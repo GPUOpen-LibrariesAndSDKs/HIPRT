@@ -1,0 +1,15 @@
+*.vs
+*.vscode
+*.png
+*.log
+*.xml
+*.bin
+*.fatbin
+*.hipfb
+*.bc
+build/
+dist/
+hiprt/hiprt.h
+hiprt/hiprtew.h
+hiprt/cache/Kernels.h
+hiprt/cache/KernelArgs.h
