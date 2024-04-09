@@ -110,7 +110,8 @@ function get_hip_sdk_verion()
             if string.sub(HIP_PATH, -1, -1) == '\\' or string.sub(HIP_PATH, -1, -1) == '/' then
                 HIP_PATH = string.sub(HIP_PATH, 1, -2)
             end
-			hipCommand = HIP_PATH..'\\'..hipCommand
+			-- HIP_PATH is expected to look like:   C:\Program Files\AMD\ROCm\5.7
+			hipCommand = '\"' .. HIP_PATH..'\\bin\\'..hipCommand .. '\"'
 		end
 	end
 	
