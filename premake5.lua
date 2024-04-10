@@ -110,7 +110,8 @@ function get_hip_sdk_verion()
             if string.sub(HIP_PATH, -1, -1) == '\\' or string.sub(HIP_PATH, -1, -1) == '/' then
                 HIP_PATH = string.sub(HIP_PATH, 1, -2)
             end
-			hipCommand = HIP_PATH..'\\'..hipCommand
+			-- HIP_PATH is expected to look like:   C:\Program Files\AMD\ROCm\5.7
+			hipCommand = '\"' .. HIP_PATH..'\\bin\\'..hipCommand .. '\"'
 		end
 	end
 	
@@ -193,6 +194,10 @@ workspace "hiprt"
         buildoptions {"-fvisibility=hidden"}
     end
     defines {"__USE_HIP__"}
+
+    -- this define is to identify that we are on the public repository of HIPRT.
+    -- it helps AMD to maintain both a public and a private repo for experimentation.
+    defines {"HIPRT_PUBLIC_REPO"}
 
     targetdir "dist/bin/%{cfg.buildcfg}"    
     location "build/"

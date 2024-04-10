@@ -31,6 +31,7 @@
 #include <map>
 #include <chrono>
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 {
 	constexpr bool	Timings	 = true;
@@ -48,7 +49,9 @@ TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 	render( "AoRayHairball.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayHairball.png", Timings, AoRadius );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, AoRayHairball )
 {
 	constexpr bool	Timings	 = true;
@@ -66,7 +69,9 @@ TEST_F( PerformanceTestCases, AoRayHairball )
 	render( "AoRayHairball.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayHairball.png", Timings, AoRadius );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, AoRayEmbreeBistro )
 {
 	constexpr bool	Timings	 = true;
@@ -84,7 +89,9 @@ TEST_F( PerformanceTestCases, AoRayEmbreeBistro )
 	render( "AoRayEmbreeBistro.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayBistro.png", Timings, AoRadius );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, AoRayBistro )
 {
 	constexpr bool	Timings	 = true;
@@ -102,7 +109,9 @@ TEST_F( PerformanceTestCases, AoRayBistro )
 	render( "AoRayBistro.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayBistro.png", Timings, AoRadius );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, PrimaryRayBistro )
 {
 	constexpr uint32_t Option	  = VisualizeColor;
@@ -121,7 +130,9 @@ TEST_F( PerformanceTestCases, PrimaryRayBistro )
 	render( "PrimaryRayBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, BvhFastBistro )
 {
 	constexpr uint32_t Option	  = VisualizeColor;
@@ -140,7 +151,9 @@ TEST_F( PerformanceTestCases, BvhFastBistro )
 	render( "BvhFastBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, BvhHighQBistro )
 {
 	constexpr uint32_t Option	  = VisualizeColor;
@@ -159,7 +172,9 @@ TEST_F( PerformanceTestCases, BvhHighQBistro )
 	render( "BvhHighQBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
 	deleteScene( m_scene );
 }
+#endif
 
+#ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, BvhBalancedBistro )
 {
 	constexpr uint32_t Option	  = VisualizeColor;
@@ -178,6 +193,7 @@ TEST_F( PerformanceTestCases, BvhBalancedBistro )
 	render( "BvhBalancedBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", getTimings );
 	deleteScene( m_scene );
 }
+#endif
 
 TEST_F( ObjTestCases, TranslateCornellBox )
 {
@@ -2683,5 +2699,6 @@ int main( int argc, const char* argv[] )
 #endif
 
 	::testing::AddGlobalTestEnvironment( new InitCommandlineArgs( parsedArgs ) );
-	return RUN_ALL_TESTS();
+	int ret = RUN_ALL_TESTS();
+	return ret;
 }

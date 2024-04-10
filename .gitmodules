@@ -4,6 +4,3 @@
 [submodule "contrib/easy-encryption"]
 	path = contrib/easy-encryption
 	url = https://github.com/amdadvtech/easy-encryption
-[submodule "test/common/meshes/lfs"]
-	path = test/common/meshes/lfs
-	url = https://github.com/amdadvtech/TestModels
