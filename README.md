@@ -4,9 +4,17 @@ This is the main repository for the source code for HIPRT.
 ## Cloning and Building 
 
 1. `git clone https://github.com/GPUOpen-LibrariesAndSDKs/HIPRT`
-2. `git submodule update --init --recursive`
-3. `git lfs fetch` (To get resources for running performance tests)
-4. `.\tools\premake5\win\premake5.exe vs2019`
+2. `cd HIPRT`
+3. `git submodule update --init --recursive`
+
+&nbsp;&nbsp;&nbsp;On Windows:  
+&nbsp;&nbsp;&nbsp;4. `.\tools\premake5\win\premake5.exe vs2022`  
+&nbsp;&nbsp;&nbsp;5. `Open build\hiprt.sln with Visual Studio 2022.`  
+
+&nbsp;&nbsp;&nbsp;On Linux:  
+&nbsp;&nbsp;&nbsp;4. `./tools/premake5/linux64/premake5 gmake`  
+&nbsp;&nbsp;&nbsp;5. `make -C build -j config=release_x64`  
+
 
 ### Using Bitcode
 Add the option `--bitcode` to enable precompiled bitcode. 
