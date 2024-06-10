@@ -16,6 +16,13 @@ if isLinux():
 
 errorMessageHeader = 'Bitcodes Compile Error:'
 
+def getVCPath():
+    import setuptools.msvc as cc
+    pI = cc.PlatformInfo("x64")
+    rI = cc.RegistryInfo(pI)
+    sI = cc.SystemInfo(rI)
+    return sI.VCInstallDir
+
 def getVersion():
     f = open(root + 'version.txt', 'r')
     HIPRT_MAJOR_VERSION = int(f.readline())
@@ -78,7 +85,7 @@ def compileAmd():
         clangpath = '/opt/rocm/bin/amdclang++'
 
     # llvm.org/docs/AMDGPUUsage.html#processors
-    gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103',  # Navi3
+    gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103', 'gfx1150', 'gfx1151',  # Navi3
             'gfx1030', 'gfx1031', 'gfx1032', 'gfx1033', 'gfx1034', 'gfx1035', 'gfx1036',  # Navi2
             'gfx1010', 'gfx1011', 'gfx1012', 'gfx1013',  # Navi1
             'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx940', 'gfx941', 'gfx942']  # Vega
@@ -138,6 +145,8 @@ def compileNv():
         ccbin = '-ccbin=' + ccbin
 
     # TODO: implement nvidia
+    print('TODO: CURRENTLY compileNv IS NOT IMPLEMENTED.');
+
 
     print('export built programs ...')
     sys.stdout.flush()

@@ -51,6 +51,12 @@ constexpr auto UseBakedCode = false;
 
 namespace hiprt
 {
+Compiler::~Compiler()
+{
+	for ( auto& module : m_moduleCache )
+		checkOro( oroModuleUnload( module.second ) );
+}
+
 Kernel Compiler::getKernel(
 	Context&					 context,
 	const std::filesystem::path& moduleName,
@@ -193,77 +199,91 @@ void Compiler::buildKernels(
 	if ( !std::filesystem::exists( m_cacheDirectory ) && !std::filesystem::create_directory( m_cacheDirectory ) )
 		throw std::runtime_error( "Cannot create cache directory" );
 
-	std::string cacheName = getCacheFilename( context, src, moduleName, options, funcNameSets, numGeomTypes, numRayTypes );
-	bool		upToDate  = isCachedFileUpToDate( m_cacheDirectory / cacheName, moduleName );
-
-	orortcProgram prog;
-	std::string	  binary;
-	if ( upToDate && cache )
+	std::lock_guard<std::mutex> lock( m_moduleMutex );
+	auto						cacheEntry = m_moduleCache.find( moduleName.string() );
+	if ( cacheEntry != m_moduleCache.end() )
 	{
-		binary = loadCacheFileToBinary( cacheName, context.getDeviceName() );
+		module = cacheEntry->second;
 	}
 	else
 	{
-		std::vector<std::string> headerData;
-		std::string				 extSrc = src;
-		if ( extended )
-		{
-			if constexpr ( UseBakedCode || UseBitcode )
-			{
-				extSrc = "#include <hiprt_device_impl.h>\n";
-				addCustomFuncsSwitchCase( extSrc, funcNameSets, numGeomTypes, numRayTypes );
-				extSrc += "\n" + src;
+		std::string cacheName = getCacheFilename( context, src, moduleName, options, funcNameSets, numGeomTypes, numRayTypes );
+		bool		upToDate  = isCachedFileUpToDate( m_cacheDirectory / cacheName, moduleName );
 
-				const uint32_t numHeaders = sizeof( GET_ARGS( hiprt_device_impl ) ) / sizeof( void* );
-				headerData.resize( numHeaders );
-				for ( uint32_t i = 0; i < numHeaders - 1; i++ )
-				{
-					auto includeName = std::find_if( includeNames.begin(), includeNames.end(), [&]( const std::string& rhs ) {
-						return GET_INC( hiprt_device_impl )[i] == rhs;
-					} );
-					if ( includeName != includeNames.end() ) continue;
-					includeNames.push_back( GET_INC( hiprt_device_impl )[i] );
-					headerData[i] = decryptSourceCode( GET_ARGS( hiprt_device_impl )[i] );
-					headers.push_back( headerData[i].c_str() );
-				}
-				includeNames.push_back( "hiprt_device_impl.h" );
-				headerData[numHeaders - 1] = decryptSourceCode( GET_ARGS( hiprt_device_impl )[numHeaders - 1] );
-				headers.push_back( headerData[numHeaders - 1].c_str() );
-			}
-			else
+		orortcProgram prog;
+		std::string	  binary;
+		if ( upToDate && cache )
+		{
+			binary = loadCacheFileToBinary( cacheName, context.getDeviceName() );
+		}
+		else
+		{
+			std::vector<std::string> headerData;
+			std::string				 extSrc = src;
+			if ( extended )
 			{
-				extSrc = "#include <hiprt/impl/hiprt_device_impl.h>\n";
-				addCustomFuncsSwitchCase( extSrc, funcNameSets, numGeomTypes, numRayTypes );
-				extSrc += "\n" + src;
+				if constexpr ( UseBakedCode || UseBitcode )
+				{
+					extSrc = "#include <hiprt_device_impl.h>\n";
+					addCustomFuncsSwitchCase( extSrc, funcNameSets, numGeomTypes, numRayTypes );
+					extSrc += "\n" + src;
+
+					const uint32_t numHeaders = sizeof( GET_ARGS( hiprt_device_impl ) ) / sizeof( void* );
+					headerData.resize( numHeaders );
+					for ( uint32_t i = 0; i < numHeaders - 1; i++ )
+					{
+						auto includeName =
+							std::find_if( includeNames.begin(), includeNames.end(), [&]( const std::string& rhs ) {
+								return GET_INC( hiprt_device_impl )[i] == rhs;
+							} );
+						if ( includeName != includeNames.end() ) continue;
+						includeNames.push_back( GET_INC( hiprt_device_impl )[i] );
+						headerData[i] = decryptSourceCode( GET_ARGS( hiprt_device_impl )[i] );
+						headers.push_back( headerData[i].c_str() );
+					}
+					includeNames.push_back( "hiprt_device_impl.h" );
+					headerData[numHeaders - 1] = decryptSourceCode( GET_ARGS( hiprt_device_impl )[numHeaders - 1] );
+					headers.push_back( headerData[numHeaders - 1].c_str() );
+				}
+				else
+				{
+					extSrc = "#include <hiprt/impl/hiprt_device_impl.h>\n";
+					addCustomFuncsSwitchCase( extSrc, funcNameSets, numGeomTypes, numRayTypes );
+					extSrc += "\n" + src;
+				}
 			}
+
+			std::vector<const char*> opts		 = options;
+			std::string				 includePath = ( "-I" + Utility::getEnvVariable( "HIPRT_PATH" ) + "/" );
+			opts.push_back( includePath.c_str() );
+			addCommonOpts( context, opts );
+
+			buildProgram(
+				context,
+				funcNames,
+				extSrc,
+				moduleName,
+				headers,
+				includeNames,
+				opts,
+				numGeomTypes,
+				numRayTypes,
+				funcNameSets,
+				prog );
+
+			size_t binarySize = 0;
+			checkOrortc( orortcGetCodeSize( prog, &binarySize ) );
+			binary.resize( binarySize );
+			checkOrortc( orortcGetCode( prog, binary.data() ) );
+
+			if ( cache ) cacheBinaryToFile( binary, cacheName, context.getDeviceName() );
+			checkOrortc( orortcDestroyProgram( &prog ) );
 		}
 
-		std::vector<const char*> opts = options;
-		addCommonOpts( context, opts );
-
-		buildProgram(
-			context,
-			funcNames,
-			extSrc,
-			moduleName,
-			headers,
-			includeNames,
-			opts,
-			numGeomTypes,
-			numRayTypes,
-			funcNameSets,
-			prog );
-
-		size_t binarySize = 0;
-		checkOrortc( orortcGetCodeSize( prog, &binarySize ) );
-		binary.resize( binarySize );
-		checkOrortc( orortcGetCode( prog, binary.data() ) );
-
-		if ( cache ) cacheBinaryToFile( binary, cacheName, context.getDeviceName() );
-		checkOrortc( orortcDestroyProgram( &prog ) );
+		checkOro( oroModuleLoadData( &module, binary.data() ) );
+		m_moduleCache[moduleName.string()] = module;
 	}
 
-	checkOro( oroModuleLoadData( &module, binary.data() ) );
 	for ( size_t i = 0; i < funcNames.size(); ++i )
 	{
 		oroFunction func;
@@ -288,86 +308,98 @@ void Compiler::buildKernelsFromBitcode(
 		if ( !std::filesystem::exists( m_cacheDirectory ) && !std::filesystem::create_directory( m_cacheDirectory ) )
 			throw std::runtime_error( "Cannot create cache directory" );
 
-		std::string cacheName = getCacheFilename(
-			context,
-			std::to_string( bitcodeBinary.size() ),
-			moduleName,
-			std::nullopt,
-			funcNameSets,
-			numGeomTypes,
-			numRayTypes );
-		bool upToDate = isCachedFileUpToDate( m_cacheDirectory / cacheName, moduleName );
-
-		std::string binary;
-		if ( upToDate && cache )
+		std::lock_guard<std::mutex> lock( m_moduleMutex );
+		auto						cacheEntry = m_moduleCache.find( moduleName.string() );
+		oroModule					module;
+		if ( cacheEntry != m_moduleCache.end() )
 		{
-			binary = loadCacheFileToBinary( cacheName, context.getDeviceName() );
+			module = cacheEntry->second;
 		}
 		else
 		{
-			std::string customFuncBitcodeBinary = buildFunctionTableBitcode( context, numGeomTypes, numRayTypes, funcNameSets );
+			std::string cacheName = getCacheFilename(
+				context,
+				std::to_string( bitcodeBinary.size() ),
+				moduleName,
+				std::nullopt,
+				funcNameSets,
+				numGeomTypes,
+				numRayTypes );
+			bool upToDate = isCachedFileUpToDate( m_cacheDirectory / cacheName, moduleName );
 
-			const uint32_t	 JITOptCount = 6u;
-			orortcLinkState	 rtcLinkState;
-			orortcJIT_option options[JITOptCount];
-			void*			 optionVals[JITOptCount];
-			float			 wallTime;
-
-			constexpr uint32_t LogSize = 8192u;
-			char			   errorLog[LogSize];
-			char			   infoLog[LogSize];
-
-			options[0]	  = ORORTC_JIT_WALL_TIME;
-			optionVals[0] = reinterpret_cast<void*>( &wallTime );
-
-			options[1]	  = ORORTC_JIT_INFO_LOG_BUFFER;
-			optionVals[1] = infoLog;
-
-			options[2]	  = ORORTC_JIT_INFO_LOG_BUFFER_SIZE_BYTES;
-			optionVals[2] = reinterpret_cast<void*>( static_cast<uintptr_t>( LogSize ) );
-
-			options[3]	  = ORORTC_JIT_ERROR_LOG_BUFFER;
-			optionVals[3] = errorLog;
-
-			options[4]	  = ORORTC_JIT_ERROR_LOG_BUFFER_SIZE_BYTES;
-			optionVals[4] = reinterpret_cast<void*>( static_cast<uintptr_t>( LogSize ) );
-
-			options[5]	  = ORORTC_JIT_LOG_VERBOSE;
-			optionVals[5] = reinterpret_cast<void*>( static_cast<uintptr_t>( 1 ) );
-
-			bool					 amd		= oroGetCurAPI( 0 ) == ORO_API_HIP;
-			std::filesystem::path	 bcPath		= getBitcodePath( amd );
-			const orortcJITInputType typeBc		= amd ? ORORTC_JIT_INPUT_LLVM_BUNDLED_BITCODE : ORORTC_JIT_INPUT_FATBINARY;
-			const orortcJITInputType typeUserBc = amd ? ORORTC_JIT_INPUT_LLVM_BITCODE : ORORTC_JIT_INPUT_PTX;
-
-			void* binaryPtr;
-			checkOrortc( orortcLinkCreate( JITOptCount, options, optionVals, &rtcLinkState ) );
-
-			orortcResult res = orortcLinkAddFile( rtcLinkState, typeBc, bcPath.string().c_str(), 0, 0, 0 );
-			if ( res != ORORTC_SUCCESS )
+			std::string binary;
+			if ( upToDate && cache )
 			{
-				// add some verbose to help debugging missing file.
-				std::cout << "orortcLinkAddFile FAILED (error=" << res << ") loading file: " << bcPath.string().c_str()
-						  << std::endl;
+				binary = loadCacheFileToBinary( cacheName, context.getDeviceName() );
 			}
-			checkOrortc( res );
+			else
+			{
+				std::string customFuncBitcodeBinary =
+					buildFunctionTableBitcode( context, numGeomTypes, numRayTypes, funcNameSets );
 
-			checkOrortc( orortcLinkAddData(
-				rtcLinkState, typeUserBc, const_cast<char*>( bitcodeBinary.data() ), bitcodeBinary.size(), 0, 0, 0, 0 ) );
-			checkOrortc( orortcLinkAddData(
-				rtcLinkState, typeUserBc, customFuncBitcodeBinary.data(), customFuncBitcodeBinary.size(), 0, 0, 0, 0 ) );
+				const uint32_t	 JITOptCount = 6u;
+				orortcLinkState	 rtcLinkState;
+				orortcJIT_option options[JITOptCount];
+				void*			 optionVals[JITOptCount];
+				float			 wallTime;
 
-			size_t binarySize = 0;
-			checkOrortc( orortcLinkComplete( rtcLinkState, &binaryPtr, &binarySize ) );
-			binary = std::string( reinterpret_cast<char*>( binaryPtr ), binarySize );
+				constexpr uint32_t LogSize = 8192u;
+				char			   errorLog[LogSize];
+				char			   infoLog[LogSize];
 
-			if ( cache ) cacheBinaryToFile( binary, cacheName, context.getDeviceName() );
+				options[0]	  = ORORTC_JIT_WALL_TIME;
+				optionVals[0] = reinterpret_cast<void*>( &wallTime );
 
-			checkOrortc( orortcLinkDestroy( rtcLinkState ) );
+				options[1]	  = ORORTC_JIT_INFO_LOG_BUFFER;
+				optionVals[1] = infoLog;
+
+				options[2]	  = ORORTC_JIT_INFO_LOG_BUFFER_SIZE_BYTES;
+				optionVals[2] = reinterpret_cast<void*>( static_cast<uintptr_t>( LogSize ) );
+
+				options[3]	  = ORORTC_JIT_ERROR_LOG_BUFFER;
+				optionVals[3] = errorLog;
+
+				options[4]	  = ORORTC_JIT_ERROR_LOG_BUFFER_SIZE_BYTES;
+				optionVals[4] = reinterpret_cast<void*>( static_cast<uintptr_t>( LogSize ) );
+
+				options[5]	  = ORORTC_JIT_LOG_VERBOSE;
+				optionVals[5] = reinterpret_cast<void*>( static_cast<uintptr_t>( 1 ) );
+
+				bool					 amd		= oroGetCurAPI( 0 ) == ORO_API_HIP;
+				std::filesystem::path	 bcPath		= getBitcodePath( amd );
+				const orortcJITInputType typeBc		= amd ? ORORTC_JIT_INPUT_LLVM_BUNDLED_BITCODE : ORORTC_JIT_INPUT_FATBINARY;
+				const orortcJITInputType typeUserBc = amd ? ORORTC_JIT_INPUT_LLVM_BITCODE : ORORTC_JIT_INPUT_PTX;
+
+				void* binaryPtr;
+				checkOrortc( orortcLinkCreate( JITOptCount, options, optionVals, &rtcLinkState ) );
+
+				orortcResult res = orortcLinkAddFile( rtcLinkState, typeBc, bcPath.string().c_str(), 0, 0, 0 );
+				if ( res != ORORTC_SUCCESS )
+				{
+					// add some verbose to help debugging missing file.
+					std::cout << "orortcLinkAddFile FAILED (error=" << res << ") loading file: " << bcPath.string().c_str()
+							  << std::endl;
+				}
+				checkOrortc( res );
+
+				checkOrortc( orortcLinkAddData(
+					rtcLinkState, typeUserBc, const_cast<char*>( bitcodeBinary.data() ), bitcodeBinary.size(), 0, 0, 0, 0 ) );
+				checkOrortc( orortcLinkAddData(
+					rtcLinkState, typeUserBc, customFuncBitcodeBinary.data(), customFuncBitcodeBinary.size(), 0, 0, 0, 0 ) );
+
+				size_t binarySize = 0;
+				checkOrortc( orortcLinkComplete( rtcLinkState, &binaryPtr, &binarySize ) );
+				binary = std::string( reinterpret_cast<char*>( binaryPtr ), binarySize );
+
+				if ( cache ) cacheBinaryToFile( binary, cacheName, context.getDeviceName() );
+
+				checkOrortc( orortcLinkDestroy( rtcLinkState ) );
+			}
+
+			checkOro( oroModuleLoadData( &module, binary.data() ) );
+			m_moduleCache[moduleName.string()] = module;
 		}
 
-		oroModule module;
-		checkOro( oroModuleLoadData( &module, binary.data() ) );
 		for ( size_t i = 0; i < funcNames.size(); ++i )
 		{
 			oroFunction func;
@@ -442,7 +474,6 @@ void Compiler::addCommonOpts( Context& context, std::vector<const char*>& opts )
 
 	if ( context.enableHwi() ) opts.push_back( "-D__USE_HWI__" );
 
-	opts.push_back( "-I../" );
 	opts.push_back( "-D__USE_HIP__" );
 	opts.push_back( "-std=c++17" );
 }
@@ -696,24 +727,37 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 {
 	bool						amd	 = oroGetCurAPI( 0 ) == ORO_API_HIP;
 	const std::filesystem::path path = getFatbinPath( amd );
-	std::vector<char>			binary;
 
-	std::ifstream file( path, std::ios::binary | std::ios::in );
-	if ( !file.is_open() )
+	std::lock_guard<std::mutex> lock( m_moduleMutex );
+	auto						cacheEntry = m_moduleCache.find( path.string() );
+	oroModule					module;
+	if ( cacheEntry != m_moduleCache.end() )
 	{
-		std::string msg = Utility::format( "Unable to open '%s'\n", path.string().c_str() );
-		throw std::runtime_error( msg );
+		module = cacheEntry->second;
 	}
-	size_t sizeFile;
-	file.seekg( 0, std::fstream::end );
-	size_t size = sizeFile = static_cast<size_t>( file.tellg() );
-	binary.resize( size );
-	file.seekg( 0, std::fstream::beg );
-	file.read( binary.data(), size );
+	else
+	{
+		std::ifstream file( path, std::ios::binary | std::ios::in );
+		if ( !file.is_open() )
+		{
+			std::string msg = Utility::format( "Unable to open '%s'\n", path.string().c_str() );
+			throw std::runtime_error( msg );
+		}
 
-	oroModule	module;
+		size_t sizeFile;
+		file.seekg( 0, std::fstream::end );
+		size_t size = sizeFile = static_cast<size_t>( file.tellg() );
+
+		std::vector<char> binary;
+		binary.resize( size );
+		file.seekg( 0, std::fstream::beg );
+		file.read( binary.data(), size );
+
+		checkOro( oroModuleLoadData( &module, binary.data() ) );
+		m_moduleCache[path.string()] = module;
+	}
+
 	oroFunction function;
-	checkOro( oroModuleLoadData( &module, binary.data() ) );
 	checkOro( oroModuleGetFunction( &function, module, funcName.c_str() ) );
 
 	return function;
@@ -727,6 +771,8 @@ std::string Compiler::buildFunctionTableBitcode(
 		bool amd = oroGetCurAPI( 0 ) == ORO_API_HIP;
 
 		std::vector<const char*> options;
+		std::string				 includePath = ( "-I" + Utility::getEnvVariable( "HIPRT_PATH" ) + "/" );
+		options.push_back( includePath.c_str() );
 		addCommonOpts( context, options );
 
 		if ( amd )

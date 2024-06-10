@@ -188,7 +188,7 @@ workspace "hiprt"
 	flags { "MultiProcessorCompile" }
 
     if os.ishost("windows") then
-        buildoptions {"/wd4244", "/wd4305", "/wd4018", "/wd4996"}
+        buildoptions {"/wd4244", "/wd4305", "/wd4018", "/wd4996", "/Zc:__cplusplus"}
     end
     if os.ishost("linux") then
         buildoptions {"-fvisibility=hidden"}
@@ -199,6 +199,11 @@ workspace "hiprt"
     -- it helps AMD to maintain both a public and a private repo for experimentation.
     defines {"HIPRT_PUBLIC_REPO"}
 
+
+    -- enable CUDA if possible
+    include "./contrib/Orochi/Orochi/enable_cuew"
+
+
     targetdir "dist/bin/%{cfg.buildcfg}"    
     location "build/"
     
@@ -207,7 +212,7 @@ workspace "hiprt"
 
     HIPRT_NAME = "hiprt"..HIPRT_VERSION_STR
     project( HIPRT_NAME )
-        cppdialect "C++20"
+        cppdialect "C++17"
         kind "SharedLib"
         defines {"HIPRT_EXPORTS"}
 	if _OPTIONS["bitcode"] then
@@ -242,12 +247,13 @@ workspace "hiprt"
     removefiles {"hiprt/bitcodes/**"}
     externalincludedirs { "./contrib/Orochi/" }
     files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
-    files {"contrib/Orochi/contrib/**.h", "contrib/Orochi/contrib/**.cpp"}
+    files {"contrib/Orochi/contrib/cuew/**.h", "contrib/Orochi/contrib/cuew/**.cpp"}
+    files {"contrib/Orochi/contrib/hipew/**.h", "contrib/Orochi/contrib/hipew/**.cpp"}
     files {"contrib/Orochi/ParallelPrimitives/**.h", "contrib/Orochi/ParallelPrimitives/**.cpp"}
 
 	
     project( "unittest" )
-        cppdialect "C++20"
+        cppdialect "C++17"
         kind "ConsoleApp"
 	    if _OPTIONS["bitcode"] then
 	    	defines {"HIPRT_BITCODE_LINKING"}
@@ -265,7 +271,8 @@ workspace "hiprt"
         files { "test/hiprtT*.h", "test/hiprtT*.cpp", "test/shared.h", "test/main.cpp", "test/CornellBox.h", "test/kernels/*.h" }
         externalincludedirs { "./contrib/Orochi/" }
         files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
-        files {"contrib/Orochi/contrib/**.h", "contrib/Orochi/contrib/**.cpp"}
+        files {"contrib/Orochi/contrib/cuew/**.h", "contrib/Orochi/contrib/cuew/**.cpp"}
+        files {"contrib/Orochi/contrib/hipew/**.h", "contrib/Orochi/contrib/hipew/**.cpp"}
 
         files { "contrib/gtest-1.6.0/gtest-all.cc" }
         externalincludedirs { "contrib/gtest-1.6.0/" }

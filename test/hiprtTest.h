@@ -29,7 +29,7 @@
 #include <embree4/rtcore.h>
 #include <optional>
 #include <filesystem>
-#include <source_location>
+#include <contrib/cpp20/source_location.h>
 #include <gtest/gtest.h>
 
 #if defined( _MSC_VER )
@@ -51,9 +51,11 @@
 
 #include <test/shared.h>
 
-void checkOro( oroError res, const std::source_location& location = std::source_location::current() );
-void checkOrortc( orortcResult res, const std::source_location& location = std::source_location::current() );
-void checkHiprt( hiprtError res, const std::source_location& location = std::source_location::current() );
+void checkOro( oroError res, const source_location& location = source_location::current() );
+void checkOrortc( orortcResult res, const source_location& location = source_location::current() );
+void checkHiprt( hiprtError res, const source_location& location = source_location::current() );
+
+std::string getEnvVariable( const std::string& key );
 
 namespace
 {
@@ -68,7 +70,7 @@ struct CmdArguments
 {
 	uint32_t	m_ww					 = 512u;
 	uint32_t	m_wh					 = 512u;
-	std::string m_referencePath			 = "../test/references/";
+	std::string m_referencePath			 = getEnvVariable( "HIPRT_PATH" ) + "/test/references/";
 	uint32_t	m_deviceIdx				 = 0u;
 	bool		m_usePrecompiledBitcodes = false;
 };
@@ -86,27 +88,7 @@ class InitCommandlineArgs : public testing::Environment
 class hiprtTest : public ::testing::Test
 {
   public:
-	void SetUp()
-	{
-		oroInitialize( (oroApi)( ORO_API_HIP | ORO_API_CUDA ), 0 );
-
-		checkOro( oroInit( 0 ) );
-		checkOro( oroDeviceGet( &m_oroDevice, g_parsedArgs.m_deviceIdx ) );
-		checkOro( oroCtxCreate( &m_oroCtx, 0, m_oroDevice ) );
-
-		oroDeviceProp props;
-		checkOro( oroGetDeviceProperties( &props, m_oroDevice ) );
-		std::cout << "Executing on '" << props.name << "'" << std::endl;
-
-		if ( std::string( props.name ).find( "NVIDIA" ) != std::string::npos )
-			m_ctxtInput.deviceType = hiprtDeviceNVIDIA;
-		else
-			m_ctxtInput.deviceType = hiprtDeviceAMD;
-		m_ctxtInput.ctxt   = oroGetRawCtx( m_oroCtx );
-		m_ctxtInput.device = oroGetRawDevice( m_oroDevice );
-		hiprtSetLogLevel( hiprtLogLevelError | hiprtLogLevelWarn );
-	}
-
+	void SetUp();
 	void TearDown() { checkOro( oroCtxDestroy( m_oroCtx ) ); }
 
   protected:
@@ -330,7 +312,7 @@ class ObjTestCases : public hiprtTest
 
 	void render(
 		std::optional<std::filesystem::path> imgPath,
-		const std::filesystem::path&		 kernelPath	 = "../test/TestKernel.h",
+		const std::filesystem::path&		 kernelPath,
 		const std::string&					 funcName	 = "PrimaryRayKernel",
 		std::optional<std::filesystem::path> refFilename = std::nullopt,
 		bool								 time		 = false,

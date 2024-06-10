@@ -1,19 +1,32 @@
 # HIPRT
+
+## About 
+HIP RT is a ray tracing library for HIP, making it easy to write ray-tracing applications in HIP. The APIs and library are designed to be minimal, lower level, and simple to use and integrate into any existing HIP applications.
+
+Although there are other ray tracing APIs which introduce many new things, we designed HIP RT in a slightly different way so you do not need to learn many new kernel types.
+
+Released binaries can be found at [HIP RT page under GPUOpen](https://gpuopen.com/hiprt/).
+HIP RT library is developed and maintained by ARR, [Advanced Rendering Research Group](https://gpuopen.com/advanced-rendering-research/). 
+
+## Development
+
 This is the main repository for the source code for HIPRT.
 
 ## Cloning and Building 
 
-1. `git clone https://github.com/GPUOpen-LibrariesAndSDKs/HIPRT`
+1. `git clone https://github.com/GPUOpen-LibrariesAndSDKs/HIPRT.git`
 2. `cd HIPRT`
 3. `git submodule update --init --recursive`
+4. `git lfs fetch` (To get resources for running performance tests)
 
 &nbsp;&nbsp;&nbsp;On Windows:  
-&nbsp;&nbsp;&nbsp;4. `.\tools\premake5\win\premake5.exe vs2022`  
-&nbsp;&nbsp;&nbsp;5. `Open build\hiprt.sln with Visual Studio 2022.`  
+&nbsp;&nbsp;&nbsp;5. `.\tools\premake5\win\premake5.exe vs2022`  
+&nbsp;&nbsp;&nbsp;6. `Open build\hiprt.sln with Visual Studio 2022.`  
 
 &nbsp;&nbsp;&nbsp;On Linux:  
-&nbsp;&nbsp;&nbsp;4. `./tools/premake5/linux64/premake5 gmake`  
-&nbsp;&nbsp;&nbsp;5. `make -C build -j config=release_x64`  
+&nbsp;&nbsp;&nbsp;5. `./tools/premake5/linux64/premake5 gmake`  
+&nbsp;&nbsp;&nbsp;6. `make -C build -j config=release_x64`  
+
 
 
 ### Using Bitcode

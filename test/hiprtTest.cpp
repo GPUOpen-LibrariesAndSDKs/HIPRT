@@ -34,10 +34,11 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <hiprt/hiprt_libpath.h>
 
 CmdArguments g_parsedArgs;
 
-void checkOro( oroError res, const std::source_location& location )
+void checkOro( oroError res, const source_location& location )
 {
 	if ( res != oroSuccess )
 	{
@@ -49,7 +50,7 @@ void checkOro( oroError res, const std::source_location& location )
 	}
 }
 
-void checkOrortc( orortcResult res, const std::source_location& location )
+void checkOrortc( orortcResult res, const source_location& location )
 {
 	if ( res != ORORTC_SUCCESS )
 	{
@@ -60,7 +61,7 @@ void checkOrortc( orortcResult res, const std::source_location& location )
 	}
 }
 
-void checkHiprt( hiprtError res, const std::source_location& location )
+void checkHiprt( hiprtError res, const source_location& location )
 {
 	if ( res != hiprtSuccess )
 	{
@@ -68,6 +69,21 @@ void checkHiprt( hiprtError res, const std::source_location& location )
 				  << " in '" << location.file_name() << "'." << std::endl;
 		exit( EXIT_FAILURE );
 	}
+}
+
+std::string getEnvVariable( const std::string& key )
+{
+#if defined( __WINDOWS__ )
+	char*  buffer	   = nullptr;
+	size_t bufferCount = 0;
+	_dupenv_s( &buffer, &bufferCount, key.c_str() );
+	const std::string val = buffer != nullptr ? buffer : "";
+	delete[] buffer;
+#else
+	const char* const env = getenv( key.c_str() );
+	const std::string val = ( env == nullptr ) ? std::string() : std::string( env );
+#endif
+	return val.empty() ? ".." : val;
 }
 
 inline float3 operator-( float3& a, float3& b ) { return make_float3( a.x - b.x, a.y - b.y, a.z - b.z ); }
@@ -85,6 +101,44 @@ struct GeometryData
 	const uint32_t* m_indices;
 	const int2*		m_pairIndices = nullptr;
 };
+
+void hiprtTest::SetUp()
+{
+	oroInitialize( (oroApi)( ORO_API_HIP | ORO_API_CUDA ), 0, g_hip_paths, g_hiprtc_paths );
+
+	checkOro( oroInit( 0 ) );
+	oroError deviceGetError = oroDeviceGet( &m_oroDevice, g_parsedArgs.m_deviceIdx );
+	if ( deviceGetError != oroSuccess )
+	{
+		// if failed, try to understand what happened.
+
+		int deviceCountHip = 0;
+		oroGetDeviceCount( &deviceCountHip, ORO_API_HIP );
+		int deviceCountCuda = 0;
+		oroGetDeviceCount( &deviceCountCuda, ORO_API_CUDADRIVER );
+
+		std::cout << "ERROR detected inside oroDeviceGet." << std::endl;
+		std::cout << "number of HIP devices detected = " << deviceCountHip << std::endl;
+		std::cout << "number of CUDA devices detected = " << deviceCountCuda << std::endl;
+		if ( deviceCountHip == 0 && deviceCountCuda == 0 )
+			std::cout << "NO COMPATIBLE DEVICE FOUND. check your driver." << std::endl;
+
+		checkOro( deviceGetError );
+	}
+	checkOro( oroCtxCreate( &m_oroCtx, 0, m_oroDevice ) );
+
+	oroDeviceProp props;
+	checkOro( oroGetDeviceProperties( &props, m_oroDevice ) );
+	std::cout << "Executing on '" << props.name << "'" << std::endl;
+
+	if ( std::string( props.name ).find( "NVIDIA" ) != std::string::npos )
+		m_ctxtInput.deviceType = hiprtDeviceNVIDIA;
+	else
+		m_ctxtInput.deviceType = hiprtDeviceAMD;
+	m_ctxtInput.ctxt   = oroGetRawCtx( m_oroCtx );
+	m_ctxtInput.device = oroGetRawDevice( m_oroDevice );
+	hiprtSetLogLevel( hiprtLogLevelError | hiprtLogLevelWarn );
+}
 
 void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 {
@@ -606,9 +660,11 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	std::vector<const char*> includeNames;
 	for ( size_t i = 0; i < includeNamesData.size(); i++ )
 	{
-		if ( !readSourceCode( std::filesystem::path( "../" ) / includeNamesData[i], headersData[i] ) )
+		if ( !readSourceCode(
+				 std::filesystem::path( getEnvVariable( "HIPRT_PATH" ) + "/" ) / includeNamesData[i], headersData[i] ) )
 		{
-			std::cerr << "Unable to find header '" << includeNamesData[i] << "' at ../" << std::endl;
+			std::cerr << "Unable to find header '" << includeNamesData[i] << "' at " << getEnvVariable( "HIPRT_PATH" ) << "/"
+					  << std::endl;
 			return hiprtErrorInternal;
 		}
 		includeNames.push_back( includeNamesData[i].string().c_str() );
@@ -638,7 +694,9 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 		options.push_back( "-arch=compute_60" );
 	}
 	options.push_back( "-std=c++17" );
-	options.push_back( "-I../" );
+
+	std::string includePath = ( "-I" + getEnvVariable( "HIPRT_PATH" ) + "/" );
+	options.push_back( includePath.c_str() );
 
 	orortcProgram prog;
 	checkOrortc( orortcCreateProgram(
@@ -657,16 +715,21 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 
 	if ( e != ORORTC_SUCCESS )
 	{
-		size_t logSize;
+		size_t logSize = 0;
 		checkOrortc( orortcGetProgramLogSize( prog, &logSize ) );
 
+		std::cerr << "Error while compiling :" << srcPath << " - Compile log:" << std::endl;
 		if ( logSize )
 		{
 			std::string log( logSize, '\0' );
 			checkOrortc( orortcGetProgramLog( prog, &log[0] ) );
 			std::cerr << log << std::endl;
-			return hiprtErrorInternal;
 		}
+		else
+		{
+			std::cerr << "Empty Log" << std::endl;
+		}
+		return hiprtErrorInternal;
 	}
 
 	std::string bitcodeBinary;
@@ -744,8 +807,8 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 			}
 		};
 
-		std::filesystem::path path =
-			std::string( "../dist/bin/Release/hiprt" ) + HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
+		std::filesystem::path path = std::string( getEnvVariable( "HIPRT_PATH" ) + "/dist/bin/Release/hiprt" ) +
+									 HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
 #if !defined( __GNUC__ )
 		path += "precompiled_bitcode_win.hipfb";
 #else
@@ -786,7 +849,7 @@ hiprtError hiprtTest::buildTraceKernels(
 	std::vector<const char*> includeNames;
 	for ( size_t i = 0; i < includeNamesData.size(); i++ )
 	{
-		readSourceCode( std::filesystem::path( "../" ) / includeNamesData[i], headersData[i] );
+		readSourceCode( std::filesystem::path( getEnvVariable( "HIPRT_PATH" ) + "/" ) / includeNamesData[i], headersData[i] );
 		includeNames.push_back( includeNamesData[i].string().c_str() );
 		headers.push_back( headersData[i].c_str() );
 	}

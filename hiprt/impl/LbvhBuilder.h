@@ -180,7 +180,7 @@ void LbvhBuilder::build(
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -202,7 +202,11 @@ void LbvhBuilder::build(
 		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
 		const uint32_t primCount	  = pairTriangles ? 0u : primitives.getCount();
 		Kernel		   initDataKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "InitGeomData", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"InitGeomData",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs( { storageMemoryArena.getStorageSize(), primCount, boxNodes, primNodes, geomType, header } );
 		initDataKernel.launch( 1, stream );
 	}
@@ -212,7 +216,7 @@ void LbvhBuilder::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -228,7 +232,11 @@ void LbvhBuilder::build(
 		{
 			int2*  pairIndices		   = reinterpret_cast<int2*>( updateCounters + 2 * primitives.getCount() );
 			Kernel pairTrianglesKernel = compiler.getKernel(
-				context, "../hiprt/impl/BvhBuilderKernels.h", "PairTriangles", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+				context,
+				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+				"PairTriangles",
+				opts,
+				GET_ARG_LIST( BvhBuilderKernels ) );
 			pairTrianglesKernel.setArgs( { primitives, pairIndices, header } );
 			timer.measure( PairTrianglesTime, [&]() { pairTrianglesKernel.launch( primitives.getCount(), stream ); } );
 			checkOro( oroStreamSynchronize( stream ) );
@@ -247,7 +255,7 @@ void LbvhBuilder::build(
 
 	Kernel computeCentroidBoxKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"ComputeCentroidBox_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -259,7 +267,7 @@ void LbvhBuilder::build(
 	// STEP 3: Calculate Morton codes
 	Kernel computeMortonCodesKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"ComputeMortonCodes_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -277,7 +285,7 @@ void LbvhBuilder::build(
 		reinterpret_cast<oroDeviceptr>( updateCounters ), 0xFF, sizeof( uint32_t ) * primitives.getCount(), stream ) );
 	Kernel emitTopologyAndFitBoundsKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/LbvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/LbvhBuilderKernels.h",
 		"EmitTopologyAndFitBounds_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( LbvhBuilderKernels ) );
@@ -293,7 +301,11 @@ void LbvhBuilder::build(
 	checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
 
 	Kernel blockCollapseKernel = compiler.getKernel(
-		context, "../hiprt/impl/BvhBuilderKernels.h", "BlockCollapse_" + nodeParam, opts, GET_ARG_LIST( BvhBuilderKernels ) );
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		"BlockCollapse_" + nodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
 	blockCollapseKernel.setArgs( { rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue } );
 	timer.measure( CollapseTime, [&]() { blockCollapseKernel.launch( CollapseBlockSize, CollapseBlockSize, stream ); } );
 
@@ -308,7 +320,11 @@ void LbvhBuilder::build(
 	uint32_t taskOffset = nodeCount - taskCount;
 
 	Kernel deviceCollapseKernel = compiler.getKernel(
-		context, "../hiprt/impl/BvhBuilderKernels.h", "DeviceCollapse_" + nodeParam, opts, GET_ARG_LIST( BvhBuilderKernels ) );
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		"DeviceCollapse_" + nodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
 	while ( taskCount > 0 )
 	{
 		deviceCollapseKernel.setArgs(
@@ -332,7 +348,11 @@ void LbvhBuilder::build(
 		checkOro( oroStreamSynchronize( stream ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ComputeCost", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ComputeCost",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		computeCostKernel.setArgs( { nodeCount, boxNodes, taskCounter } );
 		computeCostKernel.launch( nodeCount, ReductionBlockSize, stream );
 
@@ -387,7 +407,7 @@ void LbvhBuilder::update(
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -397,14 +417,18 @@ void LbvhBuilder::update(
 	else
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ResetCounters", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ResetCounters",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
 		resetCountersKernel.launch( primitives.getCount(), stream );
 	}
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

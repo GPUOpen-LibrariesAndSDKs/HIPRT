@@ -40,7 +40,11 @@ Context::Context( const hiprtContextCreationInput& input )
 	m_device = oroSetRawDevice( api, input.device );
 }
 
-Context::~Context() { oroCtxCreateFromRawDestroy( m_ctxt ); }
+Context::~Context()
+{
+	m_oroutils.unloadKernelCache();
+	oroCtxCreateFromRawDestroy( m_ctxt );
+}
 
 std::vector<hiprtGeometry>
 Context::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
@@ -96,7 +100,7 @@ Context::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInpu
 	for ( size_t i = 0; i < buildInputs.size(); ++i )
 	{
 		geometries[i] = reinterpret_cast<hiprtGeometry>( buffer );
-		buffer += sizes[i];
+		buffer		  = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	std::lock_guard<std::mutex> lockMutex( m_poolMutex );
@@ -333,7 +337,7 @@ std::vector<hiprtGeometry> Context::compactGeometries( const std::vector<hiprtGe
 		checkOro(
 			oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( geometriesOut[i] ), &header, sizeof( GeomHeader ), stream ) );
 
-		buffer += sizes[i];
+		buffer = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	{
@@ -402,7 +406,7 @@ Context::createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, con
 	for ( size_t i = 0; i < buildInputs.size(); ++i )
 	{
 		scenes[i] = reinterpret_cast<hiprtScene>( buffer );
-		buffer += sizes[i];
+		buffer	  = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	std::lock_guard<std::mutex> lockMutex( m_poolMutex );
@@ -671,7 +675,7 @@ std::vector<hiprtScene> Context::compactScenes( const std::vector<hiprtScene>& s
 		checkOro(
 			oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( scenesOut[i] ), &header, sizeof( SceneHeader ), stream ) );
 
-		buffer += sizes[i];
+		buffer = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	std::lock_guard<std::mutex> lockMutex( m_poolMutex );
@@ -939,14 +943,6 @@ std::string Context::getGcnArchName() const
 	return std::string( prop.gcnArchName );
 }
 
-uint32_t Context::getGcnArchNumber() const
-{
-	oroDeviceProp prop;
-	checkOro( oroCtxSetCurrent( m_ctxt ) );
-	checkOro( oroGetDeviceProperties( &prop, m_device ) );
-	return prop.gcnArch;
-}
-
 std::string Context::getDriverVersion() const
 {
 	int driverVersion;
@@ -959,8 +955,15 @@ oroDevice Context::getDevice() const noexcept { return m_device; }
 
 bool Context::enableHwi() const
 {
-	std::string	   deviceName = getDeviceName();
-	const uint32_t archNumber = getGcnArchNumber();
+	std::string deviceName = getDeviceName();
+	std::string archName   = getGcnArchName();
+
+	uint32_t archNumber = 0;
+	if ( archName.substr( 0, 3 ) == "gfx" )
+	{
+		std::string numberPart = archName.substr( 3 );
+		archNumber			   = std::stoi( numberPart );
+	}
 	return ( archNumber >= 1030 && deviceName.find( "NVIDIA" ) == std::string::npos );
 }
 

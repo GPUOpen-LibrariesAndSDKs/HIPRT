@@ -185,7 +185,7 @@ void PlocBuilder::build(
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -207,7 +207,11 @@ void PlocBuilder::build(
 		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
 		const uint32_t primCount	  = pairTriangles ? 0u : primitives.getCount();
 		Kernel		   initDataKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "InitGeomData", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"InitGeomData",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs( { storageMemoryArena.getStorageSize(), primCount, boxNodes, primNodes, geomType, header } );
 		initDataKernel.launch( 1, stream );
 	}
@@ -217,7 +221,7 @@ void PlocBuilder::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -233,7 +237,11 @@ void PlocBuilder::build(
 		{
 			int2*  pairIndices		   = reinterpret_cast<int2*>( mortonCodeValues[1] + primitives.getCount() );
 			Kernel pairTrianglesKernel = compiler.getKernel(
-				context, "../hiprt/impl/BvhBuilderKernels.h", "PairTriangles", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+				context,
+				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+				"PairTriangles",
+				opts,
+				GET_ARG_LIST( BvhBuilderKernels ) );
 			pairTrianglesKernel.setArgs( { primitives, pairIndices, header } );
 			timer.measure( PairTrianglesTime, [&]() { pairTrianglesKernel.launch( primitives.getCount(), stream ); } );
 
@@ -251,7 +259,7 @@ void PlocBuilder::build(
 
 	Kernel computeCentroidBoxKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"ComputeCentroidBox_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -263,7 +271,7 @@ void PlocBuilder::build(
 	// STEP 3: Calculate Morton codes
 	Kernel computeMortonCodesKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"ComputeMortonCodes_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -279,7 +287,7 @@ void PlocBuilder::build(
 	// STEP 5: Setup initial clusters from leafs
 	Kernel setupClustersKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/PlocBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/PlocBuilderKernels.h",
 		"SetupClusters_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( PlocBuilderKernels ) );
@@ -299,7 +307,11 @@ void PlocBuilder::build(
 		if ( numberOfClusters <= MainBlockSize )
 		{
 			Kernel blockPlocKernel = compiler.getKernel(
-				context, "../hiprt/impl/PlocBuilderKernels.h", "BlockPloc", opts, GET_ARG_LIST( PlocBuilderKernels ) );
+				context,
+				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/PlocBuilderKernels.h",
+				"BlockPloc",
+				opts,
+				GET_ARG_LIST( PlocBuilderKernels ) );
 			blockPlocKernel.setArgs( { numberOfClusters, nodeIndices[swapBuffers], scratchNodes, references } );
 			timer.measure( PlocTime, [&]() { blockPlocKernel.launch( numberOfClusters, MainBlockSize, stream ); } );
 			break;
@@ -310,7 +322,11 @@ void PlocBuilder::build(
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( newBlockOffsetSum ), 0, sizeof( int ), stream ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( blockCounter ), 0, sizeof( int ), stream ) );
 		Kernel devicePlocKernel = compiler.getKernel(
-			context, "../hiprt/impl/PlocBuilderKernels.h", "DevicePloc", opts, GET_ARG_LIST( PlocBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/PlocBuilderKernels.h",
+			"DevicePloc",
+			opts,
+			GET_ARG_LIST( PlocBuilderKernels ) );
 		devicePlocKernel.setArgs(
 			{ numberOfClusters,
 			  nodeIndices[swapBuffers],
@@ -336,7 +352,11 @@ void PlocBuilder::build(
 	checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
 
 	Kernel blockCollapseKernel = compiler.getKernel(
-		context, "../hiprt/impl/BvhBuilderKernels.h", "BlockCollapse_" + nodeParam, opts, GET_ARG_LIST( BvhBuilderKernels ) );
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		"BlockCollapse_" + nodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
 	blockCollapseKernel.setArgs( { rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue } );
 	timer.measure( CollapseTime, [&]() { blockCollapseKernel.launch( CollapseBlockSize, CollapseBlockSize, stream ); } );
 
@@ -351,7 +371,11 @@ void PlocBuilder::build(
 	uint32_t taskOffset = nodeCount - taskCount;
 
 	Kernel deviceCollapseKernel = compiler.getKernel(
-		context, "../hiprt/impl/BvhBuilderKernels.h", "DeviceCollapse_" + nodeParam, opts, GET_ARG_LIST( BvhBuilderKernels ) );
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		"DeviceCollapse_" + nodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
 	while ( taskCount > 0 )
 	{
 		deviceCollapseKernel.setArgs(
@@ -375,7 +399,11 @@ void PlocBuilder::build(
 		checkOro( oroStreamSynchronize( stream ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ComputeCost", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ComputeCost",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		computeCostKernel.setArgs( { nodeCount, boxNodes, taskCounter } );
 		computeCostKernel.launch( nodeCount, ReductionBlockSize, stream );
 
@@ -432,7 +460,7 @@ void PlocBuilder::update(
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -442,14 +470,18 @@ void PlocBuilder::update(
 	else
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ResetCounters", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ResetCounters",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
 		resetCountersKernel.launch( primitives.getCount(), stream );
 	}
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

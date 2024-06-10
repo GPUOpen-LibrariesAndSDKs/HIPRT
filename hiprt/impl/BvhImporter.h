@@ -145,7 +145,7 @@ void BvhImporter::build(
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -166,7 +166,11 @@ void BvhImporter::build(
 		geomType <<= 1;
 		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
 		Kernel initDataKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "InitGeomData", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"InitGeomData",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
 			{ storageMemoryArena.getStorageSize(), primitives.getCount(), boxNodes, primNodes, geomType, header } );
 		initDataKernel.launch( 1, stream );
@@ -177,7 +181,7 @@ void BvhImporter::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -190,7 +194,11 @@ void BvhImporter::build(
 	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
 	{
 		Kernel setupLeavesKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhImporterKernels.h", "SetupTriangles", opts, GET_ARG_LIST( BvhImporterKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
+			"SetupTriangles",
+			opts,
+			GET_ARG_LIST( BvhImporterKernels ) );
 		setupLeavesKernel.setArgs( { primitives, primNodes } );
 		setupLeavesKernel.launch( primitives.getCount(), stream );
 	}
@@ -198,7 +206,7 @@ void BvhImporter::build(
 	// STEP 2: Convert to internal format
 	Kernel convertKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhImporterKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
 		"Convert_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhImporterKernels ) );
@@ -212,7 +220,11 @@ void BvhImporter::build(
 		checkOro( oroMalloc( reinterpret_cast<oroDeviceptr*>( &costCounter ), sizeof( float ) ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( costCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ComputeCost", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ComputeCost",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		computeCostKernel.setArgs( { nodeCount, boxNodes, costCounter } );
 		computeCostKernel.launch( nodeCount, ReductionBlockSize, stream );
 
@@ -256,7 +268,7 @@ void BvhImporter::update(
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -266,14 +278,18 @@ void BvhImporter::update(
 	else
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ResetCounters", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ResetCounters",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
 		resetCountersKernel.launch( primitives.getCount(), stream );
 	}
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

@@ -29,7 +29,7 @@
 
 namespace hiprt
 {
-void checkOro( oroError res, const std::source_location& location )
+void checkOro( oroError res, const source_location& location )
 {
 	if ( res != oroSuccess )
 	{
@@ -45,7 +45,7 @@ void checkOro( oroError res, const std::source_location& location )
 	}
 }
 
-void checkOrortc( orortcResult res, const std::source_location& location )
+void checkOrortc( orortcResult res, const source_location& location )
 {
 	if ( res != ORORTC_SUCCESS )
 	{

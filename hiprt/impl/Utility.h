@@ -51,5 +51,20 @@ class Utility
 		std::snprintf( buf.get(), size, format.c_str(), args... );
 		return std::string( buf.get(), buf.get() + size - 1 );
 	}
+
+	static std::string getEnvVariable( const std::string& key )
+	{
+#if defined( __WINDOWS__ )
+		char*  buffer	   = nullptr;
+		size_t bufferCount = 0;
+		_dupenv_s( &buffer, &bufferCount, key.c_str() );
+		const std::string val = buffer != nullptr ? buffer : "";
+		delete[] buffer;
+#else
+		const char* const env = getenv( key.c_str() );
+		const std::string val = ( env == nullptr ) ? std::string() : std::string( env );
+#endif
+		return val.empty() ? ".." : val;
+	}
 };
 } // namespace hiprt
