@@ -1,6 +1,3 @@
-[submodule "contrib/Orochi"]
-	path = contrib/Orochi
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/Orochi
 [submodule "contrib/easy-encryption"]
 	path = contrib/easy-encryption
 	url = https://github.com/amdadvtech/easy-encryption
