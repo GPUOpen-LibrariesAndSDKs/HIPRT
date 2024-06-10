@@ -19,15 +19,25 @@ This is the main repository for the source code for HIPRT.
 3. `git submodule update --init --recursive`
 4. `git lfs fetch` (To get resources for running performance tests)
 
-&nbsp;&nbsp;&nbsp;On Windows:  
+Then, you can use either premake or cmake.
+
+&nbsp;&nbsp;&nbsp;On Windows with premake:  
 &nbsp;&nbsp;&nbsp;5. `.\tools\premake5\win\premake5.exe vs2022`  
 &nbsp;&nbsp;&nbsp;6. `Open build\hiprt.sln with Visual Studio 2022.`  
 
-&nbsp;&nbsp;&nbsp;On Linux:  
+&nbsp;&nbsp;&nbsp;On Linux with premake:  
 &nbsp;&nbsp;&nbsp;5. `./tools/premake5/linux64/premake5 gmake`  
 &nbsp;&nbsp;&nbsp;6. `make -C build -j config=release_x64`  
 
+&nbsp;&nbsp;&nbsp;Example with Cmake on Windows:  
+&nbsp;&nbsp;&nbsp;5. `mkdir build`  
+&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -S . -B build`  
+&nbsp;&nbsp;&nbsp;7. `Open build\hiprt.sln with Visual Studio 2022.`  
 
+&nbsp;&nbsp;&nbsp;Example with Cmake on Linux:  
+&nbsp;&nbsp;&nbsp;5. `mkdir build`  
+&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -S . -B build`  
+&nbsp;&nbsp;&nbsp;7. `cmake --build build --config Release`  
 
 ### Using Bitcode
 Add the option `--bitcode` to enable precompiled bitcode. 
