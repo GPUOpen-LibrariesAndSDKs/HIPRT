@@ -40,7 +40,7 @@ Then, you can use either premake or cmake.
 &nbsp;&nbsp;&nbsp;7. `cmake --build build --config Release`  
 
 ### Using Bitcode
-Add the option `--bitcode` to enable precompiled bitcode. 
+Add the option `--bitcode` in premake, or `-DBITCODE=ON` in cmake to enable precompiled bitcode. 
 
 #### Generation of bitcode
 - After premake, go to `scripts/bitcodes`, then run `python compile.py` which compiles kernels to bitcode and fatbinary.
