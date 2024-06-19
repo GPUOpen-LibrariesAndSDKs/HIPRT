@@ -6,6 +6,9 @@ option(BAKE_KERNEL "Encrypt and bake kernels" OFF)
 option(BITCODE "Enable bitcode linking" OFF)
 option(PRECOMPILE "Precompile kernels" OFF)
 option(HIPRTEW "Use hiprtew" OFF)
+option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
+option(NO_UNITTEST "Don't build unit tests" OFF)
+option(HIPRT_PREFER_HIP_5 "Prefer HIP 5" OFF)
 
 # Set C++ Standard
 set(CMAKE_CXX_STANDARD 17)
@@ -57,6 +60,22 @@ function(get_version file)
 endfunction()
 
 
+
+# Remove the last character from the string if it's a / or \\  
+function(remove_trailing_slash strInOut)
+	string(LENGTH "${${strInOut}}" strLength)
+	math(EXPR lastIndex "${strLength} - 1")
+	string(SUBSTRING "${${strInOut}}" ${lastIndex} 1 lastChar)
+	if("${lastChar}" STREQUAL "\\" OR "${lastChar}" STREQUAL "/")
+		string(SUBSTRING "${${strInOut}}" 0 ${lastIndex} strInOut_modified)
+		set(${strInOut} "${strInOut_modified}" PARENT_SCOPE)
+	endif()
+endfunction()
+
+
+
+
+
 function(get_hip_sdk_version result)
 	if(WIN32)
 		set(root ".\\")
@@ -64,35 +83,64 @@ function(get_hip_sdk_version result)
 
 	set(exec_perl "")
 	set(hipCommand "hipcc")
-	set(HIP_PATH $ENV{HIP_PATH})
 	set(PATH $ENV{PATH})
-	set(hipInPath OFF)
+	set(useHipFromPATH OFF)
 
-	# Check if HIP is in the PATH environment variable
-	string(REPLACE ";" "\n" PATH_LIST ${PATH})
-	foreach(token ${PATH_LIST})
-		if("${token}" MATCHES "hip")
-			if(EXISTS "${token}/hipcc")
-				set(hipInPath ON)
+
+
+	# Check if HIP_PATH is defined as a CMake parameter
+	if(DEFINED HIP_PATH)
+		message(STATUS "HIP_PATH is defined as a CMake parameter: ${HIP_PATH}")
+
+	# Check if HIP_PATH is defined as an environment variable
+	elseif(DEFINED ENV{HIP_PATH})
+		
+		set(HIP_PATH $ENV{HIP_PATH})
+		message(STATUS "HIP_PATH is defined as an environment variable: ${HIP_PATH}")
+			
+	# if HIP_PATH is not in cmake, and not in environment variable
+	else()
+		message(STATUS "WARNING: HIP_PATH is not defined as a CMake parameter or an environment variable - not recommended")
+
+
+		# Check if HIP is in the PATH environment variable
+		string(REPLACE ";" "\n" PATH_LIST ${PATH})
+		foreach(token ${PATH_LIST})
+			if("${token}" MATCHES "hip")
+				if(EXISTS "${token}/hipcc")
+					set(useHipFromPATH ON)
+				endif()
 			endif()
-		endif()
-	endforeach()
+		endforeach()
 
+
+	endif()
+
+
+	# clean/format HIP_PATH here.
+	if ( HIP_PATH )
+		remove_trailing_slash(HIP_PATH)
+		# message(STATUS "HIP_PATH formatted: ${HIP_PATH}")
+	endif()
+
+
+	# build hip command for Windows
 	if(WIN32)
 		set(exec_perl "perl")
-		if(hipInPath)
-			set(hipCommand "hipcc")
-		elseif(NOT HIP_PATH)
-			set(hipCommand "hipSdk\\bin\\hipcc")
-		else()
-			string(SUBSTRING ${HIP_PATH} -1 1 HIP_PATH_LAST_CHAR)
-			if(HIP_PATH_LAST_CHAR STREQUAL "\\" OR HIP_PATH_LAST_CHAR STREQUAL "/")
-				string(SUBSTRING ${HIP_PATH} 0 -1 HIP_PATH)
+
+		if(NOT HIP_PATH)
+			if(useHipFromPATH)
+				set(hipCommand "hipcc")
+			else()
+				# try classic path used by HIPRT developers
+				set(hipCommand "hipSdk\\bin\\hipcc")
 			endif()
+		else()
 			# HIP_PATH is expected to look like: C:\Program Files\AMD\ROCm\5.7
-			set(hipCommand "\"${HIP_PATH}\\bin\\${hipCommand}\"")
+			set(hipCommand "${HIP_PATH}\\bin\\${hipCommand}")
 		endif()
 	endif()
+
 
 	file(WRITE ${CMAKE_BINARY_DIR}/hip_version_tmp.txt "")
 
@@ -115,6 +163,7 @@ function(get_hip_sdk_version result)
 		set(version "HIP_SDK_NOT_FOUND")
 	endif()
 
+	message(STATUS "HIP VERSION from command : ${version}")
 	set(${result} ${version} PARENT_SCOPE)
 endfunction()
 
@@ -177,6 +226,9 @@ endfunction()
 # Set up configurations
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;DebugGpu" CACHE STRING "Configs" FORCE)
 
+set(CMAKE_SHARED_LINKER_FLAGS_DEBUGGPU "")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUGGPU "")
+
 # Define platform-specific flags and settings
 if(WIN32)
 	add_definitions(-D__WINDOWS__)
@@ -198,17 +250,17 @@ set(BASE_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dist/bin)
 
 # Set output directories for each build configuration
 foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} Debug Release RelWithDebInfo MinSizeRel)
-    string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG_UPPER)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${BASE_OUTPUT_DIR}/${OUTPUTCONFIG})
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${BASE_OUTPUT_DIR}/${OUTPUTCONFIG})
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${BASE_OUTPUT_DIR}/${OUTPUTCONFIG})
+	string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG_UPPER)
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${BASE_OUTPUT_DIR}/${OUTPUTCONFIG})
+	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${BASE_OUTPUT_DIR}/${OUTPUTCONFIG})
+	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${OUTPUTCONFIG_UPPER} ${BASE_OUTPUT_DIR}/${OUTPUTCONFIG})
 endforeach()
 
 # Set output directories for single-configuration generators
 if(NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE})
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE})
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE})
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE})
+	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE})
+	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE})
 endif()
 
 
@@ -239,17 +291,39 @@ if(BITCODE)
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BITCODE_LINKING ORO_PRECOMPILED)
 endif()
 
-if(PRECOMPILE)
-	execute_process(COMMAND python ${CMAKE_SOURCE_DIR}/scripts/bitcodes/compile.py)
+if(NOT NO_ENCRYPT)
+	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_ENCRYPT )
 endif()
+
+if(HIPRT_PREFER_HIP_5)
+	add_definitions(-DHIPRT_PREFER_HIP_5)
+endif()
+
+
+# precompile kernels
+if(PRECOMPILE)
+	execute_process(
+		COMMAND python compile.py --nvidia --hipSdkPath ${HIP_PATH}
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/scripts/bitcodes
+		)
+
+	if(NOT NO_UNITTEST)
+		execute_process(
+			COMMAND python precompile_bitcode.py --nvidia --hipSdkPath ${HIP_PATH}
+			WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/scripts/bitcodes
+			)
+	endif()
+
+endif()
+
 
 if(BAKE_KERNEL OR BITCODE)
 	message(">> BakeKernel Executed")
 	if(WIN32)
-		execute_process(COMMAND mkdir hiprt/cache)
+		execute_process(COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/hiprt/cache)
 		execute_process(COMMAND ${CMAKE_SOURCE_DIR}/tools/bakeKernel.bat)
 	else()
-		execute_process(COMMAND mkdir hiprt/cache)
+		execute_process(COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/hiprt/cache)
 		execute_process(COMMAND ${CMAKE_SOURCE_DIR}/tools/bakeKernel.sh)
 	endif()
 
@@ -271,67 +345,88 @@ list(FILTER hiprt_sources EXCLUDE REGEX "hiprt/bitcodes/.*")
 file(GLOB_RECURSE orochi_sources "${CMAKE_SOURCE_DIR}/contrib/Orochi/Orochi/*.h" "${CMAKE_SOURCE_DIR}/contrib/Orochi/Orochi/*.cpp" "${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/cuew/*.h" "${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/cuew/*.cpp" "${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/hipew/*.h" "${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/hipew/*.cpp" "${CMAKE_SOURCE_DIR}/contrib/Orochi/ParallelPrimitives/*.h" "${CMAKE_SOURCE_DIR}/contrib/Orochi/ParallelPrimitives/*.cpp")
 target_sources(${HIPRT_NAME} PRIVATE ${hiprt_sources} ${orochi_sources})
 
+
+
+
+#
+# install script
+#
+
+install(TARGETS ${HIPRT_NAME} DESTINATION bin)
+
+# add header files
+file(GLOB HIPRT_HEADERS "${CMAKE_SOURCE_DIR}/hiprt/*.h")
+install(FILES ${HIPRT_HEADERS}
+		DESTINATION include/hiprt)
+
+# add hipfb files
+file(GLOB HIPRT_HIPFB_FILES "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/*.hipfb")
+install(FILES ${HIPRT_HIPFB_FILES}
+		DESTINATION bin)
+
+
+
+
 # Project: Unit Test
-add_executable(unittest)
+if(NOT NO_UNITTEST)
 
-if(BITCODE)
-	target_compile_definitions(unittest PRIVATE HIPRT_BITCODE_LINKING)
+	add_executable(unittest)
+
+	if(BITCODE)
+		target_compile_definitions(unittest PRIVATE HIPRT_BITCODE_LINKING)
+	endif()
+	if(WIN32)
+		target_compile_options(unittest PRIVATE /wd4244)
+		target_link_libraries(unittest PRIVATE version)
+	endif()
+
+	if( ${CMAKE_BUILD_TYPE} STREQUAL "Debug" )
+		set_target_properties(unittest PROPERTIES OUTPUT_NAME "unittest64D")
+	else()
+		set_target_properties(unittest PROPERTIES OUTPUT_NAME "unittest64")
+	endif()
+
+
+	target_include_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/contrib/Orochi)
+	target_link_libraries(unittest PRIVATE ${HIPRT_NAME})
+
+	if(UNIX)
+		target_link_libraries(unittest PRIVATE pthread dl)
+	endif()
+
+	file(GLOB_RECURSE unittest_sources "${CMAKE_SOURCE_DIR}/test/hiprtT*.h" "${CMAKE_SOURCE_DIR}/test/hiprtT*.cpp" "${CMAKE_SOURCE_DIR}/test/shared.h" "${CMAKE_SOURCE_DIR}/test/main.cpp" "${CMAKE_SOURCE_DIR}/test/CornellBox.h" "${CMAKE_SOURCE_DIR}/test/kernels/*.h" "${CMAKE_SOURCE_DIR}/contrib/gtest-1.6.0/gtest-all.cc")
+
+
+	target_sources(unittest PRIVATE ${unittest_sources} ${orochi_sources})
+
+	target_include_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/gtest-1.6.0 ${CMAKE_SOURCE_DIR}/contrib/embree/include)
+
+
+	if(WIN32)
+
+		# Use target_link_directories to specify additional library directories
+		target_link_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/embree/win)
+		target_link_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/bin/win64)
+
+		copy_dir(${CMAKE_SOURCE_DIR}/contrib/embree/win ${CMAKE_SOURCE_DIR}/dist/bin/Release "*.dll")
+		copy_dir(${CMAKE_SOURCE_DIR}/contrib/embree/win ${CMAKE_SOURCE_DIR}/dist/bin/Debug "*.dll")
+		copy_dir(${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/bin/win64 ${CMAKE_SOURCE_DIR}/dist/bin/Release "*.dll")
+		copy_dir(${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/bin/win64 ${CMAKE_SOURCE_DIR}/dist/bin/Debug "*.dll")
+
+		# Explicitly link libraries from contrib/embree/win and contrib/bin/win64
+		target_link_libraries(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/embree/win/embree4.lib)
+
+	endif()
+
+
+	if(UNIX)
+		target_link_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/embree/linux)
+	endif()
+
+	target_link_libraries(unittest PRIVATE embree4 tbb)
+
 endif()
-if(WIN32)
-	target_compile_options(unittest PRIVATE /wd4244)
-	target_link_libraries(unittest PRIVATE version)
-endif()
 
-if( ${CMAKE_BUILD_TYPE} STREQUAL "Debug" )
-	set_target_properties(unittest PROPERTIES OUTPUT_NAME "unittest64D")
-else()
-	set_target_properties(unittest PROPERTIES OUTPUT_NAME "unittest64")
-endif()
-
-
-target_include_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/contrib/Orochi)
-target_link_libraries(unittest PRIVATE ${HIPRT_NAME})
-
-if(UNIX)
-	target_link_libraries(unittest PRIVATE pthread dl)
-endif()
-
-file(GLOB_RECURSE unittest_sources "${CMAKE_SOURCE_DIR}/test/hiprtT*.h" "${CMAKE_SOURCE_DIR}/test/hiprtT*.cpp" "${CMAKE_SOURCE_DIR}/test/shared.h" "${CMAKE_SOURCE_DIR}/test/main.cpp" "${CMAKE_SOURCE_DIR}/test/CornellBox.h" "${CMAKE_SOURCE_DIR}/test/kernels/*.h" "${CMAKE_SOURCE_DIR}/contrib/gtest-1.6.0/gtest-all.cc")
-
-
-target_sources(unittest PRIVATE ${unittest_sources} ${orochi_sources})
-
-target_include_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/gtest-1.6.0 ${CMAKE_SOURCE_DIR}/contrib/embree/include)
-
-
-
-
-
-if(WIN32)
-
-	# Use target_link_directories to specify additional library directories
-	target_link_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/embree/win)
-	target_link_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/bin/win64)
-
-	copy_dir(${CMAKE_SOURCE_DIR}/contrib/embree/win ${CMAKE_SOURCE_DIR}/dist/bin/Release "*.dll")
-	copy_dir(${CMAKE_SOURCE_DIR}/contrib/embree/win ${CMAKE_SOURCE_DIR}/dist/bin/Debug "*.dll")
-	copy_dir(${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/bin/win64 ${CMAKE_SOURCE_DIR}/dist/bin/Release "*.dll")
-	copy_dir(${CMAKE_SOURCE_DIR}/contrib/Orochi/contrib/bin/win64 ${CMAKE_SOURCE_DIR}/dist/bin/Debug "*.dll")
-
-	# Explicitly link libraries from contrib/embree/win and contrib/bin/win64
-	target_link_libraries(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/embree/win/embree4.lib)
-
-endif()
-
-
-if(UNIX)
-	target_link_directories(unittest PRIVATE ${CMAKE_SOURCE_DIR}/contrib/embree/linux)
-endif()
-
-
-
-
-target_link_libraries(unittest PRIVATE embree4 tbb)
 
 # Project: HIPRTEW Test
 if(HIPRTEW)

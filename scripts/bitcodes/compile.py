@@ -14,6 +14,7 @@ if isLinux():
 
 errorMessageHeader = 'Bitcodes Compile Error:'
 
+hipSdkPathFromArgument = ''
 
 def getVCPath():
     import setuptools.msvc as cc
@@ -53,6 +54,10 @@ def getVersion():
 
 hiprt_ver = getVersion()
 
+def remove_trailing_slash(path):
+    if path.endswith('/') or path.endswith('\\'):
+        return path[:-1]
+    return path
 
 def compileScript(cmd, dst):
     print('compiling ' + dst + '...')
@@ -70,11 +75,15 @@ def compileScript(cmd, dst):
 def compileAmd():
     hipccpath = 'hipcc'
     postfix = '_linux.bc'
-    if not isLinux():
+    if not isLinux(): # if OS is Windows
         postfix = '_win.bc'
         if which('hipcc', 'bat') == None:
-            hipccpath = root + 'hipSdk\\bin\\hipcc'
-            
+            hipccpath = hipSdkPathFromArgument + '\\bin\\hipcc'
+    else: # if OS is Linux
+        if hipSdkPathFromArgument != '': # if the hip path it given as an argument
+            hipccpath = hipSdkPathFromArgument + '/bin/hipcc'
+
+
     cmd = hipccpath + ' --version'
     return_code = subprocess.call(cmd, shell=True)
     if return_code != 0:
@@ -158,7 +167,26 @@ def compileNv():
 parser = optparse.OptionParser()
 parser.add_option('-a', '--amd', dest='amd_platform', help='Compile for AMD', action='store_true', default=True)
 parser.add_option('-n', '--nvidia', dest='nv_platform', help='Compile for Nvidia', action='store_true', default=False)
+
+# Add the optional hipSdkPath argument
+parser.add_option(
+    "-p", "--hipSdkPath",
+    dest="hipSdkPath",
+    default=None,
+    help="Path to the HIP SDK",
+    metavar="PATH"
+    )
+
 (options, args) = parser.parse_args()
+
+
+if options.hipSdkPath:
+    hipSdkPathFromArgument = remove_trailing_slash(options.hipSdkPath)
+    print('Compile kernel using hip sdk: ' + hipSdkPathFromArgument)
+else:
+    if not isLinux():
+        hipSdkPathFromArgument = root + 'hipSdk\\'
+
 
 if (options.amd_platform):
     compileAmd()

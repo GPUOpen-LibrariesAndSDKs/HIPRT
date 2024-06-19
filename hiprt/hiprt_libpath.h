@@ -31,7 +31,12 @@
 
 #ifdef _WIN32
 
+#ifdef HIPRT_PREFER_HIP_5
 const char* g_hip_paths[]	 = { "amdhip64.dll", "amdhip64_6.dll", NULL };
+#else
+const char* g_hip_paths[]	 = { "amdhip64_6.dll", "amdhip64.dll", NULL };
+#endif
+
 const char* g_hiprtc_paths[] = {
 	"hiprtc0605.dll",
 	"hiprtc0604.dll",
@@ -50,6 +55,8 @@ const char* g_hiprtc_paths[] = {
 const char** g_hip_paths	= nullptr;
 const char** g_hiprtc_paths = nullptr;
 #else
+
+#ifdef HIPRT_PREFER_HIP_5
 const char* g_hip_paths[] = {
 	"libamdhip64.so.5",
 	"/opt/rocm/lib/libamdhip64.so.5",
@@ -59,6 +66,17 @@ const char* g_hip_paths[] = {
 	"/opt/rocm/lib/libamdhip64.so",
 	"/opt/rocm/hip/lib/libamdhip64.so",
 	NULL };
+#else
+const char* g_hip_paths[] = {
+	"libamdhip64.so",
+	"/opt/rocm/lib/libamdhip64.so",
+	"/opt/rocm/hip/lib/libamdhip64.so",
+
+	"libamdhip64.so.5",
+	"/opt/rocm/lib/libamdhip64.so.5",
+	"/opt/rocm/hip/lib/libamdhip64.so.5",
+	NULL };
+#endif
 
 const char* g_hiprtc_paths[] = {
 

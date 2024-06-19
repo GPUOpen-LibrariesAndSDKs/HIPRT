@@ -27,7 +27,9 @@
 #include <hiprt/impl/Error.h>
 #include <hiprt/impl/Utility.h>
 #include <hiprt/impl/Context.h>
+#if defined ( HIPRT_ENCRYPT )
 #include <contrib/easy-encryption/encrypt.h>
+#endif
 #include <regex>
 #if defined( HIPRT_LOAD_FROM_STRING ) || defined( HIPRT_BITCODE_LINKING )
 #include <hiprt/cache/Kernels.h>
@@ -572,6 +574,7 @@ bool Compiler::isCachedFileUpToDate( const std::filesystem::path& cachedFile, co
 
 std::string Compiler::decryptSourceCode( const std::string& srcIn )
 {
+#if defined ( HIPRT_ENCRYPT )
 	std::lock_guard<std::mutex> lock( m_decryptMutex );
 	std::string					src;
 	if ( m_decryptCache.find( srcIn ) != m_decryptCache.end() )
@@ -586,6 +589,9 @@ std::string Compiler::decryptSourceCode( const std::string& srcIn )
 		m_decryptCache[srcIn] = src;
 	}
 	return src;
+#else
+  return srcIn;
+#endif
 }
 
 std::string Compiler::getCacheFilename(
@@ -680,8 +686,10 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 			}
 			else
 			{
+#if defined ( HIPRT_ENCRYPT )
 				std::string deryptKeyStr( DecryptKey );
 				binary				  = decrypt( binary, deryptKeyStr );
+#endif
 				m_binCache[cacheName] = binary;
 			}
 		}
@@ -693,11 +701,13 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 void Compiler::cacheBinaryToFile( const std::string& binaryIn, const std::string& cacheName, const std::string& deviceName )
 {
 	std::string binary = binaryIn;
+#if defined ( HIPRT_ENCRYPT )
 	if constexpr ( !UseBitcode )
 	{
 		std::string deryptKeyStr( DecryptKey );
 		if ( deviceName.find( "NVIDIA" ) != std::string::npos ) binary = encrypt( binary, deryptKeyStr );
 	}
+#endif
 
 	{
 		std::filesystem::path path = m_cacheDirectory / cacheName;

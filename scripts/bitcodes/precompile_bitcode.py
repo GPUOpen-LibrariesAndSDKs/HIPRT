@@ -16,6 +16,8 @@ if isLinux():
 
 errorMessageHeader = 'Bitcodes Compile Error:'
 
+hipSdkPathFromArgument = ''
+
 def getVCPath():
     import setuptools.msvc as cc
     pI = cc.PlatformInfo("x64")
@@ -33,6 +35,10 @@ def getVersion():
 
 hiprt_ver = getVersion()
 
+def remove_trailing_slash(path):
+    if path.endswith('/') or path.endswith('\\'):
+        return path[:-1]
+    return path
 
 def which(program, sufix=''):
     sufix = '.' + sufix
@@ -72,17 +78,21 @@ def compileAmd():
     postfix = '_linux.bc'
     postfixLink = '_linux.hipfb'
     hiprtlibpath = root + 'dist/bin/Release/'
-    if not isLinux():
+    if not isLinux(): # if OS is Windows
         clangpath = 'clang++'
         postfix = '_win.bc'
         postfixLink = '_win.hipfb'
         hiprtlibpath = root + 'dist\\bin\\Release\\'
         if which('hipcc', 'bat') == None:
-            hipccpath = root + 'hipSdk\\bin\\hipcc'
+            hipccpath = hipSdkPathFromArgument + '\\bin\\hipcc'
         if which('clang++', 'exe') == None:
-            clangpath = root + 'hipSdk\\bin\\clang++'
-    else:
-        clangpath = '/opt/rocm/bin/amdclang++'
+            clangpath = hipSdkPathFromArgument + '\\bin\\clang++'
+    else: # if OS is Linux
+        if hipSdkPathFromArgument != '': # if the hip path it given as an argument
+            hipccpath = hipSdkPathFromArgument + '/bin/hipcc'
+            clangpath = hipSdkPathFromArgument + '/bin/clang++'
+        else:
+            clangpath = '/opt/rocm/bin/amdclang++'
 
     # llvm.org/docs/AMDGPUUsage.html#processors
     gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103', 'gfx1150', 'gfx1151',  # Navi3
@@ -164,7 +174,26 @@ def compileNv():
 parser = optparse.OptionParser()
 parser.add_option('-a', '--amd', dest='amd_platform', help='Compile for AMD', action='store_true', default=True)
 parser.add_option('-n', '--nvidia', dest='nv_platform', help='Compile for Nvidia', action='store_true', default=False)
+
+# Add the optional hipSdkPath argument
+parser.add_option(
+    "-p", "--hipSdkPath",
+    dest="hipSdkPath",
+    default=None,
+    help="Path to the HIP SDK",
+    metavar="PATH"
+    )
+
 (options, args) = parser.parse_args()
+
+
+if options.hipSdkPath:
+    hipSdkPathFromArgument = remove_trailing_slash(options.hipSdkPath)
+    print('Compile kernel using hip sdk: ' + hipSdkPathFromArgument)
+else:
+    if not isLinux():
+        hipSdkPathFromArgument = root + 'hipSdk\\'
+
 
 if (options.amd_platform):
     compileAmd()
