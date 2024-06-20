@@ -247,6 +247,8 @@ include(${CMAKE_SOURCE_DIR}/contrib/Orochi/Orochi/enable_cuew.cmake)
 
 # Base output directory
 set(BASE_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dist/bin)
+file(MAKE_DIRECTORY "${BASE_OUTPUT_DIR}/Debug")
+file(MAKE_DIRECTORY "${BASE_OUTPUT_DIR}/Release")
 
 # Set output directories for each build configuration
 foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} Debug Release RelWithDebInfo MinSizeRel)
@@ -293,6 +295,9 @@ endif()
 
 if(NOT NO_ENCRYPT)
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_ENCRYPT )
+	set(ENV{HIPRT_NO_ENCRYPT} "OFF")
+else()
+	set(ENV{HIPRT_NO_ENCRYPT} "ON")
 endif()
 
 if(HIPRT_PREFER_HIP_5)

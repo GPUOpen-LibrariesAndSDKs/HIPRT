@@ -10,6 +10,10 @@ ekey = ''
 defines = {}
 replaced = []
 
+# A classic usage is to have this optional temporary env var created during the cmake process (through the 'NO_ENCRYPT' cmake option) before calling this python script.
+# If this env var is ON, it overides the encyption and disable it.
+no_encrypt = os.getenv('HIPRT_NO_ENCRYPT') == 'ON'
+
 def encrypt(message, key):
     file = open('./tmp.txt',mode='w')
     file.write(message)
@@ -81,7 +85,7 @@ def printfile(filename, ans, enablePrint, api):
         if( ekey != '' ):
           b = a
         else:
-          b = ('"'+a.replace("\"", "\\\"").replace("'", "\\'") + '\\n"')
+          b = ('"'+a.replace("\\", "\\\\").replace("\"", "\\\"").replace("'", "\\'") + '\\n"')
         ans += ''+b+'\n'
     return ans
 
@@ -109,6 +113,9 @@ if len(argvs) >= 2:
 
 if len(argvs) >= 3:
     ekey = argvs[2]
+    if no_encrypt:
+        ekey = ''
+
 
 #files = ['IntegratorGpuLightSamplerTestKernel.cl','Math.cl']
 
