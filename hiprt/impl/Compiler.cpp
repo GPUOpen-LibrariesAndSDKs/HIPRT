@@ -31,7 +31,7 @@
 #include <contrib/easy-encryption/encrypt.h>
 #endif
 #include <regex>
-#if defined( HIPRT_LOAD_FROM_STRING ) || defined( HIPRT_BITCODE_LINKING )
+#if defined( HIPRT_BAKE_KERNEL_GENERATED )
 #include <hiprt/cache/Kernels.h>
 #include <hiprt/cache/KernelArgs.h>
 #endif
@@ -48,6 +48,12 @@ constexpr auto UseBitcode	= false;
 constexpr auto UseBakedCode = true;
 #else
 constexpr auto UseBakedCode = false;
+#endif
+
+#if defined( HIPRT_BAKE_KERNEL_GENERATED )
+constexpr auto BakedCodeIsGenerated = true;
+#else
+constexpr auto BakedCodeIsGenerated = false;
 #endif
 } // namespace
 
@@ -224,7 +230,7 @@ void Compiler::buildKernels(
 			std::string				 extSrc = src;
 			if ( extended )
 			{
-				if constexpr ( UseBakedCode || UseBitcode )
+				if constexpr ( BakedCodeIsGenerated )
 				{
 					extSrc = "#include <hiprt_device_impl.h>\n";
 					addCustomFuncsSwitchCase( extSrc, funcNameSets, numGeomTypes, numRayTypes );
@@ -776,7 +782,7 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 std::string Compiler::buildFunctionTableBitcode(
 	Context& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets )
 {
-	if constexpr ( UseBitcode )
+	if constexpr ( BakedCodeIsGenerated )
 	{
 		bool amd = oroGetCurAPI( 0 ) == ORO_API_HIP;
 
@@ -847,7 +853,7 @@ std::string Compiler::buildFunctionTableBitcode(
 	}
 	else
 	{
-		throw std::runtime_error( "Not compiled with the bitcode linking support" );
+		throw std::runtime_error( "Not compiled with the baked kernel code support" );
 	}
 }
 } // namespace hiprt

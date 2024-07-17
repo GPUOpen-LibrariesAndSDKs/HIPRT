@@ -251,6 +251,7 @@ workspace "hiprt"
             defines {"HIPRT_LOAD_FROM_STRING"}
             defines { "ORO_PP_LOAD_FROM_STRING" }
         end
+        defines {"HIPRT_BAKE_KERNEL_GENERATED"}
     end
     if os.istarget("windows") then
         links{ "version" }

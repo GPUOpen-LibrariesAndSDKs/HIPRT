@@ -2,13 +2,25 @@ cmake_minimum_required(VERSION 3.10)
 project(hiprt)
 
 # Options
-option(BAKE_KERNEL "Encrypt and bake kernels" OFF)
+option(BAKE_KERNEL "enable the use of encrypted and baked kernels" OFF)
 option(BITCODE "Enable bitcode linking" OFF)
 option(PRECOMPILE "Precompile kernels" OFF)
 option(HIPRTEW "Use hiprtew" OFF)
 option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
 option(NO_UNITTEST "Don't build unit tests" OFF)
 option(HIPRT_PREFER_HIP_5 "Prefer HIP 5" OFF)
+
+
+# GENERATE_BAKE_KERNEL is enabled by default if we use the flags 'BAKE_KERNEL' or 'BITCODE'.
+# It can be forced to OFF, but in this case, some building functions from the HIPRT API, like hiprtBuildTraceKernelsFromBitcode will fail.
+if(BAKE_KERNEL OR BITCODE)
+	set(GENERATE_BAKE_KERNEL___DEFAULT ON)
+else()
+	set(GENERATE_BAKE_KERNEL___DEFAULT OFF)
+endif()
+option(GENERATE_BAKE_KERNEL "generate the baked kernels" ${GENERATE_BAKE_KERNEL___DEFAULT})
+message(STATUS "GENERATE_BAKE_KERNEL= ${GENERATE_BAKE_KERNEL}")
+
 
 # Set C++ Standard
 set(CMAKE_CXX_STANDARD 17)
@@ -322,7 +334,7 @@ if(PRECOMPILE)
 endif()
 
 
-if(BAKE_KERNEL OR BITCODE)
+if(BAKE_KERNEL OR GENERATE_BAKE_KERNEL)
 	message(">> BakeKernel Executed")
 	if(WIN32)
 		execute_process(COMMAND mkdir -p ${CMAKE_SOURCE_DIR}/hiprt/cache)
@@ -335,6 +347,9 @@ if(BAKE_KERNEL OR BITCODE)
 	if(BAKE_KERNEL)
 		target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_LOAD_FROM_STRING ORO_PP_LOAD_FROM_STRING)
 	endif()
+	
+	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BAKE_KERNEL_GENERATED)
+	
 endif()
 
 if(WIN32)

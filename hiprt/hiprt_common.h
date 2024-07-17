@@ -93,7 +93,7 @@
 #define HIPRT_HOST_DEVICE __host__ __device__
 
 // TODO: cleanup after baking is removed
-#if defined( HIPRT_LOAD_FROM_STRING ) || defined( HIPRT_BITCODE_LINKING )
+#if defined( HIPRT_BAKE_KERNEL_GENERATED )
 #define GET_ARGS( X ) ( hip::X##Args )
 #define GET_INC( X ) ( hip::X##Includes )
 #else
