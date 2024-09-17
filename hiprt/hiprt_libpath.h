@@ -32,9 +32,9 @@
 #ifdef _WIN32
 
 #ifdef HIPRT_PREFER_HIP_5
-const char* g_hip_paths[]	 = { "amdhip64.dll", "amdhip64_6.dll", NULL };
+const char* g_hip_paths[] = { "amdhip64.dll", "amdhip64_6.dll", NULL };
 #else
-const char* g_hip_paths[]	 = { "amdhip64_6.dll", "amdhip64.dll", NULL };
+const char* g_hip_paths[] = { "amdhip64_6.dll", "amdhip64.dll", NULL };
 #endif
 
 const char* g_hiprtc_paths[] = {

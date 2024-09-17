@@ -141,18 +141,19 @@ void LbvhBuilder::build(
 
 	Aabb* centroidBox = temporaryMemoryArena.allocate<Aabb>();
 
+	ScratchNode*   scratchNodes = temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
+	ReferenceNode* references	= temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
+	uint32_t*	   taskCounter	= temporaryMemoryArena.allocate<uint32_t>();
+	int3*		   taskQueue	= temporaryMemoryArena.allocate<int3>( primitives.getCount() );
+
 	uint32_t* mortonCodeKeys[2];
 	uint32_t* mortonCodeValues[2];
-	mortonCodeKeys[0]	= temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
-	mortonCodeValues[0] = temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
+	mortonCodeKeys[0]	= reinterpret_cast<uint32_t*>( taskQueue ) + 0 * primitives.getCount();
+	mortonCodeValues[0] = reinterpret_cast<uint32_t*>( taskQueue ) + 1 * primitives.getCount();
 	mortonCodeKeys[1]	= reinterpret_cast<uint32_t*>( boxNodes ) + 0 * primitives.getCount();
 	mortonCodeValues[1] = reinterpret_cast<uint32_t*>( boxNodes ) + 1 * primitives.getCount();
 
 	uint32_t* updateCounters = reinterpret_cast<uint32_t*>( boxNodes ) + 2 * primitives.getCount();
-
-	ScratchNode*   scratchNodes = temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
-	ReferenceNode* references	= temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
-	uint32_t*	   taskCounter	= temporaryMemoryArena.allocate<uint32_t>();
 
 	RadixSort sort( context.getDevice(), stream, context.getOrochiUtils() );
 	Timer	  timer;
@@ -172,10 +173,8 @@ void LbvhBuilder::build(
 	// STEP 0: Init data
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
@@ -185,16 +184,8 @@ void LbvhBuilder::build(
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
-			{ storageMemoryArena.getStorageSize(),
-			  primitives,
-			  boxNodes,
-			  primNodes,
-			  instances,
-			  masks,
-			  transforms,
-			  frames,
-			  header } );
-		initDataKernel.launch( primitives.getFrameCount(), stream );
+			{ storageMemoryArena.getStorageSize(), primitives, boxNodes, primNodes, instances, frames, header } );
+		initDataKernel.launch( std::max( primitives.getFrameCount(), primitives.getCount() ), stream );
 	}
 	else
 	{
@@ -230,20 +221,21 @@ void LbvhBuilder::build(
 	{
 		if ( pairTriangles )
 		{
-			int2*  pairIndices		   = reinterpret_cast<int2*>( updateCounters + 2 * primitives.getCount() );
+			int2* pairIndices = temporaryMemoryArena.allocate<int2>( primitives.getCount() );
+			checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
 			Kernel pairTrianglesKernel = compiler.getKernel(
 				context,
 				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 				"PairTriangles",
 				opts,
 				GET_ARG_LIST( BvhBuilderKernels ) );
-			pairTrianglesKernel.setArgs( { primitives, pairIndices, header } );
+			pairTrianglesKernel.setArgs( { primitives, pairIndices, taskCounter } );
 			timer.measure( PairTrianglesTime, [&]() { pairTrianglesKernel.launch( primitives.getCount(), stream ); } );
 			checkOro( oroStreamSynchronize( stream ) );
 
 			uint32_t pairCount = 0;
-			checkOro( oroMemcpyDtoHAsync(
-				&pairCount, reinterpret_cast<oroDeviceptr>( &header->m_primNodeCount ), sizeof( uint32_t ), stream ) );
+			checkOro(
+				oroMemcpyDtoHAsync( &pairCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
 			checkOro( oroStreamSynchronize( stream ) );
 			primitives.setPairs( pairCount, pairIndices );
 		}
@@ -286,58 +278,34 @@ void LbvhBuilder::build(
 	Kernel emitTopologyAndFitBoundsKernel = compiler.getKernel(
 		context,
 		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/LbvhBuilderKernels.h",
-		"EmitTopologyAndFitBounds_" + containerNodeParam,
+		"EmitTopologyAndFitBounds_" + containerParam,
 		opts,
 		GET_ARG_LIST( LbvhBuilderKernels ) );
 	emitTopologyAndFitBoundsKernel.setArgs(
-		{ mortonCodeKeys[1], mortonCodeValues[1], updateCounters, primitives, scratchNodes, references, primNodes } );
+		{ mortonCodeKeys[1], mortonCodeValues[1], updateCounters, primitives, scratchNodes, references } );
 	timer.measure( EmitTopologyTime, [&]() { emitTopologyAndFitBoundsKernel.launch( primitives.getCount(), stream ); } );
 
 	// STEP 6: Collapse
-	int2* taskQueue =
-		reinterpret_cast<int2*>( mortonCodeKeys[0] ); // aliasing (reusing the buffer with Morton codes as task queue)
-
-	uint32_t* rootAddr = &updateCounters[primitives.getCount() - 1];
-	checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
-
-	Kernel blockCollapseKernel = compiler.getKernel(
-		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
-		"BlockCollapse_" + nodeParam,
-		opts,
-		GET_ARG_LIST( BvhBuilderKernels ) );
-	blockCollapseKernel.setArgs( { rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue } );
-	timer.measure( CollapseTime, [&]() { blockCollapseKernel.launch( CollapseBlockSize, CollapseBlockSize, stream ); } );
-
-	uint32_t taskCount{};
-	checkOro( oroMemcpyDtoHAsync( &taskCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
-
-	uint32_t nodeCount{};
+	uint32_t one = 1;
+	uint32_t rootAddr;
 	checkOro( oroMemcpyDtoHAsync(
-		&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
+		&rootAddr, reinterpret_cast<oroDeviceptr>( &updateCounters[primitives.getCount() - 1] ), sizeof( uint32_t ), stream ) );
 	checkOro( oroStreamSynchronize( stream ) );
+	int3 rootCollapseTask = make_int3( encodeNodeIndex( rootAddr, BoxType ), 0, 0 );
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( int3 ), stream ) );
+	checkOro( oroMemsetD8Async(
+		reinterpret_cast<oroDeviceptr>( taskQueue + 1 ), 0xFF, sizeof( int3 ) * ( primitives.getCount() - 1 ), stream ) );
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskCounter ), &one, sizeof( uint32_t ), stream ) );
 
-	uint32_t taskOffset = nodeCount - taskCount;
-
-	Kernel deviceCollapseKernel = compiler.getKernel(
+	Kernel collapseKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
-		"DeviceCollapse_" + nodeParam,
+		"../hiprt/impl/BvhBuilderKernels.h",
+		"Collapse_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
-	while ( taskCount > 0 )
-	{
-		deviceCollapseKernel.setArgs(
-			{ taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue } );
-		timer.measure( CollapseTime, [&]() { deviceCollapseKernel.launch( taskCount, CollapseBlockSize, stream ); } );
-
-		checkOro( oroMemcpyDtoHAsync(
-			&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
-		checkOro( oroStreamSynchronize( stream ) );
-
-		taskOffset += taskCount;
-		taskCount = nodeCount - taskOffset;
-	}
+	collapseKernel.setArgs(
+		{ primitives.getCount(), header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue } );
+	timer.measure( CollapseTime, [&]() { collapseKernel.launch( primitives.getCount(), stream ); } );
 
 	// STEP 7: BVH cost
 	if constexpr ( LogBvhCost )
@@ -399,10 +367,8 @@ void LbvhBuilder::update(
 
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		GeomHeader**		  geoms		 = storageMemoryArena.allocate<GeomHeader*>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(

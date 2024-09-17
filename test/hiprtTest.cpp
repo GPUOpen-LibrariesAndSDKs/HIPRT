@@ -540,26 +540,30 @@ void hiprtTest::buildEmbreeSceneBvh(
 	std::vector<RTCBuildPrimitive> embreePrims( instanceCount );
 	for ( uint32_t i = 0; i < instanceCount; ++i )
 	{
-		const Aabb&			 geomBox = geomBoxes[i];
-		const hiprtFrameSRT& f		 = frames[i];
+		const Aabb& geomBox = geomBoxes[i];
+		Aabb		box		= geomBox;
 
-		float3 p[8];
-		p[0] = geomBox.m_min;
-		p[1] = make_float3( geomBox.m_min.x, geomBox.m_min.y, geomBox.m_max.z );
-		p[2] = make_float3( geomBox.m_min.x, geomBox.m_max.y, geomBox.m_min.z );
-		p[3] = make_float3( geomBox.m_min.x, geomBox.m_max.y, geomBox.m_max.z );
-		p[4] = make_float3( geomBox.m_max.x, geomBox.m_min.y, geomBox.m_max.z );
-		p[5] = make_float3( geomBox.m_max.x, geomBox.m_max.y, geomBox.m_min.z );
-		p[6] = make_float3( geomBox.m_max.x, geomBox.m_max.y, geomBox.m_max.z );
-		p[7] = geomBox.m_max;
-
-		Aabb box;
-		for ( uint32_t i = 0; i < 8; ++i )
+		if ( !frames.empty() )
 		{
-			p[i] *= f.scale;
-			p[i] = rotate( f.rotation, p[i] );
-			p[i] += f.translation;
-			box.grow( p[i] );
+			const hiprtFrameSRT& f = frames[i];
+
+			float3 p[8];
+			p[0] = geomBox.m_min;
+			p[1] = make_float3( geomBox.m_min.x, geomBox.m_min.y, geomBox.m_max.z );
+			p[2] = make_float3( geomBox.m_min.x, geomBox.m_max.y, geomBox.m_min.z );
+			p[3] = make_float3( geomBox.m_min.x, geomBox.m_max.y, geomBox.m_max.z );
+			p[4] = make_float3( geomBox.m_max.x, geomBox.m_min.y, geomBox.m_max.z );
+			p[5] = make_float3( geomBox.m_max.x, geomBox.m_max.y, geomBox.m_min.z );
+			p[6] = make_float3( geomBox.m_max.x, geomBox.m_max.y, geomBox.m_max.z );
+			p[7] = geomBox.m_max;
+
+			for ( uint32_t i = 0; i < 8; ++i )
+			{
+				p[i] *= f.scale;
+				p[i] = rotate( f.rotation, p[i] );
+				p[i] += f.translation;
+				box.grow( p[i] );
+			}
 		}
 
 		embreePrims[i].primID  = i;
@@ -1367,7 +1371,7 @@ void ObjTestCases::createScene(
 	// prepare scene
 	hiprtScene			 sceneLocal;
 	hiprtDevicePtr		 sceneTemp = nullptr;
-	hiprtSceneBuildInput sceneInput;
+	hiprtSceneBuildInput sceneInput{};
 	{
 		sceneInput.instanceCount = static_cast<uint32_t>( shapes.size() );
 		malloc( reinterpret_cast<uint32_t*&>( sceneInput.instanceMasks ), sceneInput.instanceCount );
@@ -1380,25 +1384,18 @@ void ObjTestCases::createScene(
 		scene.m_garbageCollector.push_back( sceneInput.instances );
 
 		std::vector<hiprtFrameSRT> frames;
-		hiprtFrameSRT			   transform;
-		if ( !frame )
+		if ( frame )
 		{
-			transform.translation = make_float3( 0.0f, 0.0f, 0.0f );
-			transform.scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-			transform.rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+			sceneInput.frameCount				= sceneInput.instanceCount;
+			sceneInput.instanceTransformHeaders = nullptr;
+
+			for ( uint32_t i = 0; i < sceneInput.instanceCount; i++ )
+				frames.push_back( frame.value() );
+
+			malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInput.instanceFrames ), frames.size() );
+			copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), frames.size() );
+			scene.m_garbageCollector.push_back( sceneInput.instanceFrames );
 		}
-
-		sceneInput.frameCount				= sceneInput.instanceCount;
-		sceneInput.instanceTransformHeaders = nullptr;
-
-		for ( uint32_t i = 0; i < sceneInput.instanceCount; i++ )
-		{
-			frames.push_back( frame ? frame.value() : transform );
-		}
-
-		malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInput.instanceFrames ), frames.size() );
-		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), frames.size() );
-		scene.m_garbageCollector.push_back( sceneInput.instanceFrames );
 
 		size_t			  sceneTempSize;
 		hiprtBuildOptions options;

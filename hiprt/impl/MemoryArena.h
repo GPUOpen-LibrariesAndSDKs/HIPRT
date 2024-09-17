@@ -37,6 +37,7 @@ class MemoryArena
 	template <typename T>
 	HIPRT_HOST_DEVICE T* allocate( size_t size = 1 )
 	{
+		if ( size == 0 ) return nullptr;
 		T* p = reinterpret_cast<T*>( reinterpret_cast<uint8_t*>( m_data ) + m_offset );
 		m_offset += roundUp( sizeof( T ) * size, m_alignment );
 		HIPRT_ASSERT( m_offset <= m_storageSize );

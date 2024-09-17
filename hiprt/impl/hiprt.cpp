@@ -630,8 +630,8 @@ hiprtError hiprtBuildTraceKernels(
 	hiprtApiModule*	  moduleOut,
 	bool			  cache )
 {
-	if ( !context || numFunctions == 0 || funcNamesIn == nullptr || functionsOut == nullptr || moduleName == nullptr ||
-		 src == nullptr )
+	if ( !context || moduleName == nullptr || src == nullptr ||
+		 ( ( funcNamesIn == nullptr || functionsOut == nullptr || numFunctions == 0 ) && moduleOut == nullptr ) )
 		return hiprtErrorInvalidParameter;
 
 	try

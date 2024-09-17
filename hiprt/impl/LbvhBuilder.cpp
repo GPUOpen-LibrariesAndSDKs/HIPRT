@@ -36,15 +36,24 @@ namespace hiprt
 /// @return The size in byte
 size_t LbvhBuilder::getTemporaryBufferSize( const size_t count )
 {
-	return roundUp( sizeof( Aabb ), DefaultAlignment ) + 2 * roundUp( sizeof( uint32_t ) * count, DefaultAlignment ) +
+	return roundUp( sizeof( Aabb ), DefaultAlignment ) + 3 * roundUp( sizeof( uint32_t ) * count, DefaultAlignment ) +
 		   roundUp( count * sizeof( ScratchNode ), DefaultAlignment ) +
 		   roundUp( count * sizeof( ReferenceNode ), DefaultAlignment ) + roundUp( sizeof( uint32_t ), DefaultAlignment );
 }
 
 size_t LbvhBuilder::getTemporaryBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t primCount = getPrimCount( buildInput );
-	return getTemporaryBufferSize( primCount );
+	const size_t primCount	   = getPrimCount( buildInput );
+	size_t		 size		   = getTemporaryBufferSize( primCount );
+	bool		 pairTriangles = false;
+	if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh )
+	{
+		const hiprtTriangleMeshPrimitive& mesh	   = buildInput.primitive.triangleMesh;
+		const bool						  pairable = mesh.triangleCount > 2 && mesh.trianglePairCount == 0;
+		pairTriangles = pairable && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableTrianglePairing );
+		if ( pairTriangles ) size += roundUp( sizeof( int2 ) * primCount, DefaultAlignment );
+	}
+	return size;
 }
 
 size_t LbvhBuilder::getTemporaryBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
@@ -54,18 +63,18 @@ size_t LbvhBuilder::getTemporaryBufferSize( const hiprtSceneBuildInput& buildInp
 
 size_t LbvhBuilder::getStorageBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t primCount = getPrimCount( buildInput );
-	const size_t nodeSize  = getNodeSize( buildInput );
-	const size_t nodeCount = divideRoundUp( 2 * primCount, 3 );
-	return getGeometryStorageBufferSize( primCount, nodeCount, nodeSize );
+	const size_t primCount	  = getPrimCount( buildInput );
+	const size_t primNodeSize = getPrimNodeSize( buildInput );
+	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
 }
 
 size_t LbvhBuilder::getStorageBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t frameCount = buildInput.frameCount;
-	const size_t primCount	= buildInput.instanceCount;
-	const size_t nodeCount	= divideRoundUp( 2 * primCount, 3 );
-	return getSceneStorageBufferSize( primCount, nodeCount, frameCount );
+	const size_t frameCount	  = buildInput.frameCount;
+	const size_t primCount	  = buildInput.instanceCount;
+	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
 }
 
 void LbvhBuilder::build(

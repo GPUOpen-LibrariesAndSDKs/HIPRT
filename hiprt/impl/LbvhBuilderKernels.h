@@ -64,7 +64,7 @@ HIPRT_DEVICE uint32_t findParent(
 	}
 }
 
-template <typename PrimitiveContainer, typename PrimitiveNode>
+template <typename PrimitiveContainer>
 __device__ void EmitTopologyAndFitBounds(
 	uint32_t			index,
 	const uint32_t*		sortedMortonCodeKeys,
@@ -72,8 +72,7 @@ __device__ void EmitTopologyAndFitBounds(
 	uint32_t*			updateCounters,
 	PrimitiveContainer& primitives,
 	ScratchNode*		scratchNodes,
-	ReferenceNode*		references,
-	PrimitiveNode*		primNodes )
+	ReferenceNode*		references )
 {
 	uint32_t primCount = primitives.getCount();
 	uint32_t i		   = index;
@@ -83,18 +82,17 @@ __device__ void EmitTopologyAndFitBounds(
 	if ( index >= primCount ) return;
 
 	uint32_t leafType;
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
+	if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
 		leafType = TriangleType;
-	else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
+	else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
 		leafType = CustomType;
-	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+	else if constexpr (
+		is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
+		is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
 		leafType = InstanceType;
 
 	uint32_t primIndex = sortedMortonCodeValues[index];
 	references[index]  = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
-
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-		primNodes[primIndex] = primitives.fetchTriangleNode( primIndex );
 
 	uint32_t parentAddr = findParent( index, leafType, i, j, primCount, scratchNodes, sortedMortonCodeKeys );
 	index				= parentAddr;
@@ -134,58 +132,54 @@ __device__ void EmitTopologyAndFitBounds(
 	}
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_TriangleMesh_TriangleNode(
+extern "C" __global__ void EmitTopologyAndFitBounds_TriangleMesh(
 	const uint32_t* sortedMortonCodeKeys,
 	const uint32_t* sortedMortonCodeValues,
 	uint32_t*		updateCounters,
 	TriangleMesh	primitives,
 	ScratchNode*	scratchNodes,
-	ReferenceNode*	references,
-	TriangleNode*	primNodes )
+	ReferenceNode*	references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	EmitTopologyAndFitBounds<TriangleMesh, TriangleNode>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references, primNodes );
+	EmitTopologyAndFitBounds<TriangleMesh>(
+		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_AabbList_CustomNode(
+extern "C" __global__ void EmitTopologyAndFitBounds_AabbList(
 	const uint32_t* sortedMortonCodeKeys,
 	const uint32_t* sortedMortonCodeValues,
 	uint32_t*		updateCounters,
 	AabbList		primitives,
 	ScratchNode*	scratchNodes,
-	ReferenceNode*	references,
-	CustomNode*		primNodes )
+	ReferenceNode*	references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	EmitTopologyAndFitBounds<AabbList, CustomNode>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references, primNodes );
+	EmitTopologyAndFitBounds<AabbList>(
+		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_InstanceList_SRTFrame_InstanceNode(
+extern "C" __global__ void EmitTopologyAndFitBounds_InstanceList_SRTFrame(
 	const uint32_t*		   sortedMortonCodeKeys,
 	const uint32_t*		   sortedMortonCodeValues,
 	uint32_t*			   updateCounters,
 	InstanceList<SRTFrame> primitives,
 	ScratchNode*		   scratchNodes,
-	ReferenceNode*		   references,
-	InstanceNode*		   primNodes )
+	ReferenceNode*		   references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	EmitTopologyAndFitBounds<InstanceList<SRTFrame>, InstanceNode>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references, primNodes );
+	EmitTopologyAndFitBounds<InstanceList<SRTFrame>>(
+		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_InstanceList_MatrixFrame_InstanceNode(
+extern "C" __global__ void EmitTopologyAndFitBounds_InstanceList_MatrixFrame(
 	const uint32_t*			  sortedMortonCodeKeys,
 	const uint32_t*			  sortedMortonCodeValues,
 	uint32_t*				  updateCounters,
 	InstanceList<MatrixFrame> primitives,
 	ScratchNode*			  scratchNodes,
-	ReferenceNode*			  references,
-	InstanceNode*			  primNodes )
+	ReferenceNode*			  references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	EmitTopologyAndFitBounds<InstanceList<MatrixFrame>, InstanceNode>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references, primNodes );
+	EmitTopologyAndFitBounds<InstanceList<MatrixFrame>>(
+		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
 }

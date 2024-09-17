@@ -37,7 +37,7 @@
 #include <hiprt/hiprt_device.h>
 
 #if __gfx1030__ || __gfx1031__ || __gfx1032__ || __gfx1033__ || __gfx1034__ || __gfx1035__ || __gfx1036__ || __gfx1100__ || \
-	__gfx1101__ || __gfx1102__ || __gfx1103__ || __gfx1150__ || __gfx1151__
+	__gfx1101__ || __gfx1102__ || __gfx1103__ || __gfx1150__ || __gfx1151__ || __gfx1201__
 #ifndef __USE_HWI__
 #define __USE_HWI__
 #endif
@@ -503,7 +503,7 @@ HIPRT_DEVICE bool GeomTraversal<Stack, PrimitiveNode, TraversalType>::testLeafNo
 	}
 	else
 	{
-		hit.primID = leafAddr;
+		hit.primID = m_primNodes[leafAddr].m_primIndex;
 		hasHit	   = intersectFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
 		if ( !hasHit ) hit.primID = InvalidValue;
 	}
@@ -640,15 +640,15 @@ class SceneTraversal : public TraversalBase<Stack>
 		uint32_t m_instanceId;
 		uint32_t m_instanceIds[MaxInstanceLevels];
 	};
-	InstanceStack&		  m_instanceStack;
-	SceneHeader*		  m_scene;
-	Instance*			  m_instances;
-	uint32_t*			  m_masks;
-	hiprtTransformHeader* m_transforms;
-	Frame*				  m_frames;
-	hiprtRayMask		  m_mask;
-	uint32_t			  m_level;
-	float				  m_time;
+
+	InstanceStack& m_instanceStack;
+	SceneHeader*   m_scene;
+	InstanceNode*  m_instanceNodes;
+	Frame*		   m_frames;
+	hiprtRayMask   m_mask;
+	uint32_t	   m_level;
+	uint32_t	   m_instanceIndex;
+	float		   m_time;
 };
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
@@ -668,12 +668,11 @@ HIPRT_DEVICE SceneTraversal<Stack, InstanceStack, TraversalType>::SceneTraversal
 {
 	SceneHeader* sceneHeader = reinterpret_cast<SceneHeader*>( scene );
 	m_boxNodes				 = sceneHeader->m_boxNodes;
-	m_instances				 = sceneHeader->m_instances;
-	m_masks					 = sceneHeader->m_masks;
-	m_transforms			 = sceneHeader->m_transforms;
+	m_instanceNodes			 = sceneHeader->m_primNodes;
 	m_frames				 = sceneHeader->m_frames;
 	m_stack.reset();
-	instanceId() = InvalidValue;
+	m_instanceIndex = InvalidValue;
+	instanceId()	= InvalidValue;
 	if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
 	{
 		m_instanceStack.reset();
@@ -684,9 +683,20 @@ HIPRT_DEVICE SceneTraversal<Stack, InstanceStack, TraversalType>::SceneTraversal
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
 HIPRT_DEVICE void SceneTraversal<Stack, InstanceStack, TraversalType>::transformRay( hiprtRay& ray, float3& invD ) const
 {
-	Transform tr( m_frames + m_transforms[instanceId()].frameIndex, m_transforms[instanceId()].frameCount );
-	ray	 = tr.transformRay( ray, m_time );
-	invD = safeInv( ray.direction );
+	const InstanceNode& instanceNode = m_instanceNodes[m_instanceIndex];
+	if ( instanceNode.m_identity == 0 )
+	{
+		if ( instanceNode.m_static != 0 )
+		{
+			ray = instanceNode.transformRay( ray );
+		}
+		else
+		{
+			Transform tr( m_frames, instanceNode.m_transform.frameIndex, instanceNode.m_transform.frameCount );
+			ray = tr.transformRay( ray, m_time );
+		}
+		invD = safeInv( ray.direction );
+	}
 }
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
@@ -754,8 +764,9 @@ HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::testLeafN
 	}
 	else
 	{
-		hit.primID = leafAddr;
-		hasHit	   = intersectFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
+		CustomNode* nodes = reinterpret_cast<CustomNode*>( primNodes );
+		hit.primID		  = nodes[leafAddr].m_primIndex;
+		hasHit			  = intersectFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
 		if ( !hasHit ) hit.primID = InvalidValue;
 	}
 
@@ -778,9 +789,9 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 		if ( instanceId() != InvalidValue )
 		{
 			transformRay( ray, invD );
-			nodes	  = m_instances[instanceId()].m_geometry->m_boxNodes;
-			primNodes = m_instances[instanceId()].m_geometry->m_primNodes;
-			geomType  = m_instances[instanceId()].m_geometry->m_geomType;
+			nodes	  = m_instanceNodes[m_instanceIndex].m_geometry->m_boxNodes;
+			primNodes = m_instanceNodes[m_instanceIndex].m_geometry->m_primNodes;
+			geomType  = m_instanceNodes[m_instanceIndex].m_geometry->m_geomType;
 		}
 	}
 
@@ -822,11 +833,9 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 											m_scene = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
 											m_level--;
 
-											m_boxNodes	 = m_scene->m_boxNodes;
-											m_instances	 = m_scene->m_instances;
-											m_masks		 = m_scene->m_masks;
-											m_transforms = m_scene->m_transforms;
-											m_frames	 = m_scene->m_frames;
+											m_boxNodes		= m_scene->m_boxNodes;
+											m_instanceNodes = m_scene->m_primNodes;
+											m_frames		= m_scene->m_frames;
 										}
 									}
 									instanceId() = InvalidValue;
@@ -845,8 +854,8 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 			}
 			else
 			{
-				uint32_t newInstanceId = getNodeAddr( m_nodeIndex );
-				if ( m_masks[newInstanceId] & m_mask )
+				uint32_t newInstanceIndex = getNodeAddr( m_nodeIndex );
+				if ( m_instanceNodes[newInstanceIndex].m_mask & m_mask )
 				{
 					if ( m_stack.vacancy() < 1 )
 					{
@@ -857,31 +866,30 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 					m_nodeIndex = RootIndex;
 					m_stack.push( InvalidValue );
 
-					instanceId() = newInstanceId;
+					m_instanceIndex = newInstanceIndex;
+					instanceId()	= m_instanceNodes[newInstanceIndex].m_primIndex;
 					transformRay( ray, invD );
 					if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
 					{
-						if ( m_instances[instanceId()].m_type == hiprtInstanceTypeScene )
+						if ( m_instanceNodes[m_instanceIndex].m_type == hiprtInstanceTypeScene )
 						{
 							m_instanceStack.push( { m_ray, reinterpret_cast<hiprtScene>( m_scene ) } );
 							m_ray	= ray;
-							m_scene = m_instances[instanceId()].m_scene;
+							m_scene = m_instanceNodes[m_instanceIndex].m_scene;
 							m_level++;
 							instanceId() = InvalidValue;
 
-							m_boxNodes	 = m_scene->m_boxNodes;
-							m_instances	 = m_scene->m_instances;
-							m_masks		 = m_scene->m_masks;
-							m_transforms = m_scene->m_transforms;
-							m_frames	 = m_scene->m_frames;
+							m_boxNodes		= m_scene->m_boxNodes;
+							m_instanceNodes = m_scene->m_primNodes;
+							m_frames		= m_scene->m_frames;
 
 							nodes = m_boxNodes;
 							continue;
 						}
 					}
-					nodes	  = m_instances[instanceId()].m_geometry->m_boxNodes;
-					primNodes = m_instances[instanceId()].m_geometry->m_primNodes;
-					geomType  = m_instances[instanceId()].m_geometry->m_geomType;
+					nodes	  = m_instanceNodes[m_instanceIndex].m_geometry->m_boxNodes;
+					primNodes = m_instanceNodes[m_instanceIndex].m_geometry->m_primNodes;
+					geomType  = m_instanceNodes[m_instanceIndex].m_geometry->m_geomType;
 					continue;
 				}
 			}
@@ -898,11 +906,9 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 					m_scene								  = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
 					m_level--;
 
-					m_boxNodes	 = m_scene->m_boxNodes;
-					m_instances	 = m_scene->m_instances;
-					m_masks		 = m_scene->m_masks;
-					m_transforms = m_scene->m_transforms;
-					m_frames	 = m_scene->m_frames;
+					m_boxNodes		= m_scene->m_boxNodes;
+					m_instanceNodes = m_scene->m_primNodes;
+					m_frames		= m_scene->m_frames;
 				}
 			}
 			instanceId() = InvalidValue;
@@ -1486,13 +1492,14 @@ HIPRT_DEVICE hiprtTraversalState hiprtSceneTraversalAnyHitCustomStack<hiprtStack
 	return m_impl->getCurrentState();
 }
 
-// tranformation getters
+// transformation getters
 HIPRT_DEVICE hiprtFrameSRT hiprtGetObjectToWorldFrameSRT( hiprtScene scene, uint32_t instanceID, float time )
 {
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	hiprt::Transform	tr(
-		   sceneHeader->m_frames + sceneHeader->m_transforms[instanceID].frameIndex,
-		   sceneHeader->m_transforms[instanceID].frameCount );
+		   sceneHeader->m_frames,
+		   sceneHeader->m_instances[instanceID].m_frameIndex,
+		   sceneHeader->m_instances[instanceID].m_frameCount );
 	hiprt::Frame	frame	 = tr.interpolateFrames( time );
 	hiprt::SRTFrame srtFrame = hiprt::SRTFrame::getSRTFrame( frame );
 	return *reinterpret_cast<hiprtFrameSRT*>( &srtFrame );
@@ -1502,8 +1509,9 @@ HIPRT_DEVICE hiprtFrameSRT hiprtGetWorldToObjectFrameSRT( hiprtScene scene, uint
 {
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	hiprt::Transform	tr(
-		   sceneHeader->m_frames + sceneHeader->m_transforms[instanceID].frameIndex,
-		   sceneHeader->m_transforms[instanceID].frameCount );
+		   sceneHeader->m_frames,
+		   sceneHeader->m_instances[instanceID].m_frameIndex,
+		   sceneHeader->m_instances[instanceID].m_frameCount );
 	hiprt::Frame	frame	 = tr.interpolateFrames( time );
 	hiprt::SRTFrame srtFrame = hiprt::SRTFrame::getSRTFrameInv( frame );
 	return *reinterpret_cast<hiprtFrameSRT*>( &srtFrame );
@@ -1513,8 +1521,9 @@ HIPRT_DEVICE hiprtFrameMatrix hiprtGetObjectToWorldFrameMatrix( hiprtScene scene
 {
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	hiprt::Transform	tr(
-		   sceneHeader->m_frames + sceneHeader->m_transforms[instanceID].frameIndex,
-		   sceneHeader->m_transforms[instanceID].frameCount );
+		   sceneHeader->m_frames,
+		   sceneHeader->m_instances[instanceID].m_frameIndex,
+		   sceneHeader->m_instances[instanceID].m_frameCount );
 	hiprt::Frame	   frame	   = tr.interpolateFrames( time );
 	hiprt::MatrixFrame matrixFrame = hiprt::MatrixFrame::getMatrixFrame( frame );
 	return *reinterpret_cast<hiprtFrameMatrix*>( &matrixFrame );
@@ -1524,8 +1533,9 @@ HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix( hiprtScene scene
 {
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	hiprt::Transform	tr(
-		   sceneHeader->m_frames + sceneHeader->m_transforms[instanceID].frameIndex,
-		   sceneHeader->m_transforms[instanceID].frameCount );
+		   sceneHeader->m_frames,
+		   sceneHeader->m_instances[instanceID].m_frameIndex,
+		   sceneHeader->m_instances[instanceID].m_frameCount );
 	hiprt::Frame	   frame	   = tr.interpolateFrames( time );
 	hiprt::MatrixFrame matrixFrame = hiprt::MatrixFrame::getMatrixFrameInv( frame );
 	return *reinterpret_cast<hiprtFrameMatrix*>( &matrixFrame );
@@ -1591,8 +1601,9 @@ hiprtGetObjectToWorldFrameMatrix( hiprtScene scene, const uint32_t ( &instanceID
 {
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	hiprt::Transform	tr(
-		   sceneHeader->m_frames + sceneHeader->m_transforms[instanceIDs[0]].frameIndex,
-		   sceneHeader->m_transforms[instanceIDs[0]].frameCount );
+		   sceneHeader->m_frames,
+		   sceneHeader->m_instances[instanceIDs[0]].m_frameIndex,
+		   sceneHeader->m_instances[instanceIDs[0]].m_frameCount );
 	hiprt::Frame	   frame	   = tr.interpolateFrames( time );
 	hiprt::MatrixFrame matrixFrame = hiprt::MatrixFrame::getMatrixFrame( frame );
 	for ( uint32_t i = 1; i < hiprtMaxInstanceLevels; ++i )
@@ -1600,8 +1611,9 @@ hiprtGetObjectToWorldFrameMatrix( hiprtScene scene, const uint32_t ( &instanceID
 		if ( sceneHeader->m_instances[instanceIDs[i - 1]].m_type != hiprtInstanceTypeScene ) break;
 		sceneHeader = sceneHeader->m_instances[instanceIDs[i - 1]].m_scene;
 		tr			= hiprt::Transform(
-			 sceneHeader->m_frames + sceneHeader->m_transforms[instanceIDs[i]].frameIndex,
-			 sceneHeader->m_transforms[instanceIDs[i]].frameCount );
+			 sceneHeader->m_frames,
+			 sceneHeader->m_instances[instanceIDs[i]].m_frameIndex,
+			 sceneHeader->m_instances[instanceIDs[i]].m_frameCount );
 		frame		= tr.interpolateFrames( time );
 		matrixFrame = hiprt::MatrixFrame::multiply( matrixFrame, hiprt::MatrixFrame::getMatrixFrame( frame ) );
 	}
@@ -1613,8 +1625,9 @@ hiprtGetWorldToObjectFrameMatrix( hiprtScene scene, const uint32_t ( &instanceID
 {
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	hiprt::Transform	tr(
-		   sceneHeader->m_frames + sceneHeader->m_transforms[instanceIDs[0]].frameIndex,
-		   sceneHeader->m_transforms[instanceIDs[0]].frameCount );
+		   sceneHeader->m_frames,
+		   sceneHeader->m_instances[instanceIDs[0]].m_frameIndex,
+		   sceneHeader->m_instances[instanceIDs[0]].m_frameCount );
 	hiprt::Frame	   frame	   = tr.interpolateFrames( time );
 	hiprt::MatrixFrame matrixFrame = hiprt::MatrixFrame::getMatrixFrameInv( frame );
 	for ( uint32_t i = 1; i < hiprtMaxInstanceLevels; ++i )
@@ -1622,8 +1635,9 @@ hiprtGetWorldToObjectFrameMatrix( hiprtScene scene, const uint32_t ( &instanceID
 		if ( sceneHeader->m_instances[instanceIDs[i - 1]].m_type != hiprtInstanceTypeScene ) break;
 		sceneHeader = sceneHeader->m_instances[instanceIDs[i - 1]].m_scene;
 		tr			= hiprt::Transform(
-			 sceneHeader->m_frames + sceneHeader->m_transforms[instanceIDs[i]].frameIndex,
-			 sceneHeader->m_transforms[instanceIDs[i]].frameCount );
+			 sceneHeader->m_frames,
+			 sceneHeader->m_instances[instanceIDs[i]].m_frameIndex,
+			 sceneHeader->m_instances[instanceIDs[i]].m_frameCount );
 		frame		= tr.interpolateFrames( time );
 		matrixFrame = hiprt::MatrixFrame::multiply( hiprt::MatrixFrame::getMatrixFrameInv( frame ), matrixFrame );
 	}

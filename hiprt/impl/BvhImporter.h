@@ -137,10 +137,8 @@ void BvhImporter::build(
 	// STEP 0: Init data
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
@@ -150,16 +148,8 @@ void BvhImporter::build(
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
-			{ storageMemoryArena.getStorageSize(),
-			  primitives,
-			  boxNodes,
-			  primNodes,
-			  instances,
-			  masks,
-			  transforms,
-			  frames,
-			  header } );
-		initDataKernel.launch( primitives.getFrameCount(), stream );
+			{ storageMemoryArena.getStorageSize(), primitives, boxNodes, primNodes, instances, frames, header } );
+		initDataKernel.launch( std::max( primitives.getFrameCount(), primitives.getCount() ), stream );
 	}
 	else
 	{
@@ -190,18 +180,15 @@ void BvhImporter::build(
 		return;
 	}
 
-	// STEP 1: Setup triangles
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-	{
-		Kernel setupLeavesKernel = compiler.getKernel(
-			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
-			"SetupTriangles",
-			opts,
-			GET_ARG_LIST( BvhImporterKernels ) );
-		setupLeavesKernel.setArgs( { primitives, primNodes } );
-		setupLeavesKernel.launch( primitives.getCount(), stream );
-	}
+	// STEP 1: Setup leaves
+	Kernel setupLeavesKernel = compiler.getKernel(
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
+		"SetupLeaves_" + containerNodeParam,
+		opts,
+		GET_ARG_LIST( BvhImporterKernels ) );
+	setupLeavesKernel.setArgs( { primitives, primNodes } );
+	setupLeavesKernel.launch( primitives.getCount(), stream );
 
 	// STEP 2: Convert to internal format
 	Kernel convertKernel = compiler.getKernel(
@@ -260,10 +247,8 @@ void BvhImporter::update(
 
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		GeomHeader**		  geoms		 = storageMemoryArena.allocate<GeomHeader*>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(

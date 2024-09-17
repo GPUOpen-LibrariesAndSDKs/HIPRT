@@ -31,6 +31,10 @@
 #include <map>
 #include <chrono>
 
+///
+
+///
+
 #ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 {
@@ -2149,6 +2153,7 @@ TEST_F( hiprtTest, Shear )
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
 	free( geomTemp );
+	free( sceneTemp );
 	free( dst );
 	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
 	checkHiprt( hiprtDestroyScene( ctxt, scene ) );

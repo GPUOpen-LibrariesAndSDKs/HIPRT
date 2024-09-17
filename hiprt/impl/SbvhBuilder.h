@@ -149,7 +149,7 @@ void SbvhBuilder::build(
 	size_t		   maxReferenceCount = alpha * primitives.getCount();
 	Header*		   header			 = storageMemoryArena.allocate<Header>();
 	BoxNode*	   boxNodes			 = storageMemoryArena.allocate<BoxNode>( divideRoundUp( 2 * maxReferenceCount, 3 ) );
-	PrimitiveNode* primNodes		 = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
+	PrimitiveNode* primNodes		 = storageMemoryArena.allocate<PrimitiveNode>( maxReferenceCount );
 
 	Aabb*		   box			= temporaryMemoryArena.allocate<Aabb>();
 	Task*		   taskQueue	= temporaryMemoryArena.allocate<Task>( maxReferenceCount );
@@ -183,10 +183,8 @@ void SbvhBuilder::build(
 	// STEP 0: Init data
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
@@ -196,16 +194,8 @@ void SbvhBuilder::build(
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
-			{ storageMemoryArena.getStorageSize(),
-			  primitives,
-			  boxNodes,
-			  primNodes,
-			  instances,
-			  masks,
-			  transforms,
-			  frames,
-			  header } );
-		initDataKernel.launch( primitives.getFrameCount(), stream );
+			{ storageMemoryArena.getStorageSize(), primitives, boxNodes, primNodes, instances, frames, header } );
+		initDataKernel.launch( std::max( primitives.getFrameCount(), primitives.getCount() ), stream );
 	}
 	else
 	{
@@ -241,19 +231,20 @@ void SbvhBuilder::build(
 	{
 		if ( pairTriangles )
 		{
-			int2*  pairIndices		   = reinterpret_cast<int2*>( referenceIndices[1] + maxReferenceCount );
+			int2* pairIndices = temporaryMemoryArena.allocate<int2>( primitives.getCount() );
+			checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
 			Kernel pairTrianglesKernel = compiler.getKernel(
 				context,
 				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 				"PairTriangles",
 				opts,
 				GET_ARG_LIST( BvhBuilderKernels ) );
-			pairTrianglesKernel.setArgs( { primitives, pairIndices, header } );
+			pairTrianglesKernel.setArgs( { primitives, pairIndices, taskCounter } );
 			timer.measure( PairTrianglesTime, [&]() { pairTrianglesKernel.launch( primitives.getCount(), stream ); } );
 
 			uint32_t pairCount = 0;
-			checkOro( oroMemcpyDtoHAsync(
-				&pairCount, reinterpret_cast<oroDeviceptr>( &header->m_primNodeCount ), sizeof( uint32_t ), stream ) );
+			checkOro(
+				oroMemcpyDtoHAsync( &pairCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
 			checkOro( oroStreamSynchronize( stream ) );
 			primitives.setPairs( pairCount, pairIndices );
 		}
@@ -280,10 +271,10 @@ void SbvhBuilder::build(
 	Kernel setupReferencesKernel = compiler.getKernel(
 		context,
 		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
-		"SetupLeavesAndReferences_" + containerNodeParam,
+		"SetupLeavesAndReferences_" + containerParam,
 		opts,
 		GET_ARG_LIST( SbvhBuilderKernels ) );
-	setupReferencesKernel.setArgs( { primitives, primNodes, references, taskQueue, box, referenceIndices[0], taskIndices } );
+	setupReferencesKernel.setArgs( { primitives, references, taskQueue, box, referenceIndices[0], taskIndices } );
 	timer.measure( SetupReferencesTime, [&]() { setupReferencesKernel.launch( primitives.getCount(), stream ); } );
 
 	// STEP 4: Construction
@@ -446,45 +437,25 @@ void SbvhBuilder::build(
 	}
 
 	// STEP 5: Collapse
-	uint32_t* rootAddr = nullptr;
-	checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
+	uint32_t one			  = 1;
+	int3	 rootCollapseTask = make_int3( encodeNodeIndex( 0, BoxType ), 0, 0 );
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( int3 ), stream ) );
+	checkOro( oroMemsetD8Async(
+		reinterpret_cast<oroDeviceptr>( reinterpret_cast<int3*>( taskQueue ) + 1 ),
+		0xFF,
+		sizeof( int3 ) * ( referenceCount - 1 ),
+		stream ) );
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskCounter ), &one, sizeof( uint32_t ), stream ) );
 
-	Kernel blockCollapseKernel = compiler.getKernel(
+	Kernel collapseKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
-		"BlockCollapse_" + nodeParam,
+		"../hiprt/impl/BvhBuilderKernels.h",
+		"Collapse_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
-	blockCollapseKernel.setArgs( { rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue } );
-	timer.measure( CollapseTime, [&]() { blockCollapseKernel.launch( CollapseBlockSize, CollapseBlockSize, stream ); } );
-
-	checkOro( oroMemcpyDtoHAsync( &taskCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
-
-	checkOro( oroMemcpyDtoHAsync(
-		&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
-	checkOro( oroStreamSynchronize( stream ) );
-
-	uint32_t taskOffset = nodeCount - taskCount;
-
-	Kernel deviceCollapseKernel = compiler.getKernel(
-		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
-		"DeviceCollapse_" + nodeParam,
-		opts,
-		GET_ARG_LIST( BvhBuilderKernels ) );
-	while ( taskCount > 0 )
-	{
-		deviceCollapseKernel.setArgs(
-			{ taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue } );
-		timer.measure( CollapseTime, [&]() { deviceCollapseKernel.launch( taskCount, CollapseBlockSize, stream ); } );
-
-		checkOro( oroMemcpyDtoHAsync(
-			&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
-		checkOro( oroStreamSynchronize( stream ) );
-
-		taskOffset += taskCount;
-		taskCount = nodeCount - taskOffset;
-	}
+	collapseKernel.setArgs(
+		{ referenceCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue } );
+	timer.measure( CollapseTime, [&]() { collapseKernel.launch( referenceCount, stream ); } );
 
 	if constexpr ( LogBvhCost )
 	{
@@ -555,10 +526,8 @@ void SbvhBuilder::update(
 
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		GeomHeader**		  geoms		 = storageMemoryArena.allocate<GeomHeader*>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(

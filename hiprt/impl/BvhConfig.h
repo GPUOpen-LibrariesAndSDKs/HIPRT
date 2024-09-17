@@ -37,7 +37,7 @@ static constexpr uint32_t CollapseBlockSize			   = 1024u;
 static constexpr uint32_t LbvhEmitBlockSize = 512u;
 // PLOC
 static constexpr uint32_t PlocMainBlockSize = 1024u;
-static constexpr uint32_t PlocRadius		= 10u;
+static constexpr uint32_t PlocRadius		= 8u;
 // SBVH
 static constexpr uint32_t SbvhMinBinCount = 8u;
 static constexpr uint32_t SbvhMaxBinCount = 32u;

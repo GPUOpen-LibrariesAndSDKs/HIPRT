@@ -31,12 +31,12 @@ Then, you can use either premake or cmake.
 
 &nbsp;&nbsp;&nbsp;Example with Cmake on Windows:  
 &nbsp;&nbsp;&nbsp;5. `mkdir build`  
-&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -S . -B build`  
+&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -DHIP_PATH="C:\Program Files\AMD\ROCm\5.7" -S . -B build`  
 &nbsp;&nbsp;&nbsp;7. `Open build\hiprt.sln with Visual Studio 2022.`  
 
 &nbsp;&nbsp;&nbsp;Example with Cmake on Linux:  
 &nbsp;&nbsp;&nbsp;5. `mkdir build`  
-&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -S . -B build`  
+&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -DHIP_PATH="/opt/rocm" -S . -B build`  
 &nbsp;&nbsp;&nbsp;7. `cmake --build build --config Release`  
 
 
@@ -47,7 +47,7 @@ Add the option `--bitcode` in premake, or `-DBITCODE=ON` in cmake to enable prec
 
 #### Generation of bitcode
 - After premake, go to `scripts/bitcodes`, then run `python compile.py` which compiles kernels to bitcode and fatbinary.
-- Or pass `--precompile` to premake. it executes the `compile.py` during premake. Note that you cannot do it in git bash on windows (because of hipcc...)
+- Or pass `--precompile` to premake, or `-DPRECOMPILE=ON` in cmake . It executes the `compile.py` during premake. Note that you cannot do it in git bash on windows (because of hipcc...)
 
 
 ## Running Unit Tests

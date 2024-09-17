@@ -106,20 +106,20 @@ HIPRT_DEVICE T warpSum( T warpVal )
 
 HIPRT_DEVICE Aabb warpUnion( Aabb warpVal )
 {
-	const uint32_t warpIndex = threadIdx.x & ( WarpSize - 1 );
-	Aabb		   warpValue = shflAabb( warpVal, warpIndex ^ 1 );
+	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
+	Aabb		   warpValue = shflAabb( warpVal, laneIndex ^ 1 );
 	warpVal.grow( warpValue );
-	warpValue = shflAabb( warpVal, warpIndex ^ 2 );
+	warpValue = shflAabb( warpVal, laneIndex ^ 2 );
 	warpVal.grow( warpValue );
-	warpValue = shflAabb( warpVal, warpIndex ^ 4 );
+	warpValue = shflAabb( warpVal, laneIndex ^ 4 );
 	warpVal.grow( warpValue );
-	warpValue = shflAabb( warpVal, warpIndex ^ 8 );
+	warpValue = shflAabb( warpVal, laneIndex ^ 8 );
 	warpVal.grow( warpValue );
-	warpValue = shflAabb( warpVal, warpIndex ^ 16 );
+	warpValue = shflAabb( warpVal, laneIndex ^ 16 );
 	warpVal.grow( warpValue );
 	if constexpr ( WarpSize == 64 )
 	{
-		warpValue = shflAabb( warpVal, warpIndex ^ 32 );
+		warpValue = shflAabb( warpVal, laneIndex ^ 32 );
 		warpVal.grow( warpValue );
 	}
 	warpVal = shflAabb( warpVal, WarpSize - 1 );
@@ -129,21 +129,21 @@ HIPRT_DEVICE Aabb warpUnion( Aabb warpVal )
 template <typename T>
 HIPRT_DEVICE T warpScan( T warpVal )
 {
-	const uint32_t warpIndex = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
 	T			   warpValue = __shfl_up( warpVal, 1 );
-	if ( warpIndex >= 1 ) warpVal += warpValue;
+	if ( laneIndex >= 1 ) warpVal += warpValue;
 	warpValue = __shfl_up( warpVal, 2 );
-	if ( warpIndex >= 2 ) warpVal += warpValue;
+	if ( laneIndex >= 2 ) warpVal += warpValue;
 	warpValue = __shfl_up( warpVal, 4 );
-	if ( warpIndex >= 4 ) warpVal += warpValue;
+	if ( laneIndex >= 4 ) warpVal += warpValue;
 	warpValue = __shfl_up( warpVal, 8 );
-	if ( warpIndex >= 8 ) warpVal += warpValue;
+	if ( laneIndex >= 8 ) warpVal += warpValue;
 	warpValue = __shfl_up( warpVal, 16 );
-	if ( warpIndex >= 16 ) warpVal += warpValue;
+	if ( laneIndex >= 16 ) warpVal += warpValue;
 	if constexpr ( WarpSize == 64 )
 	{
 		warpValue = __shfl_up( warpVal, 32 );
-		if ( warpIndex >= 32 ) warpVal += warpValue;
+		if ( laneIndex >= 32 ) warpVal += warpValue;
 	}
 	return warpVal;
 }
@@ -308,4 +308,11 @@ HIPRT_DEVICE T blockScan( bool blockVal, T* blockCache )
 
 	__syncthreads();
 	return blockCache[warpIndex] + warpSum - warpCount + static_cast<T>( blockVal );
+}
+
+HIPRT_DEVICE HIPRT_INLINE void SyncWarp()
+{
+#if defined( __CUDACC__ )
+	__syncwarp();
+#endif
 }

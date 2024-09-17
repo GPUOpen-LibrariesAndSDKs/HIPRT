@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import re
+import common_tools
 
 def isLinux():
     return os.name != 'nt'
@@ -15,14 +16,6 @@ if isLinux():
 errorMessageHeader = 'Bitcodes Compile Error:'
 
 hipSdkPathFromArgument = ''
-
-def getVCPath():
-    import setuptools.msvc as cc
-    pI = cc.PlatformInfo("x64")
-    rI = cc.RegistryInfo(pI)
-    sI = cc.SystemInfo(rI)
-    return sI.VCInstallDir
-
 
 def which(program, sufix=''):
     sufix = '.' + sufix
@@ -93,13 +86,22 @@ def compileAmd():
     hip_sdk_version = result.decode('utf-8')
     hip_sdk_version_major = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(1) 
     hip_sdk_version_minor = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(2)
+    hip_sdk_version_num = 10 * int(hip_sdk_version_major) + int(hip_sdk_version_minor)
     hip_version = hip_sdk_version_major +"."+ hip_sdk_version_minor
         
     # llvm.org/docs/AMDGPUUsage.html#processors
-    gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103', 'gfx1150', 'gfx1151',  # Navi3
+    gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103',  # Navi3
             'gfx1030', 'gfx1031', 'gfx1032', 'gfx1033', 'gfx1034', 'gfx1035', 'gfx1036',  # Navi2
             'gfx1010', 'gfx1011', 'gfx1012', 'gfx1013',  # Navi1
             'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx940', 'gfx941', 'gfx942']  # Vega
+    
+    if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
+        gpus.append('gfx1201')
+
+    if hip_sdk_version_num >= 61: # Strix supported from 6.1
+        gpus.append('gfx1150')
+        gpus.append('gfx1151')
+
     targets = ''
     for i in gpus:
         targets += ' --offload-arch=' + i
@@ -137,7 +139,7 @@ def compileAmd():
 def compileNv():
     ccbin = ''
     if not isLinux():
-        ccbin = getVCPath() + '\\bin\\Hostx64\\x64'
+        ccbin = common_tools.getVCPath() + '\\bin\\Hostx64\\x64'
         ccbin = '"{}"'.format(ccbin)
         ccbin = '-ccbin=' + ccbin + ' '
 
@@ -166,6 +168,7 @@ def compileNv():
 
 parser = optparse.OptionParser()
 parser.add_option('-a', '--amd', dest='amd_platform', help='Compile for AMD', action='store_true', default=True)
+parser.add_option('--no-amd'   , dest='amd_platform', help='Do not compile for AMD', action='store_false' )
 parser.add_option('-n', '--nvidia', dest='nv_platform', help='Compile for Nvidia', action='store_true', default=False)
 
 # Add the optional hipSdkPath argument

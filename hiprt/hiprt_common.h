@@ -37,7 +37,6 @@
 #include <cfloat>
 #include <cstring>
 #include <cmath>
-#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -46,6 +45,10 @@
 #include <type_traits>
 #define __host__
 #define __device__
+#endif
+
+#if !defined( __KERNELCC_RTC__ )
+#include <cstdint>
 #endif
 
 #ifdef __CUDACC__
@@ -92,7 +95,6 @@
 #define HIPRT_DEVICE __device__
 #define HIPRT_HOST_DEVICE __host__ __device__
 
-// TODO: cleanup after baking is removed
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
 #define GET_ARGS( X ) ( hip::X##Args )
 #define GET_INC( X ) ( hip::X##Includes )
@@ -173,6 +175,7 @@ constexpr uint32_t FullRayMask				 = ~0u;
 constexpr uint32_t MaxBatchBuildMaxPrimCount = 512u;
 constexpr uint32_t MaxInstanceLevels		 = 4u;
 constexpr uint32_t BranchingFactor			 = 4u;
+constexpr uint32_t DefaultAlignment			 = 64u;
 
 #ifdef __KERNELCC__
 #if __gfx900__ || __gfx902__ || __gfx904__ || __gfx906__ || __gfx908__ || __gfx909__ || __gfx90a__ || __gfx90c__ || \
@@ -413,9 +416,9 @@ enum TraversalObjSize
 	SizePrivateInstanceStack	   = 160,
 	SizeGlobalInstanceStack		   = 48,
 	SizeGeomTraversalCustomStack   = 128,
-	SizeSceneTraversalCustomStack  = 192,
+	SizeSceneTraversalCustomStack  = 176,
 	SizeGeomTraversalPrivateStack  = 400,
-	SizeSceneTraversalPrivateStack = 624,
+	SizeSceneTraversalPrivateStack = 608,
 };
 
 enum TraversalObjAlignment

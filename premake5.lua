@@ -208,7 +208,8 @@ workspace "hiprt"
     -- this define is to identify that we are on the public repository of HIPRT.
     -- it helps AMD to maintain both a public and a private repo for experimentation.
     defines {"HIPRT_PUBLIC_REPO"}
-
+    
+    
 
     -- enable CUDA if possible
     include "./contrib/Orochi/Orochi/enable_cuew"

@@ -42,31 +42,14 @@
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
 
-template <typename PrimitiveContainer, typename PrimitiveNode>
-__device__ void SetupClusters(
-	PrimitiveContainer& primitives,
-	PrimitiveNode*		primNodes,
-	ReferenceNode*		references,
-	const uint32_t*		sortedMortonCodeValues,
-	uint32_t*			nodeIndices )
+HIPRT_DEVICE uint32_t findParent( uint32_t i, uint32_t j, uint32_t n, const uint32_t* sortedMortonCodeKeys )
 {
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	if ( index >= primitives.getCount() ) return;
-
-	uint32_t leafType;
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-		leafType = TriangleType;
-	else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
-		leafType = CustomType;
-	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
-		leafType = InstanceType;
-
-	uint32_t primIndex = sortedMortonCodeValues[index];
-	references[index]  = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
-	nodeIndices[index] = encodeNodeIndex( index, leafType );
-
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-		primNodes[primIndex] = primitives.fetchTriangleNode( primIndex );
+	if ( i == 0 && j == n ) return InvalidValue;
+	if ( i == 0 || ( j != n && findHighestDifferentBit( j - 1, j, n, sortedMortonCodeKeys ) <
+								   findHighestDifferentBit( i - 1, i, n, sortedMortonCodeKeys ) ) )
+		return j - 1;
+	else
+		return i - 1;
 }
 
 __device__ __forceinline__ uint32_t encodeOffset( const int32_t threadIndex, const int32_t neighbourIndex )
@@ -82,290 +65,243 @@ __device__ __forceinline__ int32_t decodeOffset( const int32_t threadIndex, cons
 	return threadIndex + ( ( offset ^ threadIndex ) & 1 ? -static_cast<int32_t>( off ) : static_cast<int32_t>( off ) );
 }
 
-extern "C" __global__ void SetupClusters_TriangleMesh_TriangleNode(
-	TriangleMesh	primitives,
-	TriangleNode*	primNodes,
-	ReferenceNode*	references,
-	const uint32_t* sortedMortonCodeValues,
-	uint32_t*		nodeIndices )
+template <typename PrimitiveContainer>
+__device__ void SetupClusters(
+	PrimitiveContainer& primitives, ReferenceNode* references, const uint32_t* sortedMortonCodeValues, uint32_t* nodeIndices )
 {
-	SetupClusters<TriangleMesh, TriangleNode>( primitives, primNodes, references, sortedMortonCodeValues, nodeIndices );
+	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	if ( index >= primitives.getCount() ) return;
+
+	uint32_t leafType;
+	if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
+		leafType = TriangleType;
+	else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+		leafType = CustomType;
+	else if constexpr (
+		is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
+		is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
+		leafType = InstanceType;
+
+	uint32_t primIndex = sortedMortonCodeValues[index];
+	references[index]  = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
+	nodeIndices[index] = encodeNodeIndex( index, leafType );
 }
 
-extern "C" __global__ void SetupClusters_AabbList_CustomNode(
-	AabbList		primitives,
-	CustomNode*		primNodes,
-	ReferenceNode*	references,
-	const uint32_t* sortedMortonCodeValues,
-	uint32_t*		nodeIndices )
+extern "C" __global__ void SetupClusters_TriangleMesh(
+	TriangleMesh primitives, ReferenceNode* references, const uint32_t* sortedMortonCodeValues, uint32_t* nodeIndices )
 {
-	SetupClusters<AabbList, CustomNode>( primitives, primNodes, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<TriangleMesh>( primitives, references, sortedMortonCodeValues, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_InstanceList_SRTFrame_InstanceNode(
+extern "C" __global__ void SetupClusters_AabbList(
+	AabbList primitives, ReferenceNode* references, const uint32_t* sortedMortonCodeValues, uint32_t* nodeIndices )
+{
+	SetupClusters<AabbList>( primitives, references, sortedMortonCodeValues, nodeIndices );
+}
+
+extern "C" __global__ void SetupClusters_InstanceList_SRTFrame(
 	InstanceList<SRTFrame> primitives,
-	InstanceNode*		   primNodes,
 	ReferenceNode*		   references,
 	const uint32_t*		   sortedMortonCodeValues,
 	uint32_t*			   nodeIndices )
 {
-	SetupClusters<InstanceList<SRTFrame>, InstanceNode>(
-		primitives, primNodes, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<InstanceList<SRTFrame>>( primitives, references, sortedMortonCodeValues, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_InstanceList_MatrixFrame_InstanceNode(
+extern "C" __global__ void SetupClusters_InstanceList_MatrixFrame(
 	InstanceList<MatrixFrame> primitives,
-	InstanceNode*			  primNodes,
 	ReferenceNode*			  references,
 	const uint32_t*			  sortedMortonCodeValues,
 	uint32_t*				  nodeIndices )
 {
-	SetupClusters<InstanceList<MatrixFrame>, InstanceNode>(
-		primitives, primNodes, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<InstanceList<MatrixFrame>>( primitives, references, sortedMortonCodeValues, nodeIndices );
 }
 
-extern "C" __global__ void
-BlockPloc( uint32_t numberOfClusters, uint32_t* nodeIndices, ScratchNode* scratchNodes, ReferenceNode* references )
+// H-PLOC: Hierarchical Parallel Locally-Ordered Clustering for Bounding Volume Hierarchy Construction
+// https://gpuopen.com/download/publications/HPLOC.pdf
+// Disclaimer: This implementation is different than the one used in the paper.
+extern "C" __global__ void HPloc(
+	uint32_t		primCount,
+	const uint32_t* sortedMortonCodeKeys,
+	uint32_t*		updateCounters,
+	uint32_t*		nodeIndices,
+	ScratchNode*	scratchNodes,
+	ReferenceNode*	references,
+	uint32_t*		nodeCounter )
 {
-	const uint32_t index = blockDim.x * blockIdx.x + threadIdx.x;
-	if ( blockIdx.x > 0 ) return;
-	if ( index > PlocMainBlockSize ) return;
+	const uint32_t index	 = blockDim.x * blockIdx.x + threadIdx.x;
+	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex = threadIdx.x >> Log2( WarpSize );
 
 	alignas( alignof( Aabb ) ) __shared__ uint8_t boxesCache[sizeof( Aabb ) * PlocMainBlockSize];
 	__shared__ uint32_t							  distanceOffsetsBlock[PlocMainBlockSize];
 	__shared__ uint32_t							  nodeIndicesBlock[PlocMainBlockSize];
-	__shared__ uint32_t							  numberOfClustersBlock;
-	__shared__ uint32_t							  nodeCounter;
 
-	Aabb* boxesBlock = reinterpret_cast<Aabb*>( boxesCache );
+	Aabb*	  boxesBlock		  = reinterpret_cast<Aabb*>( boxesCache );
+	Aabb*	  boxesWarp			  = &boxesBlock[warpIndex * WarpSize];
+	uint32_t* distanceOffsetsWarp = &distanceOffsetsBlock[warpIndex * WarpSize];
+	uint32_t* nodeIndicesWarp	  = &nodeIndicesBlock[warpIndex * WarpSize];
 
-	if ( index >= 0 && index < numberOfClusters )
+	uint32_t i = index;
+	uint32_t j = i + 1;
+	uint32_t k, s;
+
+	bool active = index < primCount;
+
+	while ( __ballot( active ) != 0 )
 	{
-		uint32_t nodeIndex		= nodeIndices[index];
-		Aabb	 box			= isLeafNode( nodeIndex ) ? references[getNodeAddr( nodeIndex )].aabb()
-														  : scratchNodes[getNodeAddr( nodeIndex )].aabb();
-		boxesBlock[index]		= box;
-		nodeIndicesBlock[index] = nodeIndex;
-	}
-	else
-	{
-		boxesBlock[index]		= Aabb( make_float3( -FltMax ), make_float3( FltMax ) );
-		nodeIndicesBlock[index] = InvalidValue;
-	}
-	__syncthreads();
+		__threadfence();
 
-	constexpr uint32_t OffsetMask = ( ( 1u << ( Log2( PlocRadius ) + 1 ) ) - 1 );
-
-	while ( numberOfClusters > 1 )
-	{
-		uint32_t nodeIndex = nodeIndicesBlock[index];
-
-		distanceOffsetsBlock[index] = InvalidValue;
-		__syncthreads();
-
-		uint32_t minDistanceOffset = InvalidValue;
-		Aabb	 box			   = boxesBlock[index];
-
-		for ( int32_t neighbourIndex = index + 1; neighbourIndex < min( numberOfClusters, index + PlocRadius + 1 );
-			  ++neighbourIndex )
+		if ( active )
 		{
-			Aabb neighbourBox = boxesBlock[neighbourIndex];
-			neighbourBox.grow( box );
-			uint32_t distance = ( ( __float_as_uint( neighbourBox.area() ) << 1 ) & ~OffsetMask );
+			uint32_t parentAddr = findParent( i, j, primCount, sortedMortonCodeKeys );
+			if ( parentAddr == i - 1 )
+			{
+				k = atomicExch( &updateCounters[parentAddr], j );
+				s = i;
+				i = k;
+			}
+			else
+			{
+				k = atomicExch( &updateCounters[parentAddr], i );
+				s = j;
+				j = k;
+			}
 
-			const uint32_t offset0		   = encodeOffset( index, neighbourIndex );
-			const uint32_t distanceOffset0 = distance | offset0;
-			minDistanceOffset			   = min( minDistanceOffset, distanceOffset0 );
-
-			const uint32_t offset1		   = encodeOffset( neighbourIndex, index );
-			const uint32_t distanceOffset1 = distance | offset1;
-			atomicMin( &distanceOffsetsBlock[neighbourIndex], distanceOffset1 );
+			if ( k == InvalidValue ) active = false;
 		}
 
-		atomicMin( &distanceOffsetsBlock[index], minDistanceOffset );
+		__threadfence();
 
-		if ( index == 0 ) nodeCounter = 0;
-		__syncthreads();
+		const uint32_t size	 = j - i;
+		const bool	   last	 = active && size == primCount;
+		uint64_t	   merge = __ballot( ( active && size > WarpSize / 2 ) || last );
 
-		if ( index < numberOfClusters )
+		while ( merge )
 		{
-			int32_t neighbourIndex			= decodeOffset( index, distanceOffsetsBlock[index] & OffsetMask );
-			int32_t neighbourNeighbourIndex = decodeOffset( neighbourIndex, distanceOffsetsBlock[neighbourIndex] & OffsetMask );
+			const uint32_t currentLane = __ffsll( static_cast<unsigned long long>( merge ) ) - 1;
+			merge &= merge - 1;
 
-			uint32_t leftChildIndex	 = nodeIndicesBlock[index];
-			uint32_t rightChildIndex = nodeIndicesBlock[neighbourIndex];
+			const uint32_t current_i   = __shfl( i, currentLane );
+			const uint32_t current_j   = __shfl( j, currentLane );
+			const uint32_t current_s   = __shfl( s, currentLane );
+			const bool	   currentLast = __shfl( last, currentLane );
 
-			bool merging = false;
-			if ( index == neighbourNeighbourIndex )
+			uint32_t numLeft  = min( current_s - current_i, WarpSize / 2 );
+			uint32_t numRight = min( current_j - current_s, WarpSize / 2 );
+
+			uint32_t leftIndex = InvalidValue;
+			if ( laneIndex < numLeft ) leftIndex = nodeIndices[current_i + laneIndex];
+			uint32_t numValidLeft = __popcll( __ballot( leftIndex != InvalidValue ) );
+			numLeft				  = min( numLeft, numValidLeft );
+
+			uint32_t rightIndex = InvalidValue;
+			if ( laneIndex < numRight ) rightIndex = nodeIndices[current_s + laneIndex];
+			uint32_t numValidRight = __popcll( __ballot( rightIndex != InvalidValue ) );
+			numRight			   = min( numRight, numValidRight );
+
+			if ( laneIndex < numLeft ) nodeIndicesWarp[laneIndex] = leftIndex;
+			if ( laneIndex < numRight ) nodeIndicesWarp[laneIndex + numLeft] = rightIndex;
+
+			__threadfence_block();
+			SyncWarp();
+
+			uint32_t	   numberOfClusters = numLeft + numRight;
+			const uint32_t threshold		= currentLast ? 1 : WarpSize / 2;
+			if ( numberOfClusters > threshold )
 			{
-				if ( index < neighbourIndex )
+				uint32_t nodeIndex	 = nodeIndicesWarp[min( laneIndex, numberOfClusters - 1 )];
+				Aabb	 box		 = isLeafNode( nodeIndex ) ? references[getNodeAddr( nodeIndex )].aabb()
+															   : scratchNodes[getNodeAddr( nodeIndex )].aabb();
+				boxesWarp[laneIndex] = box;
+			}
+
+			constexpr uint32_t OffsetMask = ( ( 1u << ( Log2( PlocRadius ) + 1 ) ) - 1 );
+
+			while ( numberOfClusters > threshold )
+			{
+				distanceOffsetsWarp[laneIndex] = InvalidValue;
+				SyncWarp();
+
+				uint32_t minDistanceOffset = InvalidValue;
+				Aabb	 box			   = boxesWarp[laneIndex];
+
+				for ( uint32_t neighbourIndex = laneIndex + 1;
+					  neighbourIndex <= laneIndex + PlocRadius && neighbourIndex < numberOfClusters;
+					  ++neighbourIndex )
 				{
-					merging = true;
+					Aabb neighbourBox = boxesWarp[neighbourIndex];
+					neighbourBox.grow( box );
+					uint32_t distance = ( ( __float_as_uint( neighbourBox.area() ) << 1 ) & ~OffsetMask );
+
+					const uint32_t offset0		   = encodeOffset( laneIndex, neighbourIndex );
+					const uint32_t distanceOffset0 = distance | offset0;
+					minDistanceOffset			   = min( minDistanceOffset, distanceOffset0 );
+
+					const uint32_t offset1		   = encodeOffset( neighbourIndex, laneIndex );
+					const uint32_t distanceOffset1 = distance | offset1;
+					atomicMin( &distanceOffsetsWarp[neighbourIndex], distanceOffset1 );
 				}
-				else
+				atomicMin( &distanceOffsetsWarp[laneIndex], minDistanceOffset );
+
+				SyncWarp();
+
+				uint32_t nodeIndex = InvalidValue;
+				if ( laneIndex < numberOfClusters )
 				{
-					box		  = Aabb( make_float3( -FltMax ), make_float3( FltMax ) );
-					nodeIndex = InvalidValue;
+					int32_t neighbourIndex = decodeOffset( laneIndex, distanceOffsetsWarp[laneIndex] & OffsetMask );
+					int32_t neighbourNeighbourIndex =
+						decodeOffset( neighbourIndex, distanceOffsetsWarp[neighbourIndex] & OffsetMask );
+
+					uint32_t leftChildIndex	 = nodeIndicesWarp[laneIndex];
+					uint32_t rightChildIndex = nodeIndicesWarp[neighbourIndex];
+
+					bool merging = false;
+					if ( static_cast<int32_t>( laneIndex ) == neighbourNeighbourIndex )
+					{
+						if ( static_cast<int32_t>( laneIndex ) < neighbourIndex ) merging = true;
+					}
+					else
+					{
+						nodeIndex = leftChildIndex;
+					}
+
+					uint32_t nodeAddr = primCount - 2 - warpOffset( merging, nodeCounter );
+					if ( merging )
+					{
+						box.grow( boxesWarp[neighbourIndex] );
+
+						scratchNodes[nodeAddr].m_childIndex0 = leftChildIndex;
+						scratchNodes[nodeAddr].m_childIndex1 = rightChildIndex;
+						scratchNodes[nodeAddr].m_box		 = box;
+
+						nodeIndex = encodeNodeIndex( nodeAddr, BoxType );
+					}
 				}
+
+				const uint64_t warpBallot = __ballot( nodeIndex != InvalidValue ); // warp sync'd here
+				const uint32_t newIndex	  = __popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
+				numberOfClusters		  = __popcll( warpBallot );
+
+				if ( nodeIndex != InvalidValue )
+				{
+					boxesWarp[newIndex]		  = box;
+					nodeIndicesWarp[newIndex] = nodeIndex;
+				}
+
+				__threadfence_block();
+				SyncWarp();
 			}
 
-			uint32_t nodeAddr = numberOfClusters - 2 - warpOffset( merging, &nodeCounter );
-			if ( merging )
-			{
-				box.grow( boxesBlock[neighbourIndex] );
-				nodeIndex = encodeNodeIndex( nodeAddr, BoxType );
+			if ( laneIndex < WarpSize / 2 )
+				nodeIndices[current_i + laneIndex] =
+					( laneIndex < numberOfClusters ) ? nodeIndicesWarp[laneIndex] : InvalidValue;
 
-				scratchNodes[nodeAddr].m_childIndex0 = leftChildIndex;
-				scratchNodes[nodeAddr].m_childIndex1 = rightChildIndex;
-				scratchNodes[nodeAddr].m_box		 = box;
-			}
-		}
-		__syncthreads();
-
-		uint32_t blockSum		= blockScan( nodeIndex != InvalidValue, distanceOffsetsBlock );
-		boxesBlock[index]		= Aabb( make_float3( -FltMax ), make_float3( FltMax ) );
-		nodeIndicesBlock[index] = InvalidValue;
-		__syncthreads();
-
-		if ( index == blockDim.x - 1 ) numberOfClustersBlock = blockSum;
-		if ( index < numberOfClusters )
-		{
-			if ( nodeIndex != InvalidValue )
-			{
-				const uint32_t newClusterIndex	  = blockSum - 1;
-				boxesBlock[newClusterIndex]		  = box;
-				nodeIndicesBlock[newClusterIndex] = nodeIndex;
-			}
-		}
-		__syncthreads();
-
-		numberOfClusters = numberOfClustersBlock;
-	}
-}
-
-extern "C" __global__ void DevicePloc(
-	uint32_t	   numberOfClusters,
-	uint32_t*	   nodeIndices0,
-	uint32_t*	   nodeIndices1,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	uint32_t*	   taskCounter,
-	uint32_t*	   blockCounter,
-	uint32_t*	   newBlockOffsetSum )
-{
-	const uint32_t index	   = blockDim.x * blockIdx.x + threadIdx.x;
-	const uint32_t blockOffset = blockDim.x * blockIdx.x;
-
-	alignas( alignof( Aabb ) ) __shared__ uint8_t boxesCache[sizeof( Aabb ) * ( PlocMainBlockSize + 4 * PlocRadius )];
-	__shared__ uint32_t							  distanceOffsetsCache[PlocMainBlockSize + 4 * PlocRadius];
-	__shared__ uint32_t							  nodeIndicesCache[PlocMainBlockSize + 4 * PlocRadius];
-	__shared__ uint32_t							  newBlockOffset;
-
-	uint32_t* distanceOffsetsBlock = distanceOffsetsCache + 2 * PlocRadius;
-	uint32_t* nodeIndicesBlock	   = nodeIndicesCache + 2 * PlocRadius;
-	Aabb*	  boxesBlock		   = reinterpret_cast<Aabb*>( boxesCache ) + 2 * PlocRadius;
-
-	for ( int32_t neighbourIndex = static_cast<int32_t>( threadIdx.x - 2 * PlocRadius );
-		  neighbourIndex < static_cast<int32_t>( blockDim.x + 2 * PlocRadius );
-		  neighbourIndex += blockDim.x )
-	{
-		int32_t clusterIndex = neighbourIndex + blockOffset;
-		if ( clusterIndex >= 0 && clusterIndex < numberOfClusters )
-		{
-			uint32_t nodeIndex				 = nodeIndices0[clusterIndex];
-			Aabb	 box					 = isLeafNode( nodeIndex ) ? references[getNodeAddr( nodeIndex )].aabb()
-																	   : scratchNodes[getNodeAddr( nodeIndex )].aabb();
-			boxesBlock[neighbourIndex]		 = box;
-			nodeIndicesBlock[neighbourIndex] = nodeIndex;
-		}
-		else
-		{
-			boxesBlock[neighbourIndex]		 = Aabb( make_float3( -FltMax ), make_float3( FltMax ) );
-			nodeIndicesBlock[neighbourIndex] = InvalidValue;
-		}
-		distanceOffsetsBlock[neighbourIndex] = InvalidValue;
-	}
-	__syncthreads();
-
-	constexpr uint32_t OffsetMask = ( ( 1u << ( Log2( PlocRadius ) + 1 ) ) - 1 );
-
-	for ( int32_t threadIndex = static_cast<int32_t>( threadIdx.x - 2 * PlocRadius );
-		  threadIndex < static_cast<int32_t>( blockDim.x + PlocRadius );
-		  threadIndex += blockDim.x )
-	{
-		uint32_t minDistanceOffset = InvalidValue;
-		Aabb	 box			   = boxesBlock[threadIndex];
-
-		for ( int32_t neighbourIndex = threadIndex + 1; neighbourIndex < threadIndex + static_cast<int32_t>( PlocRadius ) + 1;
-			  ++neighbourIndex )
-		{
-			Aabb neighbourBox = boxesBlock[neighbourIndex];
-			neighbourBox.grow( box );
-			uint32_t distance = ( ( __float_as_uint( neighbourBox.area() ) << 1 ) & ~OffsetMask );
-
-			const uint32_t offset0		   = encodeOffset( threadIndex, neighbourIndex );
-			const uint32_t distanceOffset0 = distance | offset0;
-			minDistanceOffset			   = min( minDistanceOffset, distanceOffset0 );
-
-			const uint32_t offset1		   = encodeOffset( neighbourIndex, threadIndex );
-			const uint32_t distanceOffset1 = distance | offset1;
-			atomicMin( &distanceOffsetsBlock[neighbourIndex], distanceOffset1 );
+			__threadfence();
 		}
 
-		atomicMin( &distanceOffsetsBlock[threadIndex], minDistanceOffset );
-	}
-	__syncthreads();
+		if ( last ) active = false;
 
-	uint32_t nodeIndex = InvalidValue;
-	if ( index < numberOfClusters )
-	{
-		int32_t neighbourIndex			= decodeOffset( threadIdx.x, distanceOffsetsBlock[threadIdx.x] & OffsetMask );
-		int32_t neighbourNeighbourIndex = decodeOffset( neighbourIndex, distanceOffsetsBlock[neighbourIndex] & OffsetMask );
-
-		uint32_t leftChildIndex	 = nodeIndicesBlock[threadIdx.x];
-		uint32_t rightChildIndex = nodeIndicesBlock[neighbourIndex];
-
-		bool merging = false;
-		if ( static_cast<int32_t>( threadIdx.x ) == neighbourNeighbourIndex )
-		{
-			if ( static_cast<int32_t>( threadIdx.x ) < neighbourIndex ) merging = true;
-		}
-		else
-		{
-			nodeIndex = leftChildIndex;
-		}
-
-		uint32_t nodeAddr = numberOfClusters - 2 - warpOffset( merging, taskCounter );
-		if ( merging )
-		{
-			Aabb box = boxesBlock[threadIdx.x];
-			box.grow( boxesBlock[neighbourIndex] );
-
-			scratchNodes[nodeAddr].m_childIndex0 = leftChildIndex;
-			scratchNodes[nodeAddr].m_childIndex1 = rightChildIndex;
-			scratchNodes[nodeAddr].m_box		 = box;
-
-			nodeIndex = encodeNodeIndex( nodeAddr, BoxType );
-		}
-	}
-	__syncthreads();
-
-	uint32_t blockSum = blockScan( nodeIndex != InvalidValue, nodeIndicesCache ); // aliasing
-	if ( threadIdx.x == blockDim.x - 1 )
-	{
-		while ( atomicAdd( blockCounter, 0 ) < blockIdx.x )
-			;
-		newBlockOffset = atomicAdd( newBlockOffsetSum, blockSum );
-		atomicAdd( blockCounter, 1 );
-	}
-	__syncthreads();
-
-	if ( index < numberOfClusters )
-	{
-		if ( nodeIndex != InvalidValue )
-		{
-			const uint32_t newClusterIndex = newBlockOffset + blockSum - 1;
-			nodeIndices1[newClusterIndex]  = nodeIndex;
-		}
+		__threadfence();
 	}
 }

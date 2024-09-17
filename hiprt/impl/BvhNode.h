@@ -25,11 +25,12 @@
 #pragma once
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Aabb.h>
+#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/Triangle.h>
 
 namespace hiprt
 {
-static constexpr uint32_t DefaultAlignment	   = 64u;
 static constexpr uint32_t DefaultTriangleFlags = ( 2 << 2 ) | ( 1 << 0 );
 
 static constexpr float Ci = 1.0f;
@@ -77,9 +78,8 @@ HIPRT_HOST_DEVICE HIPRT_INLINE static bool isLeafNode( uint32_t nodeIndex )
 HIPRT_HOST_DEVICE HIPRT_INLINE static bool isInternalNode( uint32_t nodeIndex ) { return getNodeType( nodeIndex ) == BoxType; }
 
 // 32B
-class alignas( 32 ) ScratchNode
+struct alignas( 32 ) ScratchNode
 {
-  public:
 	uint32_t m_childIndex0;
 	uint32_t m_childIndex1;
 	Aabb	 m_box;
@@ -102,9 +102,8 @@ class alignas( 32 ) ScratchNode
 HIPRT_STATIC_ASSERT( sizeof( ScratchNode ) == 32 );
 
 // 128B
-class alignas( DefaultAlignment ) BoxNode
+struct alignas( DefaultAlignment ) BoxNode
 {
-  public:
 	HIPRT_HOST_DEVICE Aabb aabb() const
 	{
 		Aabb aabb;
@@ -145,9 +144,8 @@ class alignas( DefaultAlignment ) BoxNode
 HIPRT_STATIC_ASSERT( sizeof( BoxNode ) == 128 );
 
 // 64B
-class alignas( DefaultAlignment ) TriangleNode
+struct alignas( DefaultAlignment ) TriangleNode
 {
-  public:
 	HIPRT_HOST_DEVICE Aabb	aabb() const { return m_triPair.aabb(); }
 	HIPRT_HOST_DEVICE float area() const { return aabb().area(); }
 
@@ -159,25 +157,65 @@ class alignas( DefaultAlignment ) TriangleNode
 };
 HIPRT_STATIC_ASSERT( sizeof( TriangleNode ) == 64 );
 
-class alignas( 4 ) CustomNode
+// 8B
+struct alignas( 8 ) CustomNode
 {
-  public:
 	uint32_t m_parentAddr = InvalidValue;
+	uint32_t m_primIndex  = InvalidValue;
 };
-HIPRT_STATIC_ASSERT( sizeof( CustomNode ) == 4 );
+HIPRT_STATIC_ASSERT( sizeof( CustomNode ) == 8 );
 
-// 4B
-class alignas( 4 ) InstanceNode
+// 64B
+struct alignas( 64 ) InstanceNode
 {
-  public:
+	union
+	{
+		float				 m_matrix[3][4];
+		hiprtTransformHeader m_transform;
+	};
+
+	union
+	{
+		GeomHeader*	 m_geometry;
+		SceneHeader* m_scene;
+	};
 	uint32_t m_parentAddr = InvalidValue;
+	uint32_t m_primIndex : 21;
+	uint32_t m_type : 1;
+	uint32_t m_static : 1;
+	uint32_t m_identity : 1;
+	uint32_t m_mask : 8;
+
+	HIPRT_HOST_DEVICE const BoxNode* getBoxNodes() const
+	{
+		if ( m_type == hiprtInstanceTypeGeometry )
+			return m_geometry->m_boxNodes;
+		else
+			return m_scene->m_boxNodes;
+	}
+
+	HIPRT_HOST_DEVICE hiprtRay transformRay( const hiprtRay& ray ) const
+	{
+		hiprtRay	 outRay;
+		const float3 o	   = ray.origin;
+		const float3 d	   = ray.origin + ray.direction;
+		outRay.origin.x	   = m_matrix[0][0] * o.x + m_matrix[0][1] * o.y + m_matrix[0][2] * o.z + m_matrix[0][3];
+		outRay.origin.y	   = m_matrix[1][0] * o.x + m_matrix[1][1] * o.y + m_matrix[1][2] * o.z + m_matrix[1][3];
+		outRay.origin.z	   = m_matrix[2][0] * o.x + m_matrix[2][1] * o.y + m_matrix[2][2] * o.z + m_matrix[2][3];
+		outRay.direction.x = m_matrix[0][0] * d.x + m_matrix[0][1] * d.y + m_matrix[0][2] * d.z + m_matrix[0][3];
+		outRay.direction.y = m_matrix[1][0] * d.x + m_matrix[1][1] * d.y + m_matrix[1][2] * d.z + m_matrix[1][3];
+		outRay.direction.z = m_matrix[2][0] * d.x + m_matrix[2][1] * d.y + m_matrix[2][2] * d.z + m_matrix[2][3];
+		outRay.direction   = outRay.direction - outRay.origin;
+		outRay.minT		   = ray.minT;
+		outRay.maxT		   = ray.maxT;
+		return outRay;
+	}
 };
-HIPRT_STATIC_ASSERT( sizeof( InstanceNode ) == 4 );
+HIPRT_STATIC_ASSERT( sizeof( InstanceNode ) == 64 );
 
 // 32B
-class alignas( 32 ) ReferenceNode
+struct alignas( 32 ) ReferenceNode
 {
-  public:
 	ReferenceNode() = default;
 	HIPRT_HOST_DEVICE	   ReferenceNode( uint32_t primIndex ) : m_primIndex( primIndex ) {}
 	HIPRT_HOST_DEVICE	   ReferenceNode( uint32_t primIndex, const Aabb& box ) : m_primIndex( primIndex ), m_box( box ) {}
@@ -189,9 +227,8 @@ class alignas( 32 ) ReferenceNode
 HIPRT_STATIC_ASSERT( sizeof( ReferenceNode ) == 32 );
 
 // 64B
-class alignas( 64 ) ApiNode
+struct alignas( 64 ) ApiNode
 {
-  public:
 	HIPRT_HOST_DEVICE Aabb getChildBox( uint32_t i ) { return Aabb( m_childBoxesMin[i], m_childBoxesMax[i] ); }
 
 	uint32_t m_childIndices[BranchingFactor];

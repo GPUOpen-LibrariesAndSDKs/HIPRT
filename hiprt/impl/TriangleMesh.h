@@ -63,6 +63,7 @@ class TriangleMesh
 		m_vertices		  = reinterpret_cast<const uint8_t*>( mesh.vertices );
 		m_triangleIndices = reinterpret_cast<const uint8_t*>( mesh.triangleIndices );
 		m_pairIndices	  = reinterpret_cast<const int2*>( mesh.trianglePairIndices );
+		if ( m_triangleCount == 0 || m_triangleIndices == nullptr ) m_triangleCount = m_vertexCount / 3;
 	}
 
 	HIPRT_HOST_DEVICE int3 fetchTriangleIndices( uint32_t index ) const
@@ -72,11 +73,8 @@ class TriangleMesh
 		return make_int3( trianglePtr[0], trianglePtr[1], trianglePtr[2] );
 	}
 
-	HIPRT_HOST_DEVICE TriangleNode fetchTriangleNode( uint32_t index ) const
+	HIPRT_HOST_DEVICE TriangleNode fetchTriangleNode( int2 pairIndices ) const
 	{
-		int2 pairIndices = make_int2( index );
-		if ( m_pairCount > 0 ) pairIndices = m_pairIndices[index];
-
 		int3 indices0 = fetchTriangleIndices( pairIndices.x );
 		int3 indices1;
 
@@ -151,6 +149,13 @@ class TriangleMesh
 		}
 
 		return triNode;
+	}
+
+	HIPRT_HOST_DEVICE TriangleNode fetchTriangleNode( uint32_t index ) const
+	{
+		int2 pairIndices = make_int2( index );
+		if ( m_pairCount > 0 ) pairIndices = m_pairIndices[index];
+		return fetchTriangleNode( pairIndices );
 	}
 
 	HIPRT_HOST_DEVICE Aabb fetchAabb( uint32_t index ) const { return fetchTriangleNode( index ).aabb(); }

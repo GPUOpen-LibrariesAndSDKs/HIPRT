@@ -27,7 +27,7 @@
 #include <hiprt/impl/Error.h>
 #include <hiprt/impl/Utility.h>
 #include <hiprt/impl/Context.h>
-#if defined ( HIPRT_ENCRYPT )
+#if defined( HIPRT_ENCRYPT )
 #include <contrib/easy-encryption/encrypt.h>
 #endif
 #include <regex>
@@ -41,13 +41,13 @@ namespace
 #if defined( HIPRT_BITCODE_LINKING )
 constexpr auto UseBitcode = true;
 #else
-constexpr auto UseBitcode	= false;
+constexpr auto UseBitcode			= false;
 #endif
 
 #if defined( HIPRT_LOAD_FROM_STRING )
 constexpr auto UseBakedCode = true;
 #else
-constexpr auto UseBakedCode = false;
+constexpr auto UseBakedCode			= false;
 #endif
 
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
@@ -55,6 +55,7 @@ constexpr auto BakedCodeIsGenerated = true;
 #else
 constexpr auto BakedCodeIsGenerated = false;
 #endif
+HIPRT_STATIC_ASSERT( !UseBakedCode || BakedCodeIsGenerated );
 } // namespace
 
 namespace hiprt
@@ -230,6 +231,10 @@ void Compiler::buildKernels(
 			std::string				 extSrc = src;
 			if ( extended )
 			{
+				if constexpr ( UseBitcode && !BakedCodeIsGenerated )
+				{
+					throw std::runtime_error( "Not compiled with the baked kernel code support" );
+				}
 				if constexpr ( BakedCodeIsGenerated )
 				{
 					extSrc = "#include <hiprt_device_impl.h>\n";
@@ -580,7 +585,7 @@ bool Compiler::isCachedFileUpToDate( const std::filesystem::path& cachedFile, co
 
 std::string Compiler::decryptSourceCode( const std::string& srcIn )
 {
-#if defined ( HIPRT_ENCRYPT )
+#if defined( HIPRT_ENCRYPT )
 	std::lock_guard<std::mutex> lock( m_decryptMutex );
 	std::string					src;
 	if ( m_decryptCache.find( srcIn ) != m_decryptCache.end() )
@@ -596,7 +601,7 @@ std::string Compiler::decryptSourceCode( const std::string& srcIn )
 	}
 	return src;
 #else
-  return srcIn;
+	return srcIn;
 #endif
 }
 
@@ -692,9 +697,9 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 			}
 			else
 			{
-#if defined ( HIPRT_ENCRYPT )
+#if defined( HIPRT_ENCRYPT )
 				std::string deryptKeyStr( DecryptKey );
-				binary				  = decrypt( binary, deryptKeyStr );
+				binary = decrypt( binary, deryptKeyStr );
 #endif
 				m_binCache[cacheName] = binary;
 			}
@@ -707,7 +712,7 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 void Compiler::cacheBinaryToFile( const std::string& binaryIn, const std::string& cacheName, const std::string& deviceName )
 {
 	std::string binary = binaryIn;
-#if defined ( HIPRT_ENCRYPT )
+#if defined( HIPRT_ENCRYPT )
 	if constexpr ( !UseBitcode )
 	{
 		std::string deryptKeyStr( DecryptKey );

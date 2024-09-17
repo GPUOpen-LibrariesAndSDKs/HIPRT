@@ -34,17 +34,17 @@ DECLARE_TYPE_TRAITS( hiprtSceneBuildInput );
 
 size_t BatchBuilder::getStorageBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t primCount = getPrimCount( buildInput );
-	const size_t nodeSize  = getNodeSize( buildInput );
-	const size_t nodeCount = divideRoundUp( 2 * primCount, 3 );
-	return getGeometryStorageBufferSize( primCount, nodeCount, nodeSize );
+	const size_t primCount	  = getPrimCount( buildInput );
+	const size_t primNodeSize = getPrimNodeSize( buildInput );
+	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
 }
 
 size_t BatchBuilder::getStorageBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t frameCount = buildInput.frameCount;
-	const size_t primCount	= buildInput.instanceCount;
-	const size_t nodeCount	= divideRoundUp( 2 * primCount, 3 );
-	return getSceneStorageBufferSize( primCount, nodeCount, frameCount );
+	const size_t frameCount	  = buildInput.frameCount;
+	const size_t primCount	  = buildInput.instanceCount;
+	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
 }
 } // namespace hiprt

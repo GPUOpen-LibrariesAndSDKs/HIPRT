@@ -40,11 +40,62 @@
 #include <hiprt/impl/ApiNodeList.h>
 using namespace hiprt;
 
-extern "C" __global__ void SetupTriangles( TriangleMesh primitives, TriangleNode* primNodes )
+template <typename PrimitiveContainer, typename PrimitiveNode>
+__device__ void SetupLeaves( PrimitiveContainer& primitives, PrimitiveNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 
-	if ( index < primitives.getCount() ) primNodes[index] = primitives.fetchTriangleNode( index );
+	if ( index < primitives.getCount() )
+	{
+		if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
+		{
+			primNodes[index] = primitives.fetchTriangleNode( index );
+		}
+		else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
+		{
+			primNodes[index].m_primIndex = index;
+		}
+		else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+		{
+			hiprtInstance		 instance  = primitives.fetchInstance( index );
+			hiprtTransformHeader transform = primitives.fetchTransformHeader( index );
+			primNodes[index].m_primIndex   = index;
+			primNodes[index].m_mask		   = primitives.fetchMask( index );
+			primNodes[index].m_type		   = instance.type;
+			primNodes[index].m_static	   = transform.frameCount == 1 ? 1 : 0;
+			if ( instance.type == hiprtInstanceTypeScene )
+				primNodes[index].m_scene = reinterpret_cast<SceneHeader*>( instance.scene );
+			else
+				primNodes[index].m_geometry = reinterpret_cast<GeomHeader*>( instance.geometry );
+			if ( transform.frameCount == 1 )
+				primNodes[index].m_identity =
+					primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
+			else
+				primNodes[index].m_transform = transform;
+		}
+	}
+}
+
+extern "C" __global__ void SetupLeaves_TriangleMesh_TriangleNode( TriangleMesh primitives, TriangleNode* primNodes )
+{
+	SetupLeaves<TriangleMesh, TriangleNode>( primitives, primNodes );
+}
+
+extern "C" __global__ void SetupLeaves_AabbList_CustomNode( AabbList primitives, CustomNode* primNodes )
+{
+	SetupLeaves<AabbList, CustomNode>( primitives, primNodes );
+}
+
+extern "C" __global__ void
+SetupLeaves_InstanceList_SRTFrame_InstanceNode( InstanceList<SRTFrame> primitives, InstanceNode* primNodes )
+{
+	SetupLeaves<InstanceList<SRTFrame>, InstanceNode>( primitives, primNodes );
+}
+
+extern "C" __global__ void
+SetupLeaves_InstanceList_MatrixFrame_InstanceNode( InstanceList<MatrixFrame> primitives, InstanceNode* primNodes )
+{
+	SetupLeaves<InstanceList<MatrixFrame>, InstanceNode>( primitives, primNodes );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode>
@@ -67,7 +118,7 @@ __device__ void Convert( PrimitiveContainer& primitives, ApiNodeList nodes, BoxN
 		Aabb*	  childBoxes   = &boxNodes[index].m_box0;
 		uint32_t* childIndices = &boxNodes[index].m_childIndex0;
 		uint32_t  childCount   = 0;
-		for ( uint32_t i = 0; i < 4; ++i )
+		for ( uint32_t i = 0; i < BranchingFactor; ++i )
 		{
 			uint32_t childIndex = node.m_childIndices[i];
 			if ( childIndex != InvalidValue )

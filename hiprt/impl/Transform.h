@@ -34,6 +34,14 @@ struct MatrixFrame;
 
 struct alignas( 64 ) Frame
 {
+	HIPRT_HOST_DEVICE Frame() : m_time( 0.0f )
+	{
+		m_scale		  = make_float3( 1.0f );
+		m_shear		  = make_float3( 0.0f );
+		m_translation = make_float3( 0.0f );
+		m_rotation	  = make_float4( 0.0f, 0.0f, 0.0f, 1.0f );
+	}
+
 	HIPRT_HOST_DEVICE float3 transform( const float3& p ) const
 	{
 		if ( identity() ) return p;
@@ -83,7 +91,7 @@ struct alignas( 64 ) Frame
 		if ( m_scale.x != 1.0f || m_scale.y != 1.0f || m_scale.z != 1.0f ) return false;
 		if ( m_shear.x != 0.0f || m_shear.y != 0.0f || m_shear.z != 0.0f ) return false;
 		if ( m_translation.x != 0.0f || m_translation.y != 0.0f || m_translation.z != 0.0f ) return false;
-		if ( m_rotation.w != 0.0f ) return false;
+		if ( m_rotation.w != 1.0f ) return false;
 		return true;
 	}
 
@@ -166,6 +174,17 @@ struct alignas( 64 ) MatrixFrame
 
 	static HIPRT_HOST_DEVICE MatrixFrame getMatrixFrame( const Frame& frame )
 	{
+		MatrixFrame matrixFrame{};
+		matrixFrame.m_time = frame.m_time;
+
+		if ( frame.identity() )
+		{
+			matrixFrame.m_matrix[0][0] = 1.0f;
+			matrixFrame.m_matrix[1][1] = 1.0f;
+			matrixFrame.m_matrix[2][2] = 1.0f;
+			return matrixFrame;
+		}
+
 		float Q[3][3];
 		qtToRotationMatrix( frame.m_rotation, Q );
 
@@ -179,9 +198,6 @@ struct alignas( 64 ) MatrixFrame
 		R[1][0] = 0.0f;
 		R[2][0] = 0.0f;
 		R[2][1] = 0.0f;
-
-		MatrixFrame matrixFrame{};
-		matrixFrame.m_time = frame.m_time;
 
 #ifdef __KERNECC__
 #pragma unroll
@@ -206,6 +222,17 @@ struct alignas( 64 ) MatrixFrame
 
 	static HIPRT_HOST_DEVICE MatrixFrame getMatrixFrameInv( const Frame& frame )
 	{
+		MatrixFrame matrixFrame{};
+		matrixFrame.m_time = frame.m_time;
+
+		if ( frame.identity() )
+		{
+			matrixFrame.m_matrix[0][0] = 1.0f;
+			matrixFrame.m_matrix[1][1] = 1.0f;
+			matrixFrame.m_matrix[2][2] = 1.0f;
+			return matrixFrame;
+		}
+
 		float Q[3][3];
 		qtToRotationMatrix( frame.m_rotation, Q );
 
@@ -221,9 +248,6 @@ struct alignas( 64 ) MatrixFrame
 		Ri[2][0] = 0.0f;
 		Ri[2][1] = 0.0f;
 
-		MatrixFrame matrixFrame{};
-		matrixFrame.m_time = frame.m_time;
-
 #ifdef __KERNECC__
 #pragma unroll
 #endif
@@ -238,15 +262,15 @@ struct alignas( 64 ) MatrixFrame
 				for ( uint32_t k = 0; k < 3; ++k )
 					matrixFrame.m_matrix[i][j] += Ri[i][k] * Q[j][k];
 
-		matrixFrame.m_matrix[0][3] = matrixFrame.m_matrix[0][0] * frame.m_translation.x +
-									 matrixFrame.m_matrix[0][1] * frame.m_translation.y +
-									 matrixFrame.m_matrix[0][2] * frame.m_translation.z;
-		matrixFrame.m_matrix[1][3] = matrixFrame.m_matrix[1][0] * frame.m_translation.x +
-									 matrixFrame.m_matrix[1][1] * frame.m_translation.y +
-									 matrixFrame.m_matrix[1][2] * frame.m_translation.z;
-		matrixFrame.m_matrix[2][3] = matrixFrame.m_matrix[2][0] * frame.m_translation.x +
-									 matrixFrame.m_matrix[2][1] * frame.m_translation.y +
-									 matrixFrame.m_matrix[2][2] * frame.m_translation.z;
+		matrixFrame.m_matrix[0][3] =
+			-( matrixFrame.m_matrix[0][0] * frame.m_translation.x + matrixFrame.m_matrix[0][1] * frame.m_translation.y +
+			   matrixFrame.m_matrix[0][2] * frame.m_translation.z );
+		matrixFrame.m_matrix[1][3] =
+			-( matrixFrame.m_matrix[1][0] * frame.m_translation.x + matrixFrame.m_matrix[1][1] * frame.m_translation.y +
+			   matrixFrame.m_matrix[1][2] * frame.m_translation.z );
+		matrixFrame.m_matrix[2][3] =
+			-( matrixFrame.m_matrix[2][0] * frame.m_translation.x + matrixFrame.m_matrix[2][1] * frame.m_translation.y +
+			   matrixFrame.m_matrix[2][2] * frame.m_translation.z );
 
 		return matrixFrame;
 	}
@@ -284,13 +308,16 @@ HIPRT_STATIC_ASSERT( sizeof( MatrixFrame ) == 64 );
 class Transform
 {
   public:
-	HIPRT_HOST_DEVICE Transform( const Frame* frameData, uint32_t frameCount )
-		: m_frames( frameData ), m_frameCount( frameCount )
+	HIPRT_HOST_DEVICE Transform( const Frame* frameData, uint32_t frameIndex, uint32_t frameCount )
+		: m_frameCount( frameCount ), m_frames( nullptr )
 	{
+		if ( frameData != nullptr ) m_frames = frameData + frameIndex;
 	}
 
 	HIPRT_HOST_DEVICE Frame interpolateFrames( float time ) const
 	{
+		if ( m_frameCount == 0 || m_frames == nullptr ) return Frame();
+
 		Frame f0 = m_frames[0];
 		if ( m_frameCount == 1 || time == 0.0f || time <= f0.m_time ) return f0;
 
@@ -338,8 +365,15 @@ class Transform
 	{
 		Aabb outAabb;
 
+		if ( m_frameCount == 0 || m_frames == nullptr )
+		{
+			outAabb.grow( p );
+			return outAabb;
+		}
+
 		Frame f0 = m_frames[0];
 		outAabb.grow( f0.transform( p ) );
+
 		if ( m_frameCount == 1 ) return outAabb;
 
 		constexpr uint32_t Steps = 3;
