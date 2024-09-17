@@ -23,10 +23,11 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#include <hiprt/impl/BvhNode.h>
 
 namespace hiprt
 {
+struct BoxNode;
+
 struct GeomHeader
 {
 	BoxNode* m_boxNodes;

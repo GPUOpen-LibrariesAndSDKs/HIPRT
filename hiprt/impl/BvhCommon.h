@@ -23,6 +23,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
+#include <hiprt/impl/BvhNode.h>
 #include <hiprt/impl/Instance.h>
 #include <hiprt/impl/Scene.h>
 
@@ -51,7 +52,7 @@ HIPRT_INLINE HIPRT_HOST_DEVICE size_t getPrimCount( const hiprtGeometryBuildInpu
 	return primCount;
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getNodeSize( const hiprtGeometryBuildInput& buildInput )
+HIPRT_INLINE HIPRT_HOST_DEVICE size_t getPrimNodeSize( const hiprtGeometryBuildInput& buildInput )
 {
 	size_t nodeSize;
 	switch ( buildInput.type )
@@ -73,20 +74,18 @@ HIPRT_INLINE HIPRT_HOST_DEVICE size_t getNodeSize( const hiprtGeometryBuildInput
 }
 
 HIPRT_INLINE HIPRT_HOST_DEVICE size_t
-getGeometryStorageBufferSize( const size_t primCount, const size_t nodeCount, const size_t nodeSize )
+getGeometryStorageBufferSize( const size_t primNodeCount, const size_t boxNodeCount, const size_t primNodeSize )
 {
-	return roundUp( sizeof( GeomHeader ), DefaultAlignment ) + roundUp( primCount * nodeSize, DefaultAlignment ) +
-		   roundUp( nodeCount * sizeof( BoxNode ), DefaultAlignment );
+	return roundUp( sizeof( GeomHeader ), DefaultAlignment ) + roundUp( primNodeCount * primNodeSize, DefaultAlignment ) +
+		   roundUp( boxNodeCount * sizeof( BoxNode ), DefaultAlignment );
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t
-getSceneStorageBufferSize( const size_t primCount, const size_t nodeCount, const size_t frameCount )
+HIPRT_INLINE HIPRT_HOST_DEVICE size_t getSceneStorageBufferSize(
+	const size_t primCount, const size_t primNodeCount, const size_t boxNodeCount, const size_t frameCount )
 {
-	return roundUp( sizeof( SceneHeader ), DefaultAlignment ) + roundUp( nodeCount * sizeof( BoxNode ), DefaultAlignment ) +
-		   roundUp( primCount * sizeof( InstanceNode ), DefaultAlignment ) +
+	return roundUp( sizeof( SceneHeader ), DefaultAlignment ) + roundUp( boxNodeCount * sizeof( BoxNode ), DefaultAlignment ) +
+		   roundUp( primNodeCount * sizeof( InstanceNode ), DefaultAlignment ) +
 		   roundUp( primCount * sizeof( Instance ), DefaultAlignment ) +
-		   roundUp( primCount * sizeof( uint32_t ), DefaultAlignment ) +
-		   roundUp( primCount * sizeof( hiprtTransformHeader ), DefaultAlignment ) +
 		   roundUp( frameCount * sizeof( Frame ), DefaultAlignment );
 }
 

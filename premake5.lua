@@ -19,6 +19,16 @@ newoption {
     description = "Use hiprtew"
 }
 
+newoption {
+    trigger = "noUnittest",
+    description = "Don't build unit tests",
+}
+
+newoption {
+    trigger = "noEncrypt",
+    description = "Don't encrypt kernel source and binaries",
+}
+
 function copydir(src_dir, dst_dir, filter, single_dst_dir)
     filter = filter or "**"
     src_dir = src_dir .. "/"
@@ -188,7 +198,7 @@ workspace "hiprt"
 	flags { "MultiProcessorCompile" }
 
     if os.ishost("windows") then
-        buildoptions {"/wd4244", "/wd4305", "/wd4018", "/wd4996"}
+        buildoptions {"/wd4244", "/wd4305", "/wd4018", "/wd4996", "/Zc:__cplusplus"}
     end
     if os.ishost("linux") then
         buildoptions {"-fvisibility=hidden"}
@@ -198,6 +208,12 @@ workspace "hiprt"
     -- this define is to identify that we are on the public repository of HIPRT.
     -- it helps AMD to maintain both a public and a private repo for experimentation.
     defines {"HIPRT_PUBLIC_REPO"}
+    
+    
+
+    -- enable CUDA if possible
+    include "./contrib/Orochi/Orochi/enable_cuew"
+
 
     targetdir "dist/bin/%{cfg.buildcfg}"    
     location "build/"
@@ -207,13 +223,17 @@ workspace "hiprt"
 
     HIPRT_NAME = "hiprt"..HIPRT_VERSION_STR
     project( HIPRT_NAME )
-        cppdialect "C++20"
+        cppdialect "C++17"
         kind "SharedLib"
         defines {"HIPRT_EXPORTS"}
 	if _OPTIONS["bitcode"] then
 		defines {"HIPRT_BITCODE_LINKING"}
         defines {"ORO_PRECOMPILED"}
 	end
+
+    if not _OPTIONS["no-encrypt"] then
+        defines {"HIPRT_ENCRYPT"}
+    end
 
     if _OPTIONS["precompile"] then
         os.execute( "cd ./scripts/bitcodes/ && python compile.py")
@@ -232,6 +252,7 @@ workspace "hiprt"
             defines {"HIPRT_LOAD_FROM_STRING"}
             defines { "ORO_PP_LOAD_FROM_STRING" }
         end
+        defines {"HIPRT_BAKE_KERNEL_GENERATED"}
     end
     if os.istarget("windows") then
         links{ "version" }
@@ -242,66 +263,71 @@ workspace "hiprt"
     removefiles {"hiprt/bitcodes/**"}
     externalincludedirs { "./contrib/Orochi/" }
     files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
-    files {"contrib/Orochi/contrib/**.h", "contrib/Orochi/contrib/**.cpp"}
+    files {"contrib/Orochi/contrib/cuew/**.h", "contrib/Orochi/contrib/cuew/**.cpp"}
+    files {"contrib/Orochi/contrib/hipew/**.h", "contrib/Orochi/contrib/hipew/**.cpp"}
     files {"contrib/Orochi/ParallelPrimitives/**.h", "contrib/Orochi/ParallelPrimitives/**.cpp"}
 
 	
-    project( "unittest" )
-        cppdialect "C++20"
-        kind "ConsoleApp"
-	    if _OPTIONS["bitcode"] then
-	    	defines {"HIPRT_BITCODE_LINKING"}
-	    end
-        if os.ishost("windows") then
-            buildoptions { "/wd4244" }
-            links{ "version" }
-        end
-        externalincludedirs {"./"}
-		links { HIPRT_NAME }
-		
-        if os.ishost("linux") then
-            links { "pthread", "dl" }
-        end
-        files { "test/hiprtT*.h", "test/hiprtT*.cpp", "test/shared.h", "test/main.cpp", "test/CornellBox.h", "test/kernels/*.h" }
-        externalincludedirs { "./contrib/Orochi/" }
-        files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
-        files {"contrib/Orochi/contrib/**.h", "contrib/Orochi/contrib/**.cpp"}
-
-        files { "contrib/gtest-1.6.0/gtest-all.cc" }
-        externalincludedirs { "contrib/gtest-1.6.0/" }
-        defines { "GTEST_HAS_TR1_TUPLE=0" }
-        externalincludedirs { "contrib/embree/include/" }
-        if os.istarget("windows") then
-            libdirs{"contrib/embree/win/"}
-            copydir( "./contrib/embree/win", "./dist/bin/Release/", "*.dll" )
-            copydir( "./contrib/embree/win", "./dist/bin/Debug/", "*.dll" )
-			libdirs{"contrib/bin/win64"}
-            copydir( "./contrib/Orochi/contrib/bin/win64", "./dist/bin/Release/", "*.dll" )
-            copydir( "./contrib/Orochi/contrib/bin/win64", "./dist/bin/Debug/", "*.dll" )
-        end
-        if os.istarget("linux") then
-            libdirs{"contrib/embree/linux/"}
-        end
-        links{ "embree4", "tbb" }
-		if _OPTIONS["hiprtew"] then
-             project( "hiprtewtest" )
-                     kind "ConsoleApp"
-                     defines {"HIPRT_EXPORTS"}
-					 defines {"USE_HIPRTEW"}
-                     if os.ishost("windows") then
-                             buildoptions { "/wd4244" }
-                             links{ "version" }
-                     end
-                     externalincludedirs {"./", "./contrib/Orochi/"}
-                     if os.ishost("linux") then
-                             links { "pthread", "dl"}
-                     end
-					 files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
-					 files {"contrib/Orochi/contrib/**.h", "contrib/Orochi/contrib/**.cpp"}
-                     files { "test/hiprtewTest.h", "test/hiprtewTest.cpp" }
+	if not _OPTIONS["noUnittest"] then
+		project( "unittest" )
+			cppdialect "C++17"
+			kind "ConsoleApp"
+			if _OPTIONS["bitcode"] then
+				defines {"HIPRT_BITCODE_LINKING"}
+			end
+			if os.ishost("windows") then
+				buildoptions { "/wd4244" }
+				links{ "version" }
+			end
+			externalincludedirs {"./"}
+			links { HIPRT_NAME }
 			
-                     files { "contrib/gtest-1.6.0/gtest-all.cc" }
-                     externalincludedirs { "contrib/gtest-1.6.0/" }
-                     defines { "GTEST_HAS_TR1_TUPLE=0" }
-    end
+			if os.ishost("linux") then
+				links { "pthread", "dl" }
+			end
+			files { "test/hiprtT*.h", "test/hiprtT*.cpp", "test/shared.h", "test/main.cpp", "test/CornellBox.h", "test/kernels/*.h" }
+			externalincludedirs { "./contrib/Orochi/" }
+			files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
+			files {"contrib/Orochi/contrib/cuew/**.h", "contrib/Orochi/contrib/cuew/**.cpp"}
+			files {"contrib/Orochi/contrib/hipew/**.h", "contrib/Orochi/contrib/hipew/**.cpp"}
 
+			files { "contrib/gtest-1.6.0/gtest-all.cc" }
+			externalincludedirs { "contrib/gtest-1.6.0/" }
+			defines { "GTEST_HAS_TR1_TUPLE=0" }
+			externalincludedirs { "contrib/embree/include/" }
+			if os.istarget("windows") then
+				libdirs{"contrib/embree/win/"}
+				copydir( "./contrib/embree/win", "./dist/bin/Release/", "*.dll" )
+				copydir( "./contrib/embree/win", "./dist/bin/Debug/", "*.dll" )
+				libdirs{"contrib/bin/win64"}
+				copydir( "./contrib/Orochi/contrib/bin/win64", "./dist/bin/Release/", "*.dll" )
+				copydir( "./contrib/Orochi/contrib/bin/win64", "./dist/bin/Debug/", "*.dll" )
+			end
+			if os.istarget("linux") then
+				libdirs{"contrib/embree/linux/"}
+			end
+			links{ "embree4", "tbb" }
+
+	end
+
+	if _OPTIONS["hiprtew"] then
+		 project( "hiprtewtest" )
+				 kind "ConsoleApp"
+				 defines {"HIPRT_EXPORTS"}
+				 defines {"USE_HIPRTEW"}
+				 if os.ishost("windows") then
+						 buildoptions { "/wd4244" }
+						 links{ "version" }
+				 end
+				 externalincludedirs {"./", "./contrib/Orochi/"}
+				 if os.ishost("linux") then
+						 links { "pthread", "dl"}
+				 end
+				 files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
+				 files {"contrib/Orochi/contrib/**.h", "contrib/Orochi/contrib/**.cpp"}
+				 files { "test/hiprtewTest.h", "test/hiprtewTest.cpp" }
+
+				 files { "contrib/gtest-1.6.0/gtest-all.cc" }
+				 externalincludedirs { "contrib/gtest-1.6.0/" }
+				 defines { "GTEST_HAS_TR1_TUPLE=0" }
+    end

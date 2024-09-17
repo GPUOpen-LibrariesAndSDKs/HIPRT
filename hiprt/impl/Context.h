@@ -132,7 +132,6 @@ class Context
 	uint32_t	getMaxGridSize() const;
 	std::string getDeviceName() const;
 	std::string getGcnArchName() const;
-	uint32_t	getGcnArchNumber() const;
 	std::string getDriverVersion() const;
 
 	oroDevice	 getDevice() const noexcept;

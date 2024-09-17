@@ -13,3 +13,4 @@ hiprt/hiprt.h
 hiprt/hiprtew.h
 hiprt/cache/Kernels.h
 hiprt/cache/KernelArgs.h
+PUBLIC_OUT/

@@ -137,36 +137,30 @@ void BvhImporter::build(
 	// STEP 0: Init data
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
-			{ storageMemoryArena.getStorageSize(),
-			  primitives,
-			  boxNodes,
-			  primNodes,
-			  instances,
-			  masks,
-			  transforms,
-			  frames,
-			  header } );
-		initDataKernel.launch( primitives.getFrameCount(), stream );
+			{ storageMemoryArena.getStorageSize(), primitives, boxNodes, primNodes, instances, frames, header } );
+		initDataKernel.launch( std::max( primitives.getFrameCount(), primitives.getCount() ), stream );
 	}
 	else
 	{
 		geomType <<= 1;
 		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
 		Kernel initDataKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "InitGeomData", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"InitGeomData",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
 			{ storageMemoryArena.getStorageSize(), primitives.getCount(), boxNodes, primNodes, geomType, header } );
 		initDataKernel.launch( 1, stream );
@@ -177,7 +171,7 @@ void BvhImporter::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -186,19 +180,20 @@ void BvhImporter::build(
 		return;
 	}
 
-	// STEP 1: Setup triangles
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-	{
-		Kernel setupLeavesKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhImporterKernels.h", "SetupTriangles", opts, GET_ARG_LIST( BvhImporterKernels ) );
-		setupLeavesKernel.setArgs( { primitives, primNodes } );
-		setupLeavesKernel.launch( primitives.getCount(), stream );
-	}
+	// STEP 1: Setup leaves
+	Kernel setupLeavesKernel = compiler.getKernel(
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
+		"SetupLeaves_" + containerNodeParam,
+		opts,
+		GET_ARG_LIST( BvhImporterKernels ) );
+	setupLeavesKernel.setArgs( { primitives, primNodes } );
+	setupLeavesKernel.launch( primitives.getCount(), stream );
 
 	// STEP 2: Convert to internal format
 	Kernel convertKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhImporterKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
 		"Convert_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhImporterKernels ) );
@@ -212,7 +207,11 @@ void BvhImporter::build(
 		checkOro( oroMalloc( reinterpret_cast<oroDeviceptr*>( &costCounter ), sizeof( float ) ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( costCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ComputeCost", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ComputeCost",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		computeCostKernel.setArgs( { nodeCount, boxNodes, costCounter } );
 		computeCostKernel.launch( nodeCount, ReductionBlockSize, stream );
 
@@ -248,15 +247,13 @@ void BvhImporter::update(
 
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		GeomHeader**		  geoms		 = storageMemoryArena.allocate<GeomHeader*>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -266,14 +263,18 @@ void BvhImporter::update(
 	else
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ResetCounters", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ResetCounters",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
 		resetCountersKernel.launch( primitives.getCount(), stream );
 	}
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

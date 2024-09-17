@@ -23,6 +23,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #include <hiprt/hiprt.h>
+#include <hiprt/hiprt_libpath.h>
 #include <hiprt/impl/Error.h>
 #include <hiprt/impl/Context.h>
 #include <hiprt/impl/Geometry.h>
@@ -33,7 +34,7 @@ using namespace hiprt;
 
 hiprtError hiprtCreateContext( uint32_t hiprtApiVersion, const hiprtContextCreationInput& input, hiprtContext& contextOut )
 {
-	oroInitialize( ( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA, 0 );
+	oroInitialize( ( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA, 0, g_hip_paths, g_hiprtc_paths );
 	if ( hiprtApiVersion != HIPRT_API_VERSION ) return hiprtErrorInvalidApiVersion;
 	Context* ctxt = new Context( input );
 	contextOut	  = reinterpret_cast<hiprtContext>( ctxt );
@@ -629,8 +630,8 @@ hiprtError hiprtBuildTraceKernels(
 	hiprtApiModule*	  moduleOut,
 	bool			  cache )
 {
-	if ( !context || numFunctions == 0 || funcNamesIn == nullptr || functionsOut == nullptr || moduleName == nullptr ||
-		 src == nullptr )
+	if ( !context || moduleName == nullptr || src == nullptr ||
+		 ( ( funcNamesIn == nullptr || functionsOut == nullptr || numFunctions == 0 ) && moduleOut == nullptr ) )
 		return hiprtErrorInvalidParameter;
 
 	try

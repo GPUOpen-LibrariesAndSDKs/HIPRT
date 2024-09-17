@@ -146,10 +146,10 @@ void PlocBuilder::build(
 	ScratchNode*   scratchNodes = temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
 	ReferenceNode* references	= temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
 	uint32_t*	   taskCounter	= temporaryMemoryArena.allocate<uint32_t>();
+	int3*		   taskQueue	= temporaryMemoryArena.allocate<int3>( primitives.getCount() );
 
-	uint32_t* nodeIndices[2];
-	nodeIndices[0] = temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
-	nodeIndices[1] = temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
+	uint32_t* nodeIndices	 = reinterpret_cast<uint32_t*>( taskQueue ) + 0 * primitives.getCount();
+	uint32_t* updateCounters = reinterpret_cast<uint32_t*>( taskQueue ) + 1 * primitives.getCount();
 
 	uint32_t* mortonCodeKeys[2];
 	mortonCodeKeys[0] = reinterpret_cast<uint32_t*>( boxNodes ) + 0 * primitives.getCount();
@@ -177,29 +177,19 @@ void PlocBuilder::build(
 	// STEP 0: Init data
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs(
-			{ storageMemoryArena.getStorageSize(),
-			  primitives,
-			  boxNodes,
-			  primNodes,
-			  instances,
-			  masks,
-			  transforms,
-			  frames,
-			  header } );
-		initDataKernel.launch( primitives.getFrameCount(), stream );
+			{ storageMemoryArena.getStorageSize(), primitives, boxNodes, primNodes, instances, frames, header } );
+		initDataKernel.launch( std::max( primitives.getFrameCount(), primitives.getCount() ), stream );
 	}
 	else
 	{
@@ -207,7 +197,11 @@ void PlocBuilder::build(
 		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
 		const uint32_t primCount	  = pairTriangles ? 0u : primitives.getCount();
 		Kernel		   initDataKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "InitGeomData", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"InitGeomData",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		initDataKernel.setArgs( { storageMemoryArena.getStorageSize(), primCount, boxNodes, primNodes, geomType, header } );
 		initDataKernel.launch( 1, stream );
 	}
@@ -217,7 +211,7 @@ void PlocBuilder::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -231,15 +225,20 @@ void PlocBuilder::build(
 	{
 		if ( pairTriangles )
 		{
-			int2*  pairIndices		   = reinterpret_cast<int2*>( mortonCodeValues[1] + primitives.getCount() );
+			int2* pairIndices = temporaryMemoryArena.allocate<int2>( primitives.getCount() );
+			checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
 			Kernel pairTrianglesKernel = compiler.getKernel(
-				context, "../hiprt/impl/BvhBuilderKernels.h", "PairTriangles", opts, GET_ARG_LIST( BvhBuilderKernels ) );
-			pairTrianglesKernel.setArgs( { primitives, pairIndices, header } );
+				context,
+				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+				"PairTriangles",
+				opts,
+				GET_ARG_LIST( BvhBuilderKernels ) );
+			pairTrianglesKernel.setArgs( { primitives, pairIndices, taskCounter } );
 			timer.measure( PairTrianglesTime, [&]() { pairTrianglesKernel.launch( primitives.getCount(), stream ); } );
 
 			uint32_t pairCount = 0;
-			checkOro( oroMemcpyDtoHAsync(
-				&pairCount, reinterpret_cast<oroDeviceptr>( &header->m_primNodeCount ), sizeof( uint32_t ), stream ) );
+			checkOro(
+				oroMemcpyDtoHAsync( &pairCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
 			checkOro( oroStreamSynchronize( stream ) );
 			primitives.setPairs( pairCount, pairIndices );
 		}
@@ -251,7 +250,7 @@ void PlocBuilder::build(
 
 	Kernel computeCentroidBoxKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"ComputeCentroidBox_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -263,7 +262,7 @@ void PlocBuilder::build(
 	// STEP 3: Calculate Morton codes
 	Kernel computeMortonCodesKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"ComputeMortonCodes_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -276,95 +275,48 @@ void PlocBuilder::build(
 			mortonCodeKeys[0], mortonCodeValues[0], mortonCodeKeys[1], mortonCodeValues[1], primitives.getCount(), stream );
 	} );
 
-	// STEP 5: Setup initial clusters from leafs
+	// STEP 5: Setup initial clusters from leaves
 	Kernel setupClustersKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/PlocBuilderKernels.h",
-		"SetupClusters_" + containerNodeParam,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/PlocBuilderKernels.h",
+		"SetupClusters_" + containerParam,
 		opts,
 		GET_ARG_LIST( PlocBuilderKernels ) );
-	setupClustersKernel.setArgs( { primitives, primNodes, references, mortonCodeValues[1], nodeIndices[0] } );
+	setupClustersKernel.setArgs( { primitives, references, mortonCodeValues[1], nodeIndices } );
 	timer.measure( SetupClustersTime, [&]() { setupClustersKernel.launch( primitives.getCount(), stream ); } );
 
 	// STEP 6: Clustering
-	uint32_t* newBlockOffsetSum = mortonCodeKeys[0];
-	uint32_t* blockCounter		= newBlockOffsetSum + 1;
-	int2*	  taskQueue			= reinterpret_cast<int2*>( nodeIndices[0] );
+	checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
+	checkOro( oroMemsetD8Async(
+		reinterpret_cast<oroDeviceptr>( updateCounters ), 0xFF, sizeof( uint32_t ) * primitives.getCount(), stream ) );
 
-	uint32_t numberOfClusters = primitives.getCount();
-	bool	 swapBuffers	  = false;
-	while ( numberOfClusters > 1 )
-	{
-		// Block-wide PLOC
-		if ( numberOfClusters <= MainBlockSize )
-		{
-			Kernel blockPlocKernel = compiler.getKernel(
-				context, "../hiprt/impl/PlocBuilderKernels.h", "BlockPloc", opts, GET_ARG_LIST( PlocBuilderKernels ) );
-			blockPlocKernel.setArgs( { numberOfClusters, nodeIndices[swapBuffers], scratchNodes, references } );
-			timer.measure( PlocTime, [&]() { blockPlocKernel.launch( numberOfClusters, MainBlockSize, stream ); } );
-			break;
-		}
-
-		// Neighbour search, merging, and compaction in a single kernel (aka PLOC++)
-		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( int ), stream ) );
-		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( newBlockOffsetSum ), 0, sizeof( int ), stream ) );
-		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( blockCounter ), 0, sizeof( int ), stream ) );
-		Kernel devicePlocKernel = compiler.getKernel(
-			context, "../hiprt/impl/PlocBuilderKernels.h", "DevicePloc", opts, GET_ARG_LIST( PlocBuilderKernels ) );
-		devicePlocKernel.setArgs(
-			{ numberOfClusters,
-			  nodeIndices[swapBuffers],
-			  nodeIndices[!swapBuffers],
-			  scratchNodes,
-			  references,
-			  taskCounter,
-			  blockCounter,
-			  newBlockOffsetSum } );
-		timer.measure( PlocTime, [&]() { devicePlocKernel.launch( numberOfClusters, MainBlockSize, stream ); } );
-
-		int mergedClusters{};
-		checkOro( oroMemcpyDtoHAsync( &mergedClusters, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( int ), stream ) );
-		checkOro( oroStreamSynchronize( stream ) );
-		int newNumberOfClusters = numberOfClusters - mergedClusters;
-
-		numberOfClusters = newNumberOfClusters;
-		swapBuffers		 = !swapBuffers;
-	}
+	Kernel hplocKernel = compiler.getKernel(
+		context,
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/PlocBuilderKernels.h",
+		"HPloc",
+		opts,
+		GET_ARG_LIST( PlocBuilderKernels ) );
+	hplocKernel.setArgs(
+		{ primitives.getCount(), mortonCodeKeys[1], updateCounters, nodeIndices, scratchNodes, references, taskCounter } );
+	timer.measure( PlocTime, [&]() { hplocKernel.launch( primitives.getCount(), MainBlockSize, stream ); } );
 
 	// STEP 7: Collapse
-	uint32_t* rootAddr = nullptr;
-	checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
+	uint32_t one			  = 1;
+	int3	 rootCollapseTask = make_int3( encodeNodeIndex( 0, BoxType ), 0, 0 );
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( int3 ), stream ) );
+	checkOro( oroMemsetD8Async(
+		reinterpret_cast<oroDeviceptr>( taskQueue + 1 ), 0xFF, sizeof( int3 ) * ( primitives.getCount() - 1 ), stream ) );
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskCounter ), &one, sizeof( uint32_t ), stream ) );
 
-	Kernel blockCollapseKernel = compiler.getKernel(
-		context, "../hiprt/impl/BvhBuilderKernels.h", "BlockCollapse_" + nodeParam, opts, GET_ARG_LIST( BvhBuilderKernels ) );
-	blockCollapseKernel.setArgs( { rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue } );
-	timer.measure( CollapseTime, [&]() { blockCollapseKernel.launch( CollapseBlockSize, CollapseBlockSize, stream ); } );
-
-	uint32_t taskCount{};
-	checkOro( oroMemcpyDtoHAsync( &taskCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
-
-	uint32_t nodeCount{};
-	checkOro( oroMemcpyDtoHAsync(
-		&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
-	checkOro( oroStreamSynchronize( stream ) );
-
-	uint32_t taskOffset = nodeCount - taskCount;
-
-	Kernel deviceCollapseKernel = compiler.getKernel(
-		context, "../hiprt/impl/BvhBuilderKernels.h", "DeviceCollapse_" + nodeParam, opts, GET_ARG_LIST( BvhBuilderKernels ) );
-	while ( taskCount > 0 )
-	{
-		deviceCollapseKernel.setArgs(
-			{ taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue } );
-		timer.measure( CollapseTime, [&]() { deviceCollapseKernel.launch( taskCount, CollapseBlockSize, stream ); } );
-
-		checkOro( oroMemcpyDtoHAsync(
-			&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
-		checkOro( oroStreamSynchronize( stream ) );
-
-		taskOffset += taskCount;
-		taskCount = nodeCount - taskOffset;
-	}
+	Kernel collapseKernel = compiler.getKernel(
+		context,
+		"../hiprt/impl/BvhBuilderKernels.h",
+		"Collapse_" + containerNodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
+	collapseKernel.setArgs(
+		{ primitives.getCount(), header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue } );
+	timer.measure( CollapseTime, [&]() { collapseKernel.launch( primitives.getCount(), stream ); } );
 
 	// STEP 8: BVH cost
 	if constexpr ( LogBvhCost )
@@ -375,7 +327,11 @@ void PlocBuilder::build(
 		checkOro( oroStreamSynchronize( stream ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ComputeCost", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ComputeCost",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		computeCostKernel.setArgs( { nodeCount, boxNodes, taskCounter } );
 		computeCostKernel.launch( nodeCount, ReductionBlockSize, stream );
 
@@ -424,15 +380,13 @@ void PlocBuilder::update(
 
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		GeomHeader**		  geoms		 = storageMemoryArena.allocate<GeomHeader*>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			"../hiprt/impl/BvhBuilderKernels.h",
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -442,14 +396,18 @@ void PlocBuilder::update(
 	else
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
-			context, "../hiprt/impl/BvhBuilderKernels.h", "ResetCounters", opts, GET_ARG_LIST( BvhBuilderKernels ) );
+			context,
+			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			"ResetCounters",
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
 		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
 		resetCountersKernel.launch( primitives.getCount(), stream );
 	}
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

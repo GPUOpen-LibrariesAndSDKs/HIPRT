@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import re
+import common_tools
 
 def isLinux():
     return os.name != 'nt'
@@ -14,14 +15,7 @@ if isLinux():
 
 errorMessageHeader = 'Bitcodes Compile Error:'
 
-
-def getVCPath():
-    import setuptools.msvc as cc
-    pI = cc.PlatformInfo("x64")
-    rI = cc.RegistryInfo(pI)
-    sI = cc.SystemInfo(rI)
-    return sI.VCInstallDir
-
+hipSdkPathFromArgument = ''
 
 def which(program, sufix=''):
     sufix = '.' + sufix
@@ -53,6 +47,10 @@ def getVersion():
 
 hiprt_ver = getVersion()
 
+def remove_trailing_slash(path):
+    if path.endswith('/') or path.endswith('\\'):
+        return path[:-1]
+    return path
 
 def compileScript(cmd, dst):
     print('compiling ' + dst + '...')
@@ -70,11 +68,15 @@ def compileScript(cmd, dst):
 def compileAmd():
     hipccpath = 'hipcc'
     postfix = '_linux.bc'
-    if not isLinux():
+    if not isLinux(): # if OS is Windows
         postfix = '_win.bc'
         if which('hipcc', 'bat') == None:
-            hipccpath = root + 'hipSdk\\bin\\hipcc'
-            
+            hipccpath = hipSdkPathFromArgument + '\\bin\\hipcc'
+    else: # if OS is Linux
+        if hipSdkPathFromArgument != '': # if the hip path it given as an argument
+            hipccpath = hipSdkPathFromArgument + '/bin/hipcc'
+
+
     cmd = hipccpath + ' --version'
     return_code = subprocess.call(cmd, shell=True)
     if return_code != 0:
@@ -84,6 +86,7 @@ def compileAmd():
     hip_sdk_version = result.decode('utf-8')
     hip_sdk_version_major = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(1) 
     hip_sdk_version_minor = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(2)
+    hip_sdk_version_num = 10 * int(hip_sdk_version_major) + int(hip_sdk_version_minor)
     hip_version = hip_sdk_version_major +"."+ hip_sdk_version_minor
         
     # llvm.org/docs/AMDGPUUsage.html#processors
@@ -91,6 +94,14 @@ def compileAmd():
             'gfx1030', 'gfx1031', 'gfx1032', 'gfx1033', 'gfx1034', 'gfx1035', 'gfx1036',  # Navi2
             'gfx1010', 'gfx1011', 'gfx1012', 'gfx1013',  # Navi1
             'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx940', 'gfx941', 'gfx942']  # Vega
+    
+    if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
+        gpus.append('gfx1201')
+
+    if hip_sdk_version_num >= 61: # Strix supported from 6.1
+        gpus.append('gfx1150')
+        gpus.append('gfx1151')
+
     targets = ''
     for i in gpus:
         targets += ' --offload-arch=' + i
@@ -128,7 +139,7 @@ def compileAmd():
 def compileNv():
     ccbin = ''
     if not isLinux():
-        ccbin = getVCPath() + '\\bin\\Hostx64\\x64'
+        ccbin = common_tools.getVCPath() + '\\bin\\Hostx64\\x64'
         ccbin = '"{}"'.format(ccbin)
         ccbin = '-ccbin=' + ccbin + ' '
 
@@ -157,8 +168,28 @@ def compileNv():
 
 parser = optparse.OptionParser()
 parser.add_option('-a', '--amd', dest='amd_platform', help='Compile for AMD', action='store_true', default=True)
-parser.add_option('-n', '--nvidia', dest='nv_platform', help='Compile for Nvidia', action='store_true', default=True)
+parser.add_option('--no-amd'   , dest='amd_platform', help='Do not compile for AMD', action='store_false' )
+parser.add_option('-n', '--nvidia', dest='nv_platform', help='Compile for Nvidia', action='store_true', default=False)
+
+# Add the optional hipSdkPath argument
+parser.add_option(
+    "-p", "--hipSdkPath",
+    dest="hipSdkPath",
+    default=None,
+    help="Path to the HIP SDK",
+    metavar="PATH"
+    )
+
 (options, args) = parser.parse_args()
+
+
+if options.hipSdkPath:
+    hipSdkPathFromArgument = remove_trailing_slash(options.hipSdkPath)
+    print('Compile kernel using hip sdk: ' + hipSdkPathFromArgument)
+else:
+    if not isLinux():
+        hipSdkPathFromArgument = root + 'hipSdk\\'
+
 
 if (options.amd_platform):
     compileAmd()

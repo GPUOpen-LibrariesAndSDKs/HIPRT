@@ -25,10 +25,10 @@
 #pragma once
 #include <Orochi/Orochi.h>
 #include <hiprt/hiprt_common.h>
-#include <source_location>
+#include <contrib/cpp20/source_location.h>
 
 namespace hiprt
 {
-void checkOro( oroError res, const std::source_location& location = std::source_location::current() );
-void checkOrortc( orortcResult res, const std::source_location& location = std::source_location::current() );
+void checkOro( oroError res, const source_location& location = source_location::current() );
+void checkOrortc( orortcResult res, const source_location& location = source_location::current() );
 } // namespace hiprt

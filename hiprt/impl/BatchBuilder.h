@@ -118,7 +118,7 @@ void BatchBuilder::build(
 
 	Kernel batchBuildKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BatchBuilderKernels.h",
+		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BatchBuilderKernels.h",
 		"BatchBuild_" + buildInputParam,
 		opts,
 		GET_ARG_LIST( BatchBuilderKernels ) );

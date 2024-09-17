@@ -37,6 +37,8 @@ class Compiler
   public:
 	static constexpr std::string_view DecryptKey = "20220318";
 
+	~Compiler();
+
 	Kernel getKernel(
 		Context&					 context,
 		const std::filesystem::path& moduleName,
@@ -130,6 +132,9 @@ class Compiler
 
 	std::mutex					  m_kernelMutex;
 	std::map<std::string, Kernel> m_kernelCache;
+
+	std::mutex						 m_moduleMutex;
+	std::map<std::string, oroModule> m_moduleCache;
 
 	std::mutex						   m_decryptMutex;
 	std::map<std::string, std::string> m_decryptCache;

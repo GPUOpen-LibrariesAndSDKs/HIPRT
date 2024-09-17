@@ -30,6 +30,7 @@
 #include <hiprt/impl/Logger.h>
 #include <hiprt/impl/PlocBuilder.h>
 #include <hiprt/impl/SbvhBuilder.h>
+#include <hiprt/impl/Transform.h>
 
 namespace hiprt
 {
@@ -40,7 +41,11 @@ Context::Context( const hiprtContextCreationInput& input )
 	m_device = oroSetRawDevice( api, input.device );
 }
 
-Context::~Context() { oroCtxCreateFromRawDestroy( m_ctxt ); }
+Context::~Context()
+{
+	m_oroutils.unloadKernelCache();
+	oroCtxCreateFromRawDestroy( m_ctxt );
+}
 
 std::vector<hiprtGeometry>
 Context::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
@@ -96,7 +101,7 @@ Context::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInpu
 	for ( size_t i = 0; i < buildInputs.size(); ++i )
 	{
 		geometries[i] = reinterpret_cast<hiprtGeometry>( buffer );
-		buffer += sizes[i];
+		buffer		  = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	std::lock_guard<std::mutex> lockMutex( m_poolMutex );
@@ -333,7 +338,7 @@ std::vector<hiprtGeometry> Context::compactGeometries( const std::vector<hiprtGe
 		checkOro(
 			oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( geometriesOut[i] ), &header, sizeof( GeomHeader ), stream ) );
 
-		buffer += sizes[i];
+		buffer = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	{
@@ -402,7 +407,7 @@ Context::createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, con
 	for ( size_t i = 0; i < buildInputs.size(); ++i )
 	{
 		scenes[i] = reinterpret_cast<hiprtScene>( buffer );
-		buffer += sizes[i];
+		buffer	  = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	std::lock_guard<std::mutex> lockMutex( m_poolMutex );
@@ -600,10 +605,11 @@ std::vector<hiprtScene> Context::compactScenes( const std::vector<hiprtScene>& s
 		SceneHeader header;
 		checkOro( oroMemcpyDtoH( &header, reinterpret_cast<oroDeviceptr>( scenesIn[i] ), sizeof( SceneHeader ) ) );
 
-		const size_t primCount = header.m_primNodeCount;
-		const size_t nodeSize  = sizeof( InstanceNode );
-		const size_t nodeCount = header.m_boxNodeCount;
-		sizes[i]			   = getSceneStorageBufferSize( primCount, nodeCount, nodeSize );
+		const size_t primCount	   = header.m_primCount;
+		const size_t primNodeCount = header.m_primNodeCount;
+		const size_t primNodeSize  = sizeof( InstanceNode );
+		const size_t boxNodeCount  = header.m_boxNodeCount;
+		sizes[i]				   = getSceneStorageBufferSize( primCount, primNodeCount, boxNodeCount, primNodeSize );
 		size += sizes[i];
 	}
 
@@ -619,12 +625,10 @@ std::vector<hiprtScene> Context::compactScenes( const std::vector<hiprtScene>& s
 		scenesOut[i] = reinterpret_cast<hiprtScene>( buffer );
 		MemoryArena storageMemoryArena( scenesOut[i], sizes[i], DefaultAlignment );
 		storageMemoryArena.allocate<SceneHeader>();
-		BoxNode*			  boxNodes	 = storageMemoryArena.allocate<BoxNode>( header.m_boxNodeCount );
-		InstanceNode*		  primNodes	 = storageMemoryArena.allocate<InstanceNode>( header.m_primNodeCount );
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( header.m_primNodeCount );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( header.m_primNodeCount );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( header.m_primNodeCount );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( header.m_primNodeCount );
+		BoxNode*	  boxNodes	= storageMemoryArena.allocate<BoxNode>( header.m_boxNodeCount );
+		InstanceNode* primNodes = storageMemoryArena.allocate<InstanceNode>( header.m_primNodeCount );
+		Instance*	  instances = storageMemoryArena.allocate<Instance>( header.m_primCount );
+		Frame*		  frames	= storageMemoryArena.allocate<Frame>( header.m_frameCount );
 
 		checkOro( oroMemcpyDtoDAsync(
 			reinterpret_cast<oroDeviceptr>( boxNodes ),
@@ -641,37 +645,23 @@ std::vector<hiprtScene> Context::compactScenes( const std::vector<hiprtScene>& s
 		checkOro( oroMemcpyDtoDAsync(
 			reinterpret_cast<oroDeviceptr>( instances ),
 			reinterpret_cast<oroDeviceptr>( header.m_instances ),
-			sizeof( Instance ) * header.m_primNodeCount,
-			stream ) );
-
-		checkOro( oroMemcpyDtoDAsync(
-			reinterpret_cast<oroDeviceptr>( masks ),
-			reinterpret_cast<oroDeviceptr>( header.m_masks ),
-			sizeof( uint32_t ) * header.m_primNodeCount,
-			stream ) );
-
-		checkOro( oroMemcpyDtoDAsync(
-			reinterpret_cast<oroDeviceptr>( transforms ),
-			reinterpret_cast<oroDeviceptr>( header.m_transforms ),
-			sizeof( hiprtTransformHeader ) * header.m_primNodeCount,
+			sizeof( hiprtTransformHeader ) * header.m_primCount,
 			stream ) );
 
 		checkOro( oroMemcpyDtoDAsync(
 			reinterpret_cast<oroDeviceptr>( frames ),
 			reinterpret_cast<oroDeviceptr>( header.m_frames ),
-			sizeof( Frame ) * header.m_primNodeCount,
+			sizeof( Frame ) * header.m_frameCount,
 			stream ) );
 
-		header.m_boxNodes	= boxNodes;
-		header.m_primNodes	= primNodes;
-		header.m_instances	= instances;
-		header.m_masks		= masks;
-		header.m_transforms = transforms;
-		header.m_frames		= frames;
+		header.m_boxNodes  = boxNodes;
+		header.m_primNodes = primNodes;
+		header.m_instances = instances;
+		header.m_frames	   = frames;
 		checkOro(
 			oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( scenesOut[i] ), &header, sizeof( SceneHeader ), stream ) );
 
-		buffer += sizes[i];
+		buffer = static_cast<uint8_t*>( buffer ) + sizes[i];
 	}
 
 	std::lock_guard<std::mutex> lockMutex( m_poolMutex );
@@ -939,14 +929,6 @@ std::string Context::getGcnArchName() const
 	return std::string( prop.gcnArchName );
 }
 
-uint32_t Context::getGcnArchNumber() const
-{
-	oroDeviceProp prop;
-	checkOro( oroCtxSetCurrent( m_ctxt ) );
-	checkOro( oroGetDeviceProperties( &prop, m_device ) );
-	return prop.gcnArch;
-}
-
 std::string Context::getDriverVersion() const
 {
 	int driverVersion;
@@ -959,8 +941,15 @@ oroDevice Context::getDevice() const noexcept { return m_device; }
 
 bool Context::enableHwi() const
 {
-	std::string	   deviceName = getDeviceName();
-	const uint32_t archNumber = getGcnArchNumber();
+	std::string deviceName = getDeviceName();
+	std::string archName   = getGcnArchName();
+
+	uint32_t archNumber = 0;
+	if ( archName.substr( 0, 3 ) == "gfx" )
+	{
+		std::string numberPart = archName.substr( 3 );
+		archNumber			   = std::stoi( numberPart );
+	}
 	return ( archNumber >= 1030 && deviceName.find( "NVIDIA" ) == std::string::npos );
 }
 

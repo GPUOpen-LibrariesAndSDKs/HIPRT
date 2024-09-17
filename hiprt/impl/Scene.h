@@ -28,19 +28,21 @@
 
 namespace hiprt
 {
+struct BoxNode;
+struct InstanceNode;
 struct Instance;
 
 struct SceneHeader
 {
-	BoxNode*			  m_boxNodes;
-	InstanceNode*		  m_primNodes;
-	Instance*			  m_instances;
-	uint32_t*			  m_masks;
-	hiprtTransformHeader* m_transforms;
-	Frame*				  m_frames;
-	size_t				  m_size;
-	uint32_t			  m_boxNodeCount;
-	uint32_t			  m_primNodeCount;
+	BoxNode*	  m_boxNodes;
+	InstanceNode* m_primNodes;
+	Instance*	  m_instances;
+	Frame*		  m_frames;
+	size_t		  m_size;
+	uint32_t	  m_primCount;
+	uint32_t	  m_primNodeCount;
+	uint32_t	  m_boxNodeCount;
+	uint32_t	  m_frameCount;
 };
 HIPRT_STATIC_ASSERT( alignof( SceneHeader ) <= DefaultAlignment );
 } // namespace hiprt

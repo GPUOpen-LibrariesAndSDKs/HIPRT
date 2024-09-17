@@ -54,22 +54,22 @@ static constexpr size_t CacheSize = RoundUp( ( BatchBuilderMaxBlockSize - 1 ) * 
 									RoundUp( ( BatchBuilderMaxBlockSize ) * sizeof( ReferenceNode ), CacheAlignment ) +
 									2 * RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), CacheAlignment ) +
 									RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), CacheAlignment ) +
-									RoundUp( BatchBuilderMaxBlockSize * sizeof( int2 ), CacheAlignment );
+									RoundUp( BatchBuilderMaxBlockSize * sizeof( int3 ), CacheAlignment );
 
 HIPRT_DEVICE size_t getStorageBufferSize( const hiprtGeometryBuildInput& buildInput )
 {
-	const size_t primCount = getPrimCount( buildInput );
-	const size_t nodeSize  = getNodeSize( buildInput );
-	const size_t nodeCount = divideRoundUp( 2 * primCount, 3 );
-	return getGeometryStorageBufferSize( primCount, nodeCount, nodeSize );
+	const size_t primCount	  = getPrimCount( buildInput );
+	const size_t primNodeSize = getPrimNodeSize( buildInput );
+	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
 }
 
 HIPRT_DEVICE size_t getStorageBufferSize( const hiprtSceneBuildInput& buildInput )
 {
-	const size_t frameCount = buildInput.frameCount;
-	const size_t primCount	= buildInput.instanceCount;
-	const size_t nodeCount	= divideRoundUp( 2 * primCount, 3 );
-	return getSceneStorageBufferSize( primCount, nodeCount, frameCount );
+	const size_t frameCount	  = buildInput.frameCount;
+	const size_t primCount	  = buildInput.instanceCount;
+	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
 }
 
 template <typename PrimitiveNode, typename PrimitiveContainer>
@@ -88,23 +88,12 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	// STEP 0: Init data
 	if constexpr ( is_same<Header, SceneHeader>::value )
 	{
-		Instance*			  instances	 = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		uint32_t*			  masks		 = storageMemoryArena.allocate<uint32_t>( primitives.getCount() );
-		hiprtTransformHeader* transforms = storageMemoryArena.allocate<hiprtTransformHeader>( primitives.getCount() );
-		Frame*				  frames	 = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
 
 		primitives.setFrames( frames );
 		InitSceneData<>(
-			index,
-			storageMemoryArena.getStorageSize(),
-			primitives,
-			boxNodes,
-			primNodes,
-			instances,
-			masks,
-			transforms,
-			frames,
-			header );
+			index, storageMemoryArena.getStorageSize(), primitives, boxNodes, primNodes, instances, frames, header );
 	}
 	else
 	{
@@ -133,7 +122,7 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	uint32_t*	   mortonCodeKeys	= sharedMemoryArena.allocate<uint32_t>( blockDim.x );
 	uint32_t*	   mortonCodeValues = sharedMemoryArena.allocate<uint32_t>( blockDim.x );
 	uint32_t*	   updateCounters	= sharedMemoryArena.allocate<uint32_t>( blockDim.x );
-	int2*		   taskQueue		= sharedMemoryArena.allocate<int2>( blockDim.x );
+	int3*		   taskQueue		= sharedMemoryArena.allocate<int3>( blockDim.x );
 
 	// STEP 1: Calculate centroid bounding box by reduction
 	updateCounters[index] = InvalidValue;
@@ -173,27 +162,21 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	}
 
 	// STEP 4: Emit topology and refit nodes
-	EmitTopologyAndFitBounds(
-		index, mortonCodeKeys, mortonCodeValues, updateCounters, primitives, scratchNodes, references, primNodes );
+	EmitTopologyAndFitBounds( index, mortonCodeKeys, mortonCodeValues, updateCounters, primitives, scratchNodes, references );
 	__syncthreads();
 
 	// STEP 5: Collapse
 	uint32_t rootAddr = updateCounters[primCount - 1];
-	if ( index == 0 ) taskQueue[0] = make_int2( rootAddr, InvalidValue );
+	if ( index == 0 )
+		taskQueue[index] = make_int3( encodeNodeIndex( rootAddr, BoxType ), 0, 0 );
+	else
+		taskQueue[index] = make_int3( InvalidValue, InvalidValue, InvalidValue );
 	__syncthreads();
 
-	uint32_t taskCount	= 1;
-	uint32_t taskOffset = 0;
-	while ( taskCount > 0 )
-	{
-		DeviceCollapse( index, taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue );
-		__syncthreads();
-
-		uint32_t nodeCount = header->m_boxNodeCount;
-		taskOffset += taskCount;
-		taskCount = nodeCount - taskOffset;
-		__syncthreads();
-	}
+	uint32_t* taskCounter = &updateCounters[0];
+	*taskCounter		  = 1;
+	__syncthreads();
+	Collapse( index, primCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue );
 }
 
 extern "C" __global__ void

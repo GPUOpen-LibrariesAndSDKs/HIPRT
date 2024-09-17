@@ -43,18 +43,18 @@ size_t BvhImporter::getTemporaryBufferSize( const hiprtSceneBuildInput& buildInp
 
 size_t BvhImporter::getStorageBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t primCount = getPrimCount( buildInput );
-	const size_t nodeSize  = getNodeSize( buildInput );
-	const size_t nodeCount = buildInput.nodeList.nodeCount;
-	return getGeometryStorageBufferSize( primCount, nodeCount, nodeSize );
+	const size_t primCount	  = getPrimCount( buildInput );
+	const size_t primNodeSize = getPrimNodeSize( buildInput );
+	const size_t boxNodeCount = buildInput.nodeList.nodeCount;
+	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
 }
 
 size_t BvhImporter::getStorageBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const size_t frameCount = buildInput.frameCount;
-	const size_t primCount	= buildInput.instanceCount;
-	const size_t nodeCount	= buildInput.nodeList.nodeCount;
-	return getSceneStorageBufferSize( primCount, nodeCount, frameCount );
+	const size_t frameCount	  = buildInput.frameCount;
+	const size_t primCount	  = buildInput.instanceCount;
+	const size_t boxNodeCount = buildInput.nodeList.nodeCount;
+	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
 }
 
 void BvhImporter::build(

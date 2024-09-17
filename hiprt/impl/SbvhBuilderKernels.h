@@ -42,10 +42,9 @@
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
 
-template <typename PrimitiveContainer, typename PrimitiveNode>
+template <typename PrimitiveContainer>
 __device__ void SetupLeavesAndReferences(
 	PrimitiveContainer& primitives,
-	PrimitiveNode*		primNodes,
 	ReferenceNode*		references,
 	Task*				taskQueue,
 	Aabb*				box,
@@ -56,8 +55,6 @@ __device__ void SetupLeavesAndReferences(
 
 	if ( index < primitives.getCount() )
 	{
-		if constexpr ( is_same<PrimitiveNode, TriangleNode>::value ) primNodes[index] = primitives.fetchTriangleNode( index );
-
 		references[index]		= ReferenceNode( index, primitives.fetchAabb( index ) );
 		referenceIndices[index] = index;
 		taskIndices[index]		= 0;
@@ -66,56 +63,49 @@ __device__ void SetupLeavesAndReferences(
 	if ( index == 0 ) taskQueue[0] = Task( *box );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_TriangleMesh_TriangleNode(
+extern "C" __global__ void SetupLeavesAndReferences_TriangleMesh(
 	TriangleMesh   primitives,
-	TriangleNode*  primNodes,
 	ReferenceNode* references,
 	Task*		   taskQueue,
 	Aabb*		   box,
 	uint32_t*	   referenceIndices,
 	uint32_t*	   taskIndices )
 {
-	SetupLeavesAndReferences<TriangleMesh, TriangleNode>(
-		primitives, primNodes, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<TriangleMesh>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_AabbList_CustomNode(
+extern "C" __global__ void SetupLeavesAndReferences_AabbList(
 	AabbList	   primitives,
-	CustomNode*	   primNodes,
 	ReferenceNode* references,
 	Task*		   taskQueue,
 	Aabb*		   box,
 	uint32_t*	   referenceIndices,
 	uint32_t*	   taskIndices )
 {
-	SetupLeavesAndReferences<AabbList, CustomNode>(
-		primitives, primNodes, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<AabbList>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_InstanceList_SRTFrame_InstanceNode(
+extern "C" __global__ void SetupLeavesAndReferences_InstanceList_SRTFrame(
 	InstanceList<SRTFrame> primitives,
-	InstanceNode*		   primNodes,
 	ReferenceNode*		   references,
 	Task*				   taskQueue,
 	Aabb*				   box,
 	uint32_t*			   referenceIndices,
 	uint32_t*			   taskIndices )
 {
-	SetupLeavesAndReferences<InstanceList<SRTFrame>, InstanceNode>(
-		primitives, primNodes, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<InstanceList<SRTFrame>>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_InstanceList_MatrixFrame_InstanceNode(
+extern "C" __global__ void SetupLeavesAndReferences_InstanceList_MatrixFrame(
 	InstanceList<MatrixFrame> primitives,
-	InstanceNode*			  primNodes,
 	ReferenceNode*			  references,
 	Task*					  taskQueue,
 	Aabb*					  box,
 	uint32_t*				  referenceIndices,
 	uint32_t*				  taskIndices )
 {
-	SetupLeavesAndReferences<InstanceList<MatrixFrame>, InstanceNode>(
-		primitives, primNodes, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<InstanceList<MatrixFrame>>(
+		primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
 template <bool spatialSplits>

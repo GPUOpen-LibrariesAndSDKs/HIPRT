@@ -43,22 +43,33 @@
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
 
-HIPRT_DEVICE HIPRT_INLINE uint32_t getScratchChildIndexAndBox(
-	uint32_t i, const ScratchNode& scratchNode, const ScratchNode* scratchNodes, const ReferenceNode* references, Aabb& box )
+HIPRT_DEVICE HIPRT_INLINE Aabb
+getNodeBox( uint32_t nodeIndex, const ScratchNode* scratchNodes, const ReferenceNode* references )
 {
-	uint32_t childIndex = scratchNode.getChildIndex( i );
-	uint32_t childType	= getNodeType( childIndex );
-	uint32_t childAddr	= getNodeAddr( childIndex );
-	if ( childType == BoxType )
+	uint32_t nodeType = getNodeType( nodeIndex );
+	uint32_t nodeAddr = getNodeAddr( nodeIndex );
+	if ( nodeType == BoxType )
+		return scratchNodes[nodeAddr].aabb();
+	else
+		return references[nodeAddr].aabb();
+}
+
+template <typename PrimitiveContainer, typename PrimitiveNode>
+HIPRT_DEVICE HIPRT_INLINE Aabb
+getNodeBox( uint32_t nodeIndex, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
+{
+	uint32_t nodeAddr = getNodeAddr( nodeIndex );
+	if ( getNodeType( nodeIndex ) != BoxType )
 	{
-		box = scratchNodes[childAddr].aabb();
+		if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
+			return primNodes[nodeAddr].aabb();
+		else
+			return primitives.fetchAabb( primNodes[nodeAddr].m_primIndex );
 	}
 	else
 	{
-		box		   = references[childAddr].aabb();
-		childIndex = encodeNodeIndex( references[childAddr].m_primIndex, childType );
+		return boxNodes[nodeAddr].aabb();
 	}
-	return childIndex;
 }
 
 __device__ void InitGeomDataImpl(
@@ -75,8 +86,8 @@ __device__ void InitGeomDataImpl(
 		geomHeader->m_size			= size;
 		geomHeader->m_boxNodes		= boxNodes;
 		geomHeader->m_primNodes		= primNodes;
-		geomHeader->m_boxNodeCount	= 1u;
-		geomHeader->m_primNodeCount = primCount;
+		geomHeader->m_boxNodeCount	= 1;
+		geomHeader->m_primNodeCount = primCount == 1 ? 1 : 0;
 		geomHeader->m_geomType		= geomType;
 	}
 }
@@ -90,22 +101,28 @@ InitGeomData( size_t size, uint32_t primCount, BoxNode* boxNodes, void* primNode
 
 template <typename InstanceList>
 __device__ void InitSceneData(
-	uint32_t			  index,
-	size_t				  size,
-	InstanceList&		  instanceList,
-	BoxNode*			  boxNodes,
-	InstanceNode*		  primNodes,
-	Instance*			  instances,
-	uint32_t*			  masks,
-	hiprtTransformHeader* transforms,
-	Frame*				  frames,
-	SceneHeader*		  sceneHeader )
+	uint32_t	  index,
+	size_t		  size,
+	InstanceList& instanceList,
+	BoxNode*	  boxNodes,
+	InstanceNode* primNodes,
+	Instance*	  instances,
+	Frame*		  frames,
+	SceneHeader*  sceneHeader )
 {
 	if ( index < instanceList.getCount() )
 	{
-		instances[index]  = instanceList.fetchInstance( index );
-		masks[index]	  = instanceList.fetchMask( index );
-		transforms[index] = instanceList.fetchTransformHeader( index );
+		hiprtInstance		 i = instanceList.fetchInstance( index );
+		hiprtTransformHeader t = instanceList.fetchTransformHeader( index );
+		Instance			 instance;
+		instance.m_type		  = i.type;
+		instance.m_frameIndex = t.frameIndex;
+		instance.m_frameCount = t.frameCount;
+		if ( i.type == hiprtInstanceTypeGeometry )
+			instance.m_geometry = reinterpret_cast<GeomHeader*>( i.geometry );
+		else
+			instance.m_scene = reinterpret_cast<SceneHeader*>( i.scene );
+		instances[index] = instance;
 	}
 
 	if ( index < instanceList.getFrameCount() ) instanceList.convertFrame( index );
@@ -116,11 +133,11 @@ __device__ void InitSceneData(
 		sceneHeader->m_boxNodes		 = boxNodes;
 		sceneHeader->m_primNodes	 = primNodes;
 		sceneHeader->m_instances	 = instances;
-		sceneHeader->m_masks		 = masks;
-		sceneHeader->m_transforms	 = transforms;
 		sceneHeader->m_frames		 = frames;
-		sceneHeader->m_boxNodeCount	 = 1u;
-		sceneHeader->m_primNodeCount = instanceList.getCount();
+		sceneHeader->m_primCount	 = instanceList.getCount();
+		sceneHeader->m_primNodeCount = instanceList.getCount() == 1 ? 1 : 0;
+		sceneHeader->m_boxNodeCount	 = 1;
+		sceneHeader->m_frameCount	 = instanceList.getFrameCount();
 	}
 }
 
@@ -130,14 +147,11 @@ extern "C" __global__ void InitSceneData_InstanceList_SRTFrame(
 	BoxNode*			   boxNodes,
 	InstanceNode*		   primNodes,
 	Instance*			   instances,
-	uint32_t*			   masks,
-	hiprtTransformHeader*  transforms,
 	Frame*				   frames,
 	SceneHeader*		   sceneHeader )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-	InitSceneData<InstanceList<SRTFrame>>(
-		index, size, instanceList, boxNodes, primNodes, instances, masks, transforms, frames, sceneHeader );
+	InitSceneData<InstanceList<SRTFrame>>( index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
 }
 
 extern "C" __global__ void InitSceneData_InstanceList_MatrixFrame(
@@ -146,14 +160,11 @@ extern "C" __global__ void InitSceneData_InstanceList_MatrixFrame(
 	BoxNode*				  boxNodes,
 	InstanceNode*			  primNodes,
 	Instance*				  instances,
-	uint32_t*				  masks,
-	hiprtTransformHeader*	  transforms,
 	Frame*					  frames,
 	SceneHeader*			  sceneHeader )
 {
 	uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-	InitSceneData<InstanceList<MatrixFrame>>(
-		index, size, instanceList, boxNodes, primNodes, instances, masks, transforms, frames, sceneHeader );
+	InitSceneData<InstanceList<MatrixFrame>>( index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode>
@@ -170,10 +181,24 @@ SingletonConstruction( uint32_t index, PrimitiveContainer& primitives, BoxNode* 
 	}
 	else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
 	{
-		leafType = CustomType;
+		primNodes[0].m_primIndex = 0;
+		leafType				 = CustomType;
 	}
 	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
 	{
+		hiprtInstance instance	 = primitives.fetchInstance( 0 );
+		primNodes[0].m_primIndex = 0;
+		primNodes[0].m_mask		 = primitives.fetchMask( 0 );
+		primNodes[0].m_type		 = instance.type;
+		primNodes[0].m_static	 = primitives.getCount() == primitives.getFrameCount() ? 1 : 0;
+		if ( instance.type == hiprtInstanceTypeScene )
+			primNodes[0].m_scene = reinterpret_cast<SceneHeader*>( instance.scene );
+		else
+			primNodes[0].m_geometry = reinterpret_cast<GeomHeader*>( instance.geometry );
+		if ( primitives.getFrameCount() == 1 )
+			primNodes[0].m_identity = primitives.copyInvTransformMatrix( 0, primNodes[0].m_matrix ) ? 1 : 0;
+		else
+			primNodes[0].m_transform = primitives.fetchTransformHeader( 0 );
 		leafType = InstanceType;
 	}
 
@@ -221,12 +246,11 @@ extern "C" __global__ void SingletonConstruction_InstanceList_MatrixFrame_Instan
 	SingletonConstruction<InstanceList<MatrixFrame>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, GeomHeader* header )
+extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, uint32_t* pairCounter )
 {
 	const uint32_t index	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
 
-	// TODO: validate triangles
 	bool	 valid		 = index < mesh.getCount();
 	uint32_t pairedIndex = InvalidValue;
 	uint64_t activeMask	 = __ballot( valid );
@@ -269,7 +293,7 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, 
 	}
 
 	bool	 pairing   = index < mesh.getCount() && pairedIndex != InvalidValue;
-	uint32_t pairIndex = warpOffset( pairing, &header->m_primNodeCount );
+	uint32_t pairIndex = warpOffset( pairing, pairCounter );
 	if ( pairing ) pairIndices[pairIndex] = make_int2( index, pairedIndex );
 }
 
@@ -427,8 +451,18 @@ __device__ void FitBounds( PrimitiveContainer& primitives, BoxNode* boxNodes, Pr
 	uint32_t parentAddr = primNodes[index].m_parentAddr;
 	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
 	{
-		primNodes[index]			  = primitives.fetchTriangleNode( index );
+		primNodes[index] =
+			primitives.fetchTriangleNode( make_int2( primNodes[index].m_primIndex0, primNodes[index].m_primIndex1 ) );
 		primNodes[index].m_parentAddr = parentAddr;
+	}
+	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+	{
+		const uint32_t		 primIndex = primNodes[index].m_primIndex;
+		hiprtTransformHeader transform = primitives.fetchTransformHeader( primIndex );
+		primNodes[index].m_mask		   = primitives.fetchMask( primIndex );
+		if ( transform.frameCount == 1 )
+			primNodes[index].m_identity =
+				primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
 	}
 
 	index = parentAddr;
@@ -439,40 +473,16 @@ __device__ void FitBounds( PrimitiveContainer& primitives, BoxNode* boxNodes, Pr
 		BoxNode& node = boxNodes[index];
 
 		if ( node.m_childIndex0 != InvalidValue )
-		{
-			uint32_t childAddr = node.getChildAddr( 0 );
-			if ( node.getChildType( 0 ) != BoxType )
-				node.m_box0 = primitives.fetchAabb( childAddr );
-			else
-				node.m_box0 = boxNodes[childAddr].aabb();
-		}
+			node.m_box0 = getNodeBox( node.m_childIndex0, primitives, boxNodes, primNodes );
 
 		if ( node.m_childIndex1 != InvalidValue )
-		{
-			uint32_t childAddr = node.getChildAddr( 1 );
-			if ( node.getChildType( 1 ) != BoxType )
-				node.m_box1 = primitives.fetchAabb( childAddr );
-			else
-				node.m_box1 = boxNodes[childAddr].aabb();
-		}
+			node.m_box1 = getNodeBox( node.m_childIndex1, primitives, boxNodes, primNodes );
 
 		if ( node.m_childIndex2 != InvalidValue )
-		{
-			uint32_t childAddr = node.getChildAddr( 2 );
-			if ( node.getChildType( 2 ) != BoxType )
-				node.m_box2 = primitives.fetchAabb( childAddr );
-			else
-				node.m_box2 = boxNodes[childAddr].aabb();
-		}
+			node.m_box2 = getNodeBox( node.m_childIndex2, primitives, boxNodes, primNodes );
 
 		if ( node.m_childIndex3 != InvalidValue )
-		{
-			uint32_t childAddr = node.getChildAddr( 3 );
-			if ( node.getChildType( 3 ) != BoxType )
-				node.m_box3 = primitives.fetchAabb( childAddr );
-			else
-				node.m_box3 = boxNodes[childAddr].aabb();
-		}
+			node.m_box3 = getNodeBox( node.m_childIndex3, primitives, boxNodes, primNodes );
 
 		index = boxNodes[index].m_parentAddr;
 
@@ -503,54 +513,50 @@ extern "C" __global__ void FitBounds_InstanceList_MatrixFrame_InstanceNode(
 	FitBounds<InstanceList<MatrixFrame>, InstanceNode>( primitives, boxNodes, primNodes );
 }
 
-template <typename PrimitiveNode, typename Header>
-__device__ void BlockCollapse(
-	uint32_t*	   rootAddr,
-	Header*		   header,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	PrimitiveNode* primNodes,
-	uint32_t*	   taskCounter,
-	int2*		   taskQueue )
+template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
+__device__ void Collapse(
+	uint32_t			index,
+	uint32_t			leafCount,
+	Header*				header,
+	ScratchNode*		scratchNodes,
+	ReferenceNode*		references,
+	BoxNode*			boxNodes,
+	PrimitiveNode*		primNodes,
+	PrimitiveContainer& primitives,
+	uint32_t*			taskCounter,
+	int3*				taskQueue )
 {
-	__shared__ int2		taskQueueBlock[CollapseBlockSize * BranchingFactor];
-	__shared__ uint32_t taskOffset;
-	__shared__ uint32_t taskCount;
-	__shared__ uint32_t newTaskCount;
-
-	if ( threadIdx.x == 0 )
+	bool done = index >= leafCount;
+	while ( __any( !done ) )
 	{
-		taskQueueBlock[0] = make_int2( rootAddr != nullptr ? *rootAddr : 0u, InvalidValue );
-		taskOffset		  = 0;
-		taskCount		  = 1;
-		newTaskCount	  = 0;
-	}
-	__syncthreads();
+		__threadfence();
 
-	while ( true )
-	{
-		const uint32_t taskEnd = roundUp( taskCount, blockDim.x );
-		for ( uint32_t taskIndex = threadIdx.x; taskIndex < taskEnd; taskIndex += blockDim.x )
+		if ( done ) continue;
+
+		int3	 task		= taskQueue[index];
+		uint32_t nodeIndex	= task.x;
+		uint32_t nodeAddr	= task.y;
+		uint32_t parentAddr = task.z;
+
+		// we need to check all three values
+		if ( nodeIndex != InvalidValue && nodeAddr != InvalidValue && parentAddr != InvalidValue )
 		{
-			int2 task;
-			if ( taskIndex < taskCount ) task = taskQueueBlock[taskIndex];
-			__syncthreads();
-
-			if ( taskIndex < taskCount )
+			if ( isInternalNode( nodeIndex ) )
 			{
-				uint32_t scratchAddr = task.x;
-				uint32_t parentAddr	 = task.y;
-
-				ScratchNode scratchNode = scratchNodes[scratchAddr];
+				if ( nodeAddr == 0 ) parentAddr = InvalidValue;
 
 				BoxNode boxNode;
-				boxNode.m_parentAddr  = parentAddr;
-				boxNode.m_childIndex0 = getScratchChildIndexAndBox( 0, scratchNode, scratchNodes, references, boxNode.m_box0 );
-				boxNode.m_childIndex1 = getScratchChildIndexAndBox( 1, scratchNode, scratchNodes, references, boxNode.m_box1 );
+				boxNode.m_parentAddr = parentAddr;
 
 				Aabb*	  childBoxes   = &boxNode.m_box0;
 				uint32_t* childIndices = &boxNode.m_childIndex0;
+
+				ScratchNode scratchNode = scratchNodes[getNodeAddr( nodeIndex )];
+				childIndices[0]			= scratchNode.m_childIndex0;
+				childIndices[1]			= scratchNode.m_childIndex1;
+				childBoxes[0]			= getNodeBox( scratchNode.m_childIndex0, scratchNodes, references );
+				childBoxes[1]			= getNodeBox( scratchNode.m_childIndex1, scratchNodes, references );
+
 				for ( uint32_t i = 0; i < BranchingFactor - 2; ++i )
 				{
 					float	 maxArea  = 0.0f;
@@ -570,11 +576,11 @@ __device__ void BlockCollapse(
 
 					if ( maxIndex == InvalidValue ) break;
 
-					ScratchNode scratchChild = scratchNodes[getNodeAddr( childIndices[maxIndex] )];
-					childIndices[maxIndex] =
-						getScratchChildIndexAndBox( 0, scratchChild, scratchNodes, references, childBoxes[maxIndex] );
-					childIndices[boxNode.m_childCount] = getScratchChildIndexAndBox(
-						1, scratchChild, scratchNodes, references, childBoxes[boxNode.m_childCount] );
+					ScratchNode scratchChild		   = scratchNodes[getNodeAddr( childIndices[maxIndex] )];
+					childIndices[maxIndex]			   = scratchChild.m_childIndex0;
+					childIndices[boxNode.m_childCount] = scratchChild.m_childIndex1;
+					childBoxes[maxIndex]			   = getNodeBox( scratchChild.m_childIndex0, scratchNodes, references );
+					childBoxes[boxNode.m_childCount]   = getNodeBox( scratchChild.m_childIndex1, scratchNodes, references );
 					++boxNode.m_childCount;
 				}
 
@@ -584,218 +590,122 @@ __device__ void BlockCollapse(
 					if ( isInternalNode( childIndices[i] ) ) ++internalCount;
 				}
 
-				uint32_t childOffset = atomicAdd( &newTaskCount, internalCount );
-
-				const uint32_t nodeAddr = taskOffset + taskIndex;
+				uint32_t taskOffset		= atomicAdd( taskCounter, boxNode.m_childCount - 1 );
+				uint32_t internalOffset = atomicAdd( &header->m_boxNodeCount, internalCount );
+				uint32_t leafOffset		= atomicAdd( &header->m_primNodeCount, boxNode.m_childCount - internalCount );
 				for ( uint32_t i = 0; i < boxNode.m_childCount; ++i )
 				{
-					if ( isInternalNode( childIndices[i] ) )
-					{
-						uint32_t newTaskIndex		 = childOffset++;
-						uint32_t childAddr			 = taskOffset + taskCount + newTaskIndex;
-						taskQueueBlock[newTaskIndex] = make_int2( getNodeAddr( childIndices[i] ), nodeAddr );
-						boxNode.encodeChildIndex( i, childAddr, BoxType );
-					}
-					else if ( childIndices[i] != InvalidValue )
-					{
-						uint32_t childAddr				  = getNodeAddr( childIndices[i] );
-						primNodes[childAddr].m_parentAddr = nodeAddr;
-					}
+					uint32_t childIndex = childIndices[i];
+					uint32_t childAddr	= isInternalNode( childIndices[i] ) ? internalOffset++ : leafOffset++;
+					childIndices[i]		= encodeNodeIndex( childAddr, getNodeType( childIndex ) );
+
+					uint32_t taskAddr	= i == 0 ? index : taskOffset++;
+					taskQueue[taskAddr] = make_int3( childIndex, childAddr, nodeAddr );
+					__threadfence();
 				}
+
 				boxNodes[nodeAddr] = boxNode;
 			}
-		}
-		__syncthreads();
-
-		if ( threadIdx.x == 0 )
-		{
-			taskOffset += taskCount;
-			taskCount	 = newTaskCount;
-			newTaskCount = 0;
-		}
-		__syncthreads();
-
-		if ( taskCount == 0 || taskCount >= CollapseBlockSize ) break;
-	}
-
-	for ( uint32_t taskIndex = threadIdx.x; taskIndex < taskCount; taskIndex += blockDim.x )
-		taskQueue[taskOffset + taskIndex] = taskQueueBlock[taskIndex];
-
-	if ( threadIdx.x == 0 )
-	{
-		header->m_boxNodeCount = taskOffset + taskCount;
-		*taskCounter		   = taskCount;
-	}
-}
-
-extern "C" __global__ void BlockCollapse_TriangleNode(
-	uint32_t*	   rootAddr,
-	GeomHeader*	   header,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	TriangleNode*  primNodes,
-	uint32_t*	   taskCounter,
-	int2*		   taskQueue )
-{
-	BlockCollapse<TriangleNode>( rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue );
-}
-
-extern "C" __global__ void BlockCollapse_CustomNode(
-	uint32_t*	   rootAddr,
-	GeomHeader*	   header,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	CustomNode*	   primNodes,
-	uint32_t*	   taskCounter,
-	int2*		   taskQueue )
-{
-	BlockCollapse<CustomNode>( rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue );
-}
-
-extern "C" __global__ void BlockCollapse_InstanceNode(
-	uint32_t*	   rootAddr,
-	SceneHeader*   header,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	InstanceNode*  primNodes,
-	uint32_t*	   taskCounter,
-	int2*		   taskQueue )
-{
-	BlockCollapse<InstanceNode>( rootAddr, header, scratchNodes, references, boxNodes, primNodes, taskCounter, taskQueue );
-}
-
-template <typename PrimitiveNode, typename Header>
-__device__ void DeviceCollapse(
-	uint32_t	   index,
-	uint32_t	   taskCount,
-	uint32_t	   taskOffset,
-	Header*		   header,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	PrimitiveNode* primNodes,
-	int2*		   taskQueue )
-{
-	BoxNode	  boxNode;
-	Aabb*	  childBoxes	= &boxNode.m_box0;
-	uint32_t* childIndices	= &boxNode.m_childIndex0;
-	uint32_t  internalCount = 0;
-
-	const uint32_t nodeAddr = taskOffset + index;
-
-	if ( index < taskCount )
-	{
-		int2	 task		 = taskQueue[nodeAddr];
-		uint32_t scratchAddr = task.x;
-		uint32_t parentAddr	 = task.y;
-
-		ScratchNode scratchNode = scratchNodes[scratchAddr];
-
-		boxNode.m_parentAddr  = parentAddr;
-		boxNode.m_childIndex0 = getScratchChildIndexAndBox( 0, scratchNode, scratchNodes, references, boxNode.m_box0 );
-		boxNode.m_childIndex1 = getScratchChildIndexAndBox( 1, scratchNode, scratchNodes, references, boxNode.m_box1 );
-
-		for ( uint32_t i = 0; i < BranchingFactor - 2; ++i )
-		{
-			float	 maxArea  = 0.0f;
-			uint32_t maxIndex = InvalidValue;
-			for ( uint32_t j = 0; j < boxNode.m_childCount; ++j )
+			else
 			{
-				if ( boxNode.getChildType( j ) == BoxType )
+				const ReferenceNode reference = references[getNodeAddr( nodeIndex )];
+				if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
 				{
-					float area = childBoxes[j].area();
-					if ( area > maxArea )
-					{
-						maxArea	 = area;
-						maxIndex = j;
-					}
+					primNodes[nodeAddr] = primitives.fetchTriangleNode( reference.m_primIndex );
 				}
-			}
-
-			if ( maxIndex == InvalidValue ) break;
-
-			ScratchNode scratchChild = scratchNodes[getNodeAddr( childIndices[maxIndex] )];
-			childIndices[maxIndex] =
-				getScratchChildIndexAndBox( 0, scratchChild, scratchNodes, references, childBoxes[maxIndex] );
-			childIndices[boxNode.m_childCount] =
-				getScratchChildIndexAndBox( 1, scratchChild, scratchNodes, references, childBoxes[boxNode.m_childCount] );
-			++boxNode.m_childCount;
-		}
-
-		for ( uint32_t i = 0; i < boxNode.m_childCount; ++i )
-		{
-			if ( isInternalNode( childIndices[i] ) ) ++internalCount;
-		}
-	}
-
-	uint32_t childOffset = warpOffset( internalCount, &header->m_boxNodeCount );
-
-	if ( index < taskCount )
-	{
-		for ( uint32_t i = 0; i < boxNode.m_childCount; ++i )
-		{
-			if ( isInternalNode( childIndices[i] ) )
-			{
-				uint32_t childAddr	 = childOffset++;
-				taskQueue[childAddr] = make_int2( getNodeAddr( childIndices[i] ), nodeAddr );
-				boxNode.encodeChildIndex( i, childAddr, BoxType );
-			}
-			else if ( childIndices[i] != InvalidValue )
-			{
-				uint32_t childAddr				  = getNodeAddr( childIndices[i] );
-				primNodes[childAddr].m_parentAddr = nodeAddr;
+				else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
+				{
+					primNodes[nodeAddr].m_primIndex = reference.m_primIndex;
+				}
+				else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+				{
+					hiprtInstance		 instance	= primitives.fetchInstance( reference.m_primIndex );
+					hiprtTransformHeader transform	= primitives.fetchTransformHeader( reference.m_primIndex );
+					primNodes[nodeAddr].m_primIndex = reference.m_primIndex;
+					primNodes[nodeAddr].m_mask		= primitives.fetchMask( reference.m_primIndex );
+					primNodes[nodeAddr].m_type		= instance.type;
+					primNodes[nodeAddr].m_static	= transform.frameCount == 1 ? 1 : 0;
+					if ( instance.type == hiprtInstanceTypeScene )
+						primNodes[nodeAddr].m_scene = reinterpret_cast<SceneHeader*>( instance.scene );
+					else
+						primNodes[nodeAddr].m_geometry = reinterpret_cast<GeomHeader*>( instance.geometry );
+					if ( transform.frameCount == 1 )
+						primNodes[nodeAddr].m_identity =
+							primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[nodeAddr].m_matrix ) ? 1 : 0;
+					else
+						primNodes[nodeAddr].m_transform = transform;
+				}
+				primNodes[nodeAddr].m_parentAddr = parentAddr;
+				done							 = true;
 			}
 		}
-		boxNodes[nodeAddr] = boxNode;
+
+		__threadfence();
 	}
 }
 
-extern "C" __global__ void DeviceCollapse_TriangleNode(
-	uint32_t	   taskCount,
-	uint32_t	   taskOffset,
+extern "C" __global__ void Collapse_TriangleMesh_TriangleNode(
+	uint32_t	   leafCount,
 	GeomHeader*	   header,
 	ScratchNode*   scratchNodes,
 	ReferenceNode* references,
 	BoxNode*	   boxNodes,
 	TriangleNode*  primNodes,
-	int2*		   taskQueue )
+	TriangleMesh   primitives,
+	uint32_t*	   taskCounter,
+	int3*		   taskQueue )
 {
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	DeviceCollapse<TriangleNode>(
-		index, taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue );
+	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<TriangleMesh, TriangleNode>(
+		index, leafCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue );
 }
 
-extern "C" __global__ void DeviceCollapse_CustomNode(
-	uint32_t	   taskCount,
-	uint32_t	   taskOffset,
+extern "C" __global__ void Collapse_AabbList_CustomNode(
+	uint32_t	   leafCount,
 	GeomHeader*	   header,
 	ScratchNode*   scratchNodes,
 	ReferenceNode* references,
 	BoxNode*	   boxNodes,
 	CustomNode*	   primNodes,
-	int2*		   taskQueue )
+	AabbList	   primitives,
+	uint32_t*	   taskCounter,
+	int3*		   taskQueue )
 {
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	DeviceCollapse<CustomNode>(
-		index, taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue );
+	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<AabbList, CustomNode>(
+		index, leafCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue );
 }
 
-extern "C" __global__ void DeviceCollapse_InstanceNode(
-	uint32_t	   taskCount,
-	uint32_t	   taskOffset,
-	SceneHeader*   header,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	InstanceNode*  primNodes,
-	int2*		   taskQueue )
+extern "C" __global__ void Collapse_InstanceList_SRTFrame_InstanceNode(
+	uint32_t			   leafCount,
+	SceneHeader*		   header,
+	ScratchNode*		   scratchNodes,
+	ReferenceNode*		   references,
+	BoxNode*			   boxNodes,
+	InstanceNode*		   primNodes,
+	InstanceList<SRTFrame> primitives,
+	uint32_t*			   taskCounter,
+	int3*				   taskQueue )
 {
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	DeviceCollapse<InstanceNode>(
-		index, taskCount, taskOffset, header, scratchNodes, references, boxNodes, primNodes, taskQueue );
+	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<InstanceList<SRTFrame>, InstanceNode>(
+		index, leafCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue );
+}
+
+extern "C" __global__ void Collapse_InstanceList_MatrixFrame_InstanceNode(
+	uint32_t				  leafCount,
+	SceneHeader*			  header,
+	ScratchNode*			  scratchNodes,
+	ReferenceNode*			  references,
+	BoxNode*				  boxNodes,
+	InstanceNode*			  primNodes,
+	InstanceList<MatrixFrame> primitives,
+	uint32_t*				  taskCounter,
+	int3*					  taskQueue )
+{
+	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<InstanceList<MatrixFrame>, InstanceNode>(
+		index, leafCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue );
 }
 
 extern "C" __global__ void ComputeCost( uint32_t nodeCount, BoxNode* boxNodes, float* costCounter )

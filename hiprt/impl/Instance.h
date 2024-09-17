@@ -31,7 +31,9 @@ namespace hiprt
 {
 struct alignas( 16 ) Instance
 {
-	hiprtInstanceType m_type;
+	uint32_t m_frameIndex;
+	uint32_t m_frameCount : 31;
+	uint32_t m_type : 1;
 	union
 	{
 		GeomHeader*	 m_geometry;
@@ -45,8 +47,6 @@ struct alignas( 16 ) Instance
 		else
 			return m_scene->m_boxNodes;
 	}
-
-	HIPRT_HOST_DEVICE Aabb fetchAabb() const { return getBoxNodes()->aabb(); }
 };
 HIPRT_STATIC_ASSERT( sizeof( Instance ) == 16 );
 } // namespace hiprt

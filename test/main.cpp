@@ -31,6 +31,10 @@
 #include <map>
 #include <chrono>
 
+///
+
+///
+
 #ifndef HIPRT_PUBLIC_REPO
 TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 {
@@ -40,13 +44,19 @@ TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 	Camera camera = createCamera<TestCasesType::TestHairball>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/hairball/hairball.obj",
-		"../test/common/meshes/lfs/hairball/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/hairball.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitCustomBvhImport,
 		Timings );
-	render( "AoRayHairball.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayHairball.png", Timings, AoRadius );
+	render(
+		"AoRayHairball.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayHairball.png",
+		Timings,
+		AoRadius );
 	deleteScene( m_scene );
 }
 #endif
@@ -60,13 +70,19 @@ TEST_F( PerformanceTestCases, AoRayHairball )
 	Camera camera = createCamera<TestCasesType::TestHairball>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/hairball/hairball.obj",
-		"../test/common/meshes/lfs/hairball/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/hairball.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferBalancedBuild,
 		Timings );
-	render( "AoRayHairball.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayHairball.png", Timings, AoRadius );
+	render(
+		"AoRayHairball.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayHairball.png",
+		Timings,
+		AoRadius );
 	deleteScene( m_scene );
 }
 #endif
@@ -80,13 +96,19 @@ TEST_F( PerformanceTestCases, AoRayEmbreeBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		"../test/common/meshes/lfs/bistro_full/Exterior/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitCustomBvhImport,
 		Timings );
-	render( "AoRayEmbreeBistro.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayBistro.png", Timings, AoRadius );
+	render(
+		"AoRayEmbreeBistro.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayBistro.png",
+		Timings,
+		AoRadius );
 	deleteScene( m_scene );
 }
 #endif
@@ -100,13 +122,19 @@ TEST_F( PerformanceTestCases, AoRayBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		"../test/common/meshes/lfs/bistro_full/Exterior/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferHighQualityBuild,
 		Timings );
-	render( "AoRayBistro.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayBistro.png", Timings, AoRadius );
+	render(
+		"AoRayBistro.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayBistro.png",
+		Timings,
+		AoRadius );
 	deleteScene( m_scene );
 }
 #endif
@@ -121,13 +149,18 @@ TEST_F( PerformanceTestCases, PrimaryRayBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		"../test/common/meshes/lfs/bistro_full/Exterior/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
-	render( "PrimaryRayBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
+	render(
+		"PrimaryRayBistro.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayBistro.png",
+		Timings );
 	deleteScene( m_scene );
 }
 #endif
@@ -142,13 +175,18 @@ TEST_F( PerformanceTestCases, BvhFastBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		"../test/common/meshes/lfs/bistro_full/Exterior/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
-	render( "BvhFastBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
+	render(
+		"BvhFastBistro.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayBistro.png",
+		Timings );
 	deleteScene( m_scene );
 }
 #endif
@@ -163,13 +201,18 @@ TEST_F( PerformanceTestCases, BvhHighQBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		"../test/common/meshes/lfs/bistro_full/Exterior/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferHighQualityBuild,
 		Timings );
-	render( "BvhHighQBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
+	render(
+		"BvhHighQBistro.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayBistro.png",
+		Timings );
 	deleteScene( m_scene );
 }
 #endif
@@ -184,13 +227,18 @@ TEST_F( PerformanceTestCases, BvhBalancedBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		"../test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		"../test/common/meshes/lfs/bistro_full/Exterior/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferBalancedBuild,
 		getTimings );
-	render( "BvhBalancedBistro.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", getTimings );
+	render(
+		"BvhBalancedBistro.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayBistro.png",
+		getTimings );
 	deleteScene( m_scene );
 }
 #endif
@@ -207,8 +255,16 @@ TEST_F( ObjTestCases, TranslateCornellBox )
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
-		camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/", false, transform );
-	render( "TranslateCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "TranslateCornellBox.png" );
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		false,
+		transform );
+	render(
+		"TranslateCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"TranslateCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -224,8 +280,16 @@ TEST_F( ObjTestCases, ScaleCornellBox )
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
-		camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/", false, transform );
-	render( "ScaleCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "ScaleCornellBox.png" );
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		false,
+		transform );
+	render(
+		"ScaleCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"ScaleCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -241,8 +305,16 @@ TEST_F( ObjTestCases, RotateCornellBox )
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
-		camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/", false, transform );
-	render( "RotateCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "RotateCornellBox.png" );
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		false,
+		transform );
+	render(
+		"RotateCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"RotateCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -264,26 +336,36 @@ TEST_F( ObjTestCases, BvhUpdateCornellBox )
 		transform.rotation = make_float4( 0.0f, 1.0f, 0.0f, angle );
 		setupScene(
 			camera,
-			"../test/common/meshes/cornellbox/cornellBox.obj",
-			"../test/common/meshes/cornellbox/",
+			getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+			getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
 			false,
 			transform,
 			hiprtBuildFlagBitPreferFastBuild,
 			Timings );
-		render( std::nullopt, "../test/kernels/PrimaryRayKernel.h", kernelName, std::nullopt, Timings );
+		render(
+			std::nullopt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+			kernelName,
+			std::nullopt,
+			Timings );
 		deleteScene( m_scene );
 	}
 
 	transform.rotation = make_float4( 0.0f, 1.0f, 0.0f, angle );
 	setupScene(
 		camera,
-		"../test/common/meshes/cornellbox/cornellBox.obj",
-		"../test/common/meshes/cornellbox/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
 		false,
 		transform,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
-	render( "BvhUpdateCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "BvhUpdateCornellBox.png", Timings );
+	render(
+		"BvhUpdateCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"BvhUpdateCornellBox.png",
+		Timings );
 	deleteScene( m_scene );
 }
 
@@ -296,13 +378,18 @@ TEST_F( ObjTestCases, BvhFastCornellBox )
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
 		camera,
-		"../test/common/meshes/cornellbox/cornellBox.obj",
-		"../test/common/meshes/cornellbox/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
-	render( "BvhFastCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayCornellBox.png", Timings );
+	render(
+		"BvhFastCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayCornellBox.png",
+		Timings );
 	deleteScene( m_scene );
 }
 
@@ -315,13 +402,18 @@ TEST_F( ObjTestCases, BvhHighQCornellBox )
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
 		camera,
-		"../test/common/meshes/cornellbox/cornellBox.obj",
-		"../test/common/meshes/cornellbox/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferHighQualityBuild,
 		Timings );
-	render( "BvhHighQCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayCornellBox.png", Timings );
+	render(
+		"BvhHighQCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayCornellBox.png",
+		Timings );
 	deleteScene( m_scene );
 }
 
@@ -334,22 +426,33 @@ TEST_F( ObjTestCases, BvhBalancedCornellBox )
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
 		camera,
-		"../test/common/meshes/cornellbox/cornellBox.obj",
-		"../test/common/meshes/cornellbox/",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferBalancedBuild,
 		Timings );
 	render(
-		"BvhBalancedCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayCornellBox.png", Timings );
+		"BvhBalancedCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayCornellBox.png",
+		Timings );
 	deleteScene( m_scene );
 }
 
 TEST_F( ObjTestCases, ShadowRayCornellBox )
 {
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "ShadowRayCornellBox.png", "../test/kernels/ShadowRayKernel.h", "ShadowRayKernel", "ShadowRayCornellBox.png" );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"ShadowRayCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/ShadowRayKernel.h",
+		"ShadowRayKernel",
+		"ShadowRayCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -359,8 +462,17 @@ TEST_F( ObjTestCases, AoRayCornellBox )
 	constexpr float AoRadius = 1.4f;
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "AoRayCornellBox.png", "../test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayCornellBox.png", Timings, AoRadius );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"AoRayCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayCornellBox.png",
+		Timings,
+		AoRadius );
 	deleteScene( m_scene );
 }
 
@@ -370,8 +482,15 @@ TEST_F( ObjTestCases, PrimaryRayCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "PrimaryRayCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayCornellBox.png" );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"PrimaryRayCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimaryRayCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -381,8 +500,15 @@ TEST_F( ObjTestCases, UvsCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "UvsCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "UvsCornellBox.png" );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"UvsCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"UvsCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -392,8 +518,15 @@ TEST_F( ObjTestCases, PrimIdsCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "PrimIdsCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "PrimIdsCornellBox.png" );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"PrimIdsCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"PrimIdsCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -403,8 +536,15 @@ TEST_F( ObjTestCases, HitDistCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "HitDistCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "HitDistCornellBox.png" );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"HitDistCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"HitDistCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -414,9 +554,27 @@ TEST_F( ObjTestCases, NormalsCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene( camera, "../test/common/meshes/cornellbox/cornellBox.obj", "../test/common/meshes/cornellbox/" );
-	render( "NormalsCornellBox.png", "../test/kernels/PrimaryRayKernel.h", kernelName, "NormalsCornellBox.png" );
+	setupScene(
+		camera,
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	render(
+		"NormalsCornellBox.png",
+		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		kernelName,
+		"NormalsCornellBox.png" );
 	deleteScene( m_scene );
+}
+
+TEST_F( hiprtTest, CudaEnabled )
+{
+// this unit test is just to inform if CUEW is disabled.
+// if it fails, this means that you should install the CUDA SDK, add its include path to this project, and enable
+// OROCHI_ENABLE_CUEW. ( if the CUDA SDK is installed, the premake script should automatically enable CUEW )
+#ifndef OROCHI_ENABLE_CUEW
+	printf( "This build may not be able to run on NVIDIA.\n" );
+	ASSERT_TRUE( false );
+#endif
 }
 
 TEST_F( hiprtTest, MinimumCornellBox )
@@ -466,12 +624,26 @@ TEST_F( hiprtTest, MinimumCornellBox )
 	if constexpr ( UseBitcode )
 	{
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			3,
+			1 );
 	}
 	else
 	{
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			3,
+			1 );
 	}
 
 	hiprtFuncDataSet funcDataSet;
@@ -561,12 +733,26 @@ TEST_F( hiprtTest, Compaction )
 	if constexpr ( UseBitcode )
 	{
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			3,
+			1 );
 	}
 	else
 	{
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			3,
+			1 );
 	}
 
 	hiprtFuncDataSet funcDataSet;
@@ -647,12 +833,26 @@ TEST_F( hiprtTest, BatchCornellBox )
 	if constexpr ( UseBitcode )
 	{
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	}
 	else
 	{
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	}
 
 	hiprtFuncDataSet funcDataSet;
@@ -781,10 +981,24 @@ TEST_F( hiprtTest, CustomBvhImport )
 
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	else
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 
 	hiprtFuncDataSet funcDataSet;
 	hiprtFuncTable	 funcTable;
@@ -872,10 +1086,24 @@ TEST_F( hiprtTest, BvhIoApi )
 
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	else
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CornellBoxKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -941,9 +1169,11 @@ TEST_F( hiprtTest, MeshIntersection )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -997,9 +1227,11 @@ TEST_F( hiprtTest, MeshIntersectionNonIndexed )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -1093,9 +1325,11 @@ TEST_F( hiprtTest, PairTriangles )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -1166,9 +1400,24 @@ TEST_F( hiprtTest, Cutout )
 	// note : precompiled bitcode path is not used for this test
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CutoutKernel", func, std::nullopt, funcNameSets, 4, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CutoutKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			4,
+			1 );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "CutoutKernel", func, std::nullopt, funcNameSets, 4, 1 );
+		buildTraceKernel(
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CutoutKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			4,
+			1 );
 
 	hiprtFuncDataSet funcDataSet;
 	hiprtFuncTable	 funcTable;
@@ -1235,10 +1484,24 @@ TEST_F( hiprtTest, CustomIntersection )
 	oroFunction func;
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CustomIntersectionKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CustomIntersectionKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	else
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "CustomIntersectionKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"CustomIntersectionKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 
 	float* centers;
 	malloc( centers, 3 );
@@ -1347,9 +1610,11 @@ TEST_F( hiprtTest, SceneIntersectionSingleton )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -1505,10 +1770,24 @@ TEST_F( hiprtTest, SceneIntersection )
 
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"SceneIntersectionKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	else
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"SceneIntersectionKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 
 	float* centers;
 	malloc( centers, 3 );
@@ -1721,10 +2000,24 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 	// note : precompiled bitcode path is not used for this test
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"SceneIntersectionKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 	else
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionKernel", func, std::nullopt, funcNameSets, 1, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"SceneIntersectionKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			1,
+			1 );
 
 	float* centers;
 	malloc( centers, 3 );
@@ -1841,9 +2134,11 @@ TEST_F( hiprtTest, Shear )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -1858,6 +2153,7 @@ TEST_F( hiprtTest, Shear )
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
 	free( geomTemp );
+	free( sceneTemp );
 	free( dst );
 	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
 	checkHiprt( hiprtDestroyScene( ctxt, scene ) );
@@ -2008,9 +2304,10 @@ TEST_F( hiprtTest, MotionBlur )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernel( ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -2213,9 +2510,10 @@ TEST_F( hiprtTest, MotionBlurMatrix )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernel( ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -2330,10 +2628,24 @@ TEST_F( hiprtTest, MotionBlurSlerp )
 	oroFunction func;
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "MotionBlurSlerpKernel", func, std::nullopt, funcNameSets, 2, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"MotionBlurSlerpKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			2,
+			1 );
 	else
 		buildTraceKernel(
-			ctxt, "../test/kernels/HiprtTestKernel.h", "MotionBlurSlerpKernel", func, std::nullopt, funcNameSets, 2, 1 );
+			ctxt,
+			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			"MotionBlurSlerpKernel",
+			func,
+			std::nullopt,
+			funcNameSets,
+			2,
+			1 );
 
 	float4* spheres;
 	malloc( spheres, list.aabbCount );
@@ -2411,9 +2723,11 @@ TEST_F( hiprtTest, Rebuild )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -2482,9 +2796,11 @@ TEST_F( hiprtTest, Update )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -2643,9 +2959,10 @@ TEST_F( hiprtTest, TraceKernel )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode( ctxt, "../test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
+		buildTraceKernelFromBitcode(
+			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
 	else
-		buildTraceKernel( ctxt, "../test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
+		buildTraceKernel( ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
 	int numRegs;
 	checkOro( oroFuncGetAttribute( &numRegs, ORO_FUNC_ATTRIBUTE_NUM_REGS, func ) );
 
