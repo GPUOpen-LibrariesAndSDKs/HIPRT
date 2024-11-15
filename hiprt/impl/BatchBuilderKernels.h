@@ -26,7 +26,7 @@
 #include <hiprt/hiprt_common.h>
 #include <hiprt/hiprt_vec.h>
 #include <hiprt/hiprt_types.h>
-#include <hiprt/impl/Math.h>
+#include <hiprt/hiprt_math.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/AabbList.h>
 #include <hiprt/impl/BvhCommon.h>
@@ -54,13 +54,13 @@ static constexpr size_t CacheSize = RoundUp( ( BatchBuilderMaxBlockSize - 1 ) * 
 									RoundUp( ( BatchBuilderMaxBlockSize ) * sizeof( ReferenceNode ), CacheAlignment ) +
 									2 * RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), CacheAlignment ) +
 									RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), CacheAlignment ) +
-									RoundUp( BatchBuilderMaxBlockSize * sizeof( int3 ), CacheAlignment );
+									RoundUp( BatchBuilderMaxBlockSize * sizeof( uint3 ), CacheAlignment );
 
 HIPRT_DEVICE size_t getStorageBufferSize( const hiprtGeometryBuildInput& buildInput )
 {
 	const size_t primCount	  = getPrimCount( buildInput );
 	const size_t primNodeSize = getPrimNodeSize( buildInput );
-	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
 	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
 }
 
@@ -68,7 +68,7 @@ HIPRT_DEVICE size_t getStorageBufferSize( const hiprtSceneBuildInput& buildInput
 {
 	const size_t frameCount	  = buildInput.frameCount;
 	const size_t primCount	  = buildInput.instanceCount;
-	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
 	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
 }
 
@@ -79,7 +79,7 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	typedef typename conditional<is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
 
 	Header*		   header	 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( divideRoundUp( 2 * primitives.getCount(), 3 ) );
+	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( DivideRoundUp( 2 * primitives.getCount(), 3 ) );
 	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
 
 	uint32_t index	   = threadIdx.x;
@@ -115,14 +115,14 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	else
 		primBox = primitives.fetchAabb( primCount - 1 );
 
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	ReferenceNode* references		= sharedMemoryArena.allocate<ReferenceNode>( blockDim.x );
 	ScratchNode*   scratchNodes		= sharedMemoryArena.allocate<ScratchNode>( blockDim.x - 1 );
 	uint32_t*	   mortonCodeKeys	= sharedMemoryArena.allocate<uint32_t>( blockDim.x );
 	uint32_t*	   mortonCodeValues = sharedMemoryArena.allocate<uint32_t>( blockDim.x );
 	uint32_t*	   updateCounters	= sharedMemoryArena.allocate<uint32_t>( blockDim.x );
-	int3*		   taskQueue		= sharedMemoryArena.allocate<int3>( blockDim.x );
+	uint3*		   taskQueue		= sharedMemoryArena.allocate<uint3>( blockDim.x );
 
 	// STEP 1: Calculate centroid bounding box by reduction
 	updateCounters[index] = InvalidValue;
@@ -168,9 +168,9 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	// STEP 5: Collapse
 	uint32_t rootAddr = updateCounters[primCount - 1];
 	if ( index == 0 )
-		taskQueue[index] = make_int3( encodeNodeIndex( rootAddr, BoxType ), 0, 0 );
+		taskQueue[index] = make_uint3( encodeNodeIndex( rootAddr, BoxType ), 0, 0 );
 	else
-		taskQueue[index] = make_int3( InvalidValue, InvalidValue, InvalidValue );
+		taskQueue[index] = make_uint3( InvalidValue, InvalidValue, InvalidValue );
 	__syncthreads();
 
 	uint32_t* taskCounter = &updateCounters[0];

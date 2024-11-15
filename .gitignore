@@ -14,3 +14,4 @@ hiprt/hiprtew.h
 hiprt/cache/Kernels.h
 hiprt/cache/KernelArgs.h
 PUBLIC_OUT/
+hiprt/impl/bvh_build_array.h

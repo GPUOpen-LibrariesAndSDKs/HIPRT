@@ -74,11 +74,11 @@ TEST_F( hiprtewTest, HiprtEwTest )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );

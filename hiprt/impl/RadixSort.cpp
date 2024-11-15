@@ -30,8 +30,8 @@
 namespace
 {
 // NOTE: change the path to match where the kernels are stored.
-constexpr auto hiprtKernelPath{ "/contrib/Orochi/ParallelPrimitives/RadixSortKernels.h" };
-constexpr auto hiprtIncludeDir{ "/contrib/Orochi/" };
+constexpr auto hiprtKernelPath{ "contrib/Orochi/ParallelPrimitives/RadixSortKernels.h" };
+constexpr auto hiprtIncludeDir{ "contrib/Orochi/" };
 } // namespace
 
 namespace hiprt
@@ -42,8 +42,8 @@ RadixSort::RadixSort( oroDevice device, oroStream stream, OrochiUtils& oroutils 
 		  device,
 		  oroutils,
 		  stream,
-		  Utility::getEnvVariable( "HIPRT_PATH" ) + hiprtKernelPath,
-		  Utility::getEnvVariable( "HIPRT_PATH" ) + hiprtIncludeDir )
+		  ( Utility::getRootDir() / hiprtKernelPath ).string(),
+		  ( Utility::getRootDir() / hiprtIncludeDir ).string() )
 {
 }
 

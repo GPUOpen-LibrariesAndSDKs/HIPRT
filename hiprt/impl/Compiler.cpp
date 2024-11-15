@@ -36,6 +36,10 @@
 #include <hiprt/cache/KernelArgs.h>
 #endif
 
+#if defined( HIPRT_BAKE_COMPILED_KERNEL )
+#include "hiprt/impl/bvh_build_array.h"
+#endif
+
 namespace
 {
 #if defined( HIPRT_BITCODE_LINKING )
@@ -267,7 +271,7 @@ void Compiler::buildKernels(
 			}
 
 			std::vector<const char*> opts		 = options;
-			std::string				 includePath = ( "-I" + Utility::getEnvVariable( "HIPRT_PATH" ) + "/" );
+			std::string				 includePath = "-I" + Utility::getRootDir().string();
 			opts.push_back( includePath.c_str() );
 			addCommonOpts( context, opts );
 
@@ -751,7 +755,7 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 
 	std::lock_guard<std::mutex> lock( m_moduleMutex );
 	auto						cacheEntry = m_moduleCache.find( path.string() );
-	oroModule					module;
+	oroModule					module	   = nullptr;
 	if ( cacheEntry != m_moduleCache.end() )
 	{
 		module = cacheEntry->second;
@@ -761,20 +765,29 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 		std::ifstream file( path, std::ios::binary | std::ios::in );
 		if ( !file.is_open() )
 		{
+// Note: even if 'HIPRT_BAKE_COMPILED_KERNEL' is enable, if the file exists, it overrides the embedded precompiled kernel.
+#if defined( HIPRT_BAKE_COMPILED_KERNEL )
+			checkOro( oroModuleLoadData( &module, &bvh_build_array_h ) );
+#else
 			std::string msg = Utility::format( "Unable to open '%s'\n", path.string().c_str() );
 			throw std::runtime_error( msg );
+#endif
+		}
+		else
+		{
+
+			size_t sizeFile;
+			file.seekg( 0, std::fstream::end );
+			size_t size = sizeFile = static_cast<size_t>( file.tellg() );
+
+			std::vector<char> binary;
+			binary.resize( size );
+			file.seekg( 0, std::fstream::beg );
+			file.read( binary.data(), size );
+
+			checkOro( oroModuleLoadData( &module, binary.data() ) );
 		}
 
-		size_t sizeFile;
-		file.seekg( 0, std::fstream::end );
-		size_t size = sizeFile = static_cast<size_t>( file.tellg() );
-
-		std::vector<char> binary;
-		binary.resize( size );
-		file.seekg( 0, std::fstream::beg );
-		file.read( binary.data(), size );
-
-		checkOro( oroModuleLoadData( &module, binary.data() ) );
 		m_moduleCache[path.string()] = module;
 	}
 
@@ -792,7 +805,7 @@ std::string Compiler::buildFunctionTableBitcode(
 		bool amd = oroGetCurAPI( 0 ) == ORO_API_HIP;
 
 		std::vector<const char*> options;
-		std::string				 includePath = ( "-I" + Utility::getEnvVariable( "HIPRT_PATH" ) + "/" );
+		std::string				 includePath = "-I" + Utility::getRootDir().string();
 		options.push_back( includePath.c_str() );
 		addCommonOpts( context, options );
 

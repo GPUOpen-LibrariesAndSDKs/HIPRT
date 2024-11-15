@@ -64,7 +64,14 @@ class Utility
 		const char* const env = getenv( key.c_str() );
 		const std::string val = ( env == nullptr ) ? std::string() : std::string( env );
 #endif
-		return val.empty() ? ".." : val;
+		return val;
+	}
+
+	static std::filesystem::path getRootDir()
+	{
+		std::string val = getEnvVariable( "HIPRT_PATH" );
+		if ( val.empty() ) val = "..";
+		return std::filesystem::path( val );
 	}
 };
 } // namespace hiprt

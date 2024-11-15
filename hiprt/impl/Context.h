@@ -98,8 +98,8 @@ class Context
 	void	   saveScene( hiprtScene inScene, const std::string& filename );
 	hiprtScene loadScene( const std::string& filename );
 
-	void exportGeometryAabb( hiprtGeometry inGeometry, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax );
-	void exportSceneAabb( hiprtScene inScene, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax );
+	void exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax );
+	void exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax );
 
 	void buildKernels(
 		const std::vector<const char*>&		 funcNames,

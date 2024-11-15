@@ -43,8 +43,8 @@ class AabbList
 		const float*   boxMinPtr  = reinterpret_cast<const float*>( m_aabbs + index * m_aabbStride + 0 * halfStride );
 		const float*   boxMaxPtr  = reinterpret_cast<const float*>( m_aabbs + index * m_aabbStride + 1 * halfStride );
 		Aabb		   box;
-		box.m_min = make_float3( boxMinPtr[0], boxMinPtr[1], boxMinPtr[2] );
-		box.m_max = make_float3( boxMaxPtr[0], boxMaxPtr[1], boxMaxPtr[2] );
+		box.m_min = { boxMinPtr[0], boxMinPtr[1], boxMinPtr[2] };
+		box.m_max = { boxMaxPtr[0], boxMaxPtr[1], boxMaxPtr[2] };
 		return box;
 	}
 

@@ -22,9 +22,9 @@
 //
 //////////////////////////////////////////////////////////////////////////////////////////
 
+#include <hiprt/hiprt_math.h>
 #include <hiprt/impl/Kernel.h>
 #include <hiprt/impl/Error.h>
-#include <hiprt/impl/Math.h>
 #include <string.h>
 
 namespace hiprt
@@ -63,14 +63,14 @@ void Kernel::launch( uint32_t nx, oroStream stream, uint32_t sharedMemBytes )
 {
 	int tb, minNb;
 	checkOro( oroModuleOccupancyMaxPotentialBlockSize( &minNb, &tb, m_function, 0, 0 ) );
-	uint32_t nb = divideRoundUp( nx, static_cast<uint32_t>( tb ) );
+	uint32_t nb = DivideRoundUp( nx, static_cast<uint32_t>( tb ) );
 	launch( nb, 1, 1, tb, 1, 1, sharedMemBytes, stream );
 }
 
 void Kernel::launch( uint32_t nx, uint32_t tx, oroStream stream, uint32_t sharedMemBytes )
 {
 	uint32_t tb = tx;
-	uint32_t nb = divideRoundUp( nx, tb );
+	uint32_t nb = DivideRoundUp( nx, tb );
 	launch( nb, 1, 1, tb, 1, 1, sharedMemBytes, stream );
 }
 

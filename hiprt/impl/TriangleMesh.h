@@ -29,9 +29,9 @@
 
 namespace hiprt
 {
-HIPRT_HOST_DEVICE HIPRT_INLINE int3 tryPairTriangles( const int3& a, const int3& b )
+HIPRT_HOST_DEVICE HIPRT_INLINE uint3 tryPairTriangles( const uint3& a, const uint3& b )
 {
-	int3 lb = make_int3( 3 );
+	uint3 lb = uint3{ 3, 3, 3 };
 
 	lb.x = ( b.x == a.x ) ? 0 : lb.x;
 	lb.y = ( b.y == a.x ) ? 0 : lb.y;
@@ -46,12 +46,12 @@ HIPRT_HOST_DEVICE HIPRT_INLINE int3 tryPairTriangles( const int3& a, const int3&
 	lb.z = ( b.z == a.z ) ? 2 : lb.z;
 
 	if ( ( lb.x == 3 ) + ( lb.y == 3 ) + ( lb.z == 3 ) <= 1 ) return lb;
-	return make_int3( InvalidValue );
+	return uint3{ InvalidValue, InvalidValue, InvalidValue };
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE int3 shiftLeft( const int3& a ) { return make_int3( a.y, a.z, a.x ); }
+HIPRT_HOST_DEVICE HIPRT_INLINE uint3 shiftLeft( const uint3& a ) { return uint3{ a.y, a.z, a.x }; }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE int3 shiftRight( const int3& a ) { return make_int3( a.z, a.x, a.y ); }
+HIPRT_HOST_DEVICE HIPRT_INLINE uint3 shiftRight( const uint3& a ) { return uint3{ a.z, a.x, a.y }; }
 
 class TriangleMesh
 {
@@ -62,30 +62,30 @@ class TriangleMesh
 	{
 		m_vertices		  = reinterpret_cast<const uint8_t*>( mesh.vertices );
 		m_triangleIndices = reinterpret_cast<const uint8_t*>( mesh.triangleIndices );
-		m_pairIndices	  = reinterpret_cast<const int2*>( mesh.trianglePairIndices );
+		m_pairIndices	  = reinterpret_cast<const uint2*>( mesh.trianglePairIndices );
 		if ( m_triangleCount == 0 || m_triangleIndices == nullptr ) m_triangleCount = m_vertexCount / 3;
 	}
 
-	HIPRT_HOST_DEVICE int3 fetchTriangleIndices( uint32_t index ) const
+	HIPRT_HOST_DEVICE uint3 fetchTriangleIndices( uint32_t index ) const
 	{
-		if ( m_triangleIndices == nullptr ) return make_int3( 3 * index + 0, 3 * index + 1, 3 * index + 2 );
+		if ( m_triangleIndices == nullptr ) return uint3{ 3 * index + 0, 3 * index + 1, 3 * index + 2 };
 		const uint32_t* trianglePtr = reinterpret_cast<const uint32_t*>( m_triangleIndices + index * m_triangleStride );
-		return make_int3( trianglePtr[0], trianglePtr[1], trianglePtr[2] );
+		return uint3{ trianglePtr[0], trianglePtr[1], trianglePtr[2] };
 	}
 
-	HIPRT_HOST_DEVICE TriangleNode fetchTriangleNode( int2 pairIndices ) const
+	HIPRT_HOST_DEVICE TriangleNode fetchTriangleNode( uint2 pairIndices ) const
 	{
-		int3 indices0 = fetchTriangleIndices( pairIndices.x );
-		int3 indices1;
+		uint3 indices0 = fetchTriangleIndices( pairIndices.x );
+		uint3 indices1;
 
 		uint32_t flags = DefaultTriangleFlags;
 		if ( pairIndices.x != pairIndices.y )
 		{
-			indices1		   = fetchTriangleIndices( pairIndices.y );
-			int3 vertexMapping = tryPairTriangles( indices1, indices0 );
+			indices1			= fetchTriangleIndices( pairIndices.y );
+			uint3 vertexMapping = tryPairTriangles( indices1, indices0 );
 
 			// align the first triangle to [1,2]
-			int3 flags0 = { 1, 2, 0 };
+			uint3 flags0 = { 1, 2, 0 };
 			if ( vertexMapping.y == 3 )
 			{
 				vertexMapping = shiftLeft( vertexMapping );
@@ -108,7 +108,7 @@ class TriangleMesh
 				   ( vertexMapping.y == 1 && vertexMapping.z == 0 ) );
 
 			// align the second triangle to [1,2]
-			int3 flags1 = flip ? int3{ 2, 1, 0 } : int3{ 0, 1, 2 };
+			uint3 flags1 = flip ? uint3{ 2, 1, 0 } : uint3{ 0, 1, 2 };
 			if ( ( vertexMapping.y == 2 && vertexMapping.z == 1 ) || ( vertexMapping.y == 1 && vertexMapping.z == 2 ) )
 			{
 				// [2 0 1] -- L --> [0 1 2]
@@ -137,15 +137,15 @@ class TriangleMesh
 		const float* vertexPtr1 = reinterpret_cast<const float*>( m_vertices + indices0.y * m_vertexStride );
 		const float* vertexPtr2 = reinterpret_cast<const float*>( m_vertices + indices0.z * m_vertexStride );
 
-		triNode.m_triPair.m_v0 = make_float3( vertexPtr0[0], vertexPtr0[1], vertexPtr0[2] );
-		triNode.m_triPair.m_v1 = make_float3( vertexPtr1[0], vertexPtr1[1], vertexPtr1[2] );
-		triNode.m_triPair.m_v2 = make_float3( vertexPtr2[0], vertexPtr2[1], vertexPtr2[2] );
+		triNode.m_triPair.m_v0 = { vertexPtr0[0], vertexPtr0[1], vertexPtr0[2] };
+		triNode.m_triPair.m_v1 = { vertexPtr1[0], vertexPtr1[1], vertexPtr1[2] };
+		triNode.m_triPair.m_v2 = { vertexPtr2[0], vertexPtr2[1], vertexPtr2[2] };
 		triNode.m_triPair.m_v3 = triNode.m_triPair.m_v2;
 
 		if ( pairIndices.x != pairIndices.y )
 		{
 			const float* vertexPtr3 = reinterpret_cast<const float*>( m_vertices + indices1.z * m_vertexStride );
-			triNode.m_triPair.m_v3	= make_float3( vertexPtr3[0], vertexPtr3[1], vertexPtr3[2] );
+			triNode.m_triPair.m_v3	= { vertexPtr3[0], vertexPtr3[1], vertexPtr3[2] };
 		}
 
 		return triNode;
@@ -153,7 +153,7 @@ class TriangleMesh
 
 	HIPRT_HOST_DEVICE TriangleNode fetchTriangleNode( uint32_t index ) const
 	{
-		int2 pairIndices = make_int2( index );
+		uint2 pairIndices = make_uint2( index );
 		if ( m_pairCount > 0 ) pairIndices = m_pairIndices[index];
 		return fetchTriangleNode( pairIndices );
 	}
@@ -164,7 +164,7 @@ class TriangleMesh
 
 	HIPRT_HOST_DEVICE uint32_t getCount() const { return m_pairCount > 0 ? m_pairCount : m_triangleCount; }
 
-	HIPRT_HOST_DEVICE void setPairs( uint32_t pairCount, const int2* pairIndices )
+	HIPRT_HOST_DEVICE void setPairs( uint32_t pairCount, const uint2* pairIndices )
 	{
 		m_pairCount	  = pairCount;
 		m_pairIndices = pairIndices;
@@ -179,7 +179,7 @@ class TriangleMesh
 	const uint8_t* m_triangleIndices;
 	uint32_t	   m_triangleCount;
 	uint32_t	   m_triangleStride;
-	const int2*	   m_pairIndices = nullptr;
+	const uint2*   m_pairIndices = nullptr;
 	uint32_t	   m_pairCount	 = 0u;
 };
 } // namespace hiprt

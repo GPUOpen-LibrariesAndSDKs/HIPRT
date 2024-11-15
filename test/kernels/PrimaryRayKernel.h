@@ -33,20 +33,20 @@
 #endif
 
 template <uint32_t Option>
-__device__ int3
+__device__ uint3
 getColor( hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
 {
-	return int3{};
+	return uint3{};
 }
 
 template <>
-__device__ int3 getColor<VisualizeColor>(
+__device__ uint3 getColor<VisualizeColor>(
 	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
 {
 	const uint32_t matOffset	= matOffsetPerInstance[hit.instanceID] + hit.primID;
 	const uint32_t matIndex		= matIndices[matOffset];
 	float3		   diffuseColor = materials[matIndex].m_diffuse;
-	int3		   color;
+	uint3		   color;
 	color.x = diffuseColor.x * 255;
 	color.y = diffuseColor.y * 255;
 	color.z = diffuseColor.z * 255;
@@ -54,10 +54,10 @@ __device__ int3 getColor<VisualizeColor>(
 }
 
 template <>
-__device__ int3 getColor<VisualizeUv>(
+__device__ uint3 getColor<VisualizeUv>(
 	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
 {
-	int3 color;
+	uint3 color;
 	color.x = hiprt::clamp( static_cast<uint32_t>( hit.uv.x * 255 ), 0, 255 );
 	color.y = hiprt::clamp( static_cast<uint32_t>( hit.uv.y * 255 ), 0, 255 );
 	color.z = 0;
@@ -65,10 +65,10 @@ __device__ int3 getColor<VisualizeUv>(
 }
 
 template <>
-__device__ int3 getColor<VisualizeId>(
+__device__ uint3 getColor<VisualizeId>(
 	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
 {
-	int3 color;
+	uint3 color;
 	color.x = tea<16>( hit.primID, 0 ).x % 255;
 	color.y = tea<16>( hit.instanceID, 0 ).x % 255;
 	color.z = tea<16>( hit.instanceID, hit.primID ).x % 255;
@@ -76,11 +76,11 @@ __device__ int3 getColor<VisualizeId>(
 }
 
 template <>
-__device__ int3 getColor<VisualizeHitDist>(
+__device__ uint3 getColor<VisualizeHitDist>(
 	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
 {
 	float t = hit.t / 50.0f;
-	int3  color;
+	uint3 color;
 	color.x = hiprt::clamp( static_cast<uint32_t>( t * 255 ), 0, 255 );
 	color.y = hiprt::clamp( static_cast<uint32_t>( t * 255 ), 0, 255 );
 	color.z = hiprt::clamp( static_cast<uint32_t>( t * 255 ), 0, 255 );
@@ -88,11 +88,11 @@ __device__ int3 getColor<VisualizeHitDist>(
 }
 
 template <>
-__device__ int3 getColor<VisualizeNormal>(
+__device__ uint3 getColor<VisualizeNormal>(
 	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
 {
 	float3 n = hiprt::normalize( hiprtVectorObjectToWorld( hit.normal, scene, hit.instanceID ) );
-	int3   color;
+	uint3  color;
 	color.x = ( ( n.x + 1.0f ) * 0.5f ) * 255;
 	color.y = ( ( n.y + 1.0f ) * 0.5f ) * 255;
 	color.z = ( ( n.z + 1.0f ) * 0.5f ) * 255;
@@ -103,7 +103,7 @@ template <uint32_t Option>
 __device__ void PrimaryRayKernel(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	const Camera&		   camera,
 	uint32_t*			   matIndices,
@@ -133,7 +133,7 @@ __device__ void PrimaryRayKernel(
 	hiprtSceneTraversalClosestCustomStack<Stack, InstanceStack> tr( scene, ray, stack, instanceStack );
 	{
 		hiprtHit hit = tr.getNextHit();
-		int3	 color{};
+		uint3	 color{};
 		if ( hit.hasHit() ) color = getColor<Option>( scene, hit, matIndices, materials, matOffsetPerInstance );
 
 		image[index * 4 + 0] = color.x;
@@ -146,7 +146,7 @@ __device__ void PrimaryRayKernel(
 extern "C" __global__ void PrimaryRayKernel_0(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -181,7 +181,7 @@ extern "C" __global__ void PrimaryRayKernel_0(
 extern "C" __global__ void PrimaryRayKernel_1(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -216,7 +216,7 @@ extern "C" __global__ void PrimaryRayKernel_1(
 extern "C" __global__ void PrimaryRayKernel_2(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -251,7 +251,7 @@ extern "C" __global__ void PrimaryRayKernel_2(
 extern "C" __global__ void PrimaryRayKernel_3(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -286,7 +286,7 @@ extern "C" __global__ void PrimaryRayKernel_3(
 extern "C" __global__ void PrimaryRayKernel_4(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -321,7 +321,7 @@ extern "C" __global__ void PrimaryRayKernel_4(
 extern "C" __global__ void PrimaryRayKernel_5(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,

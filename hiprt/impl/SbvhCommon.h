@@ -57,7 +57,7 @@ struct alignas( 32 ) Bin
 		uint32_t m_exit;
 	};
 };
-static_assert( sizeof( Bin ) == 32 );
+HIPRT_STATIC_ASSERT( sizeof( Bin ) == 32 );
 
 struct Split
 {
@@ -77,7 +77,7 @@ struct Split
 	uint32_t m_leftLeaf : 1;
 	uint32_t m_rightLeaf : 1;
 };
-static_assert( sizeof( Split ) == 4 );
+HIPRT_STATIC_ASSERT( sizeof( Split ) == 4 );
 
 struct alignas( 64 ) Task
 {
@@ -103,6 +103,6 @@ struct alignas( 64 ) Task
 		uint32_t m_refOffset;
 	};
 };
-static_assert( sizeof( Task ) == 128 );
+HIPRT_STATIC_ASSERT( sizeof( Task ) == 128 );
 
 } // namespace hiprt

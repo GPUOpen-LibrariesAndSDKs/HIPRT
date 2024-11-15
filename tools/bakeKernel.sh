@@ -19,8 +19,8 @@ $PYTHON_BIN tools/stringify.py ./contrib/Orochi/ParallelPrimitives/RadixSortConf
 echo "#pragma once" >> hiprt/cache/Kernels.h
 echo "#pragma once" >> hiprt/cache/KernelArgs.h
 
-$PYTHON_BIN tools/stringify.py ./hiprt/impl/Math.h 20220318  >> hiprt/cache/Kernels.h
 $PYTHON_BIN tools/stringify.py ./hiprt/hiprt_vec.h 20220318  >> hiprt/cache/Kernels.h
+$PYTHON_BIN tools/stringify.py ./hiprt/hiprt_math.h 20220318  >> hiprt/cache/Kernels.h
 $PYTHON_BIN tools/stringify.py ./hiprt/impl/Aabb.h 20220318  >> hiprt/cache/Kernels.h
 $PYTHON_BIN tools/stringify.py ./hiprt/impl/AabbList.h 20220318  >> hiprt/cache/Kernels.h
 $PYTHON_BIN tools/stringify.py ./hiprt/impl/BvhCommon.h 20220318  >> hiprt/cache/Kernels.h

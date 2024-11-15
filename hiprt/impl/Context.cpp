@@ -810,7 +810,7 @@ void Context::saveScene( hiprtScene inScene, const std::string& filename ) { thr
 
 hiprtScene Context::loadScene( const std::string& filename ) { throw std::runtime_error( "Not implemented" ); }
 
-void Context::exportGeometryAabb( hiprtGeometry inGeometry, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax )
+void Context::exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -825,7 +825,7 @@ void Context::exportGeometryAabb( hiprtGeometry inGeometry, hiprtFloat3& outAabb
 	outAabbMax = box.m_max;
 }
 
-void Context::exportSceneAabb( hiprtScene inScene, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax )
+void Context::exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 

@@ -25,7 +25,7 @@
 #pragma once
 #include <hiprt/hiprt_common.h>
 #include <hiprt/hiprt_vec.h>
-#include <hiprt/impl/Math.h>
+#include <hiprt/hiprt_math.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/AabbList.h>
 #include <hiprt/impl/BvhBuilderUtil.h>
@@ -172,9 +172,9 @@ extern "C" __global__ void BinReferencesObject(
 		ReferenceNode ref  = references[referenceIndex];
 
 		float3 k = ( 1.0f - SbvhEpsilon ) * ( static_cast<float>( binCount ) / ( task.m_box.m_max - task.m_box.m_min ) );
-		int3   binIndex =
-			clamp( make_int3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_int3( 0 ), make_int3( binCount - 1 ) );
-		int3 binAddr = binIndex + make_int3( 0, 1, 2 ) * binCount;
+		uint3  binIndex =
+			clamp( make_uint3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_uint3( 0 ), make_uint3( binCount - 1 ) );
+		uint3 binAddr = binIndex + make_uint3( 0, 1, 2 ) * binCount;
 		if ( firstTaskIndex != lastTaskIndex ) binAddr = taskIndex + taskCount * binAddr;
 
 		bins[binAddr.x].m_box.atomicGrow( ref.m_box );
@@ -191,8 +191,8 @@ extern "C" __global__ void BinReferencesObject(
 		__syncthreads();
 		for ( uint32_t binIndex = threadIdx.x; binIndex < binCount; binIndex += blockDim.x )
 		{
-			int3 binOffset = make_int3( binIndex ) + make_int3( 0, 1, 2 ) * binCount;
-			int3 binAddr   = firstTaskIndex + taskCount * binOffset;
+			uint3 binOffset = make_uint3( binIndex ) + make_uint3( 0, 1, 2 ) * binCount;
+			uint3 binAddr	= firstTaskIndex + taskCount * binOffset;
 
 			if ( binCache[binOffset.x].m_counter > 0 )
 			{
@@ -334,8 +334,8 @@ __device__ void BinReferencesSpatial(
 		__syncthreads();
 		for ( uint32_t binIndex = threadIdx.x; binIndex < binCount; binIndex += blockDim.x )
 		{
-			int3 binOffset = make_int3( binIndex ) + make_int3( 0, 1, 2 ) * binCount;
-			int3 binAddr   = firstTaskIndex + taskCount * binOffset;
+			uint3 binOffset = make_uint3( binIndex ) + make_uint3( 0, 1, 2 ) * binCount;
+			uint3 binAddr	= firstTaskIndex + taskCount * binOffset;
 
 			if ( binCache[binOffset.x].m_box.valid() ) binsGlobal[binAddr.x].m_box.atomicGrow( binCache[binOffset.x].m_box );
 			if ( binCache[binOffset.y].m_box.valid() ) binsGlobal[binAddr.y].m_box.atomicGrow( binCache[binOffset.y].m_box );
@@ -557,7 +557,7 @@ __device__ void SplitReferences(
 	uint32_t*	 refOffsetCounter )
 {
 	const uint32_t taskIndex = blockDim.x * blockIdx.x + threadIdx.x;
-	const uint32_t taskEnd	 = roundUp( taskCount, WarpSize );
+	const uint32_t taskEnd	 = RoundUp( taskCount, WarpSize );
 
 	if ( taskIndex < taskEnd )
 	{
@@ -795,8 +795,8 @@ __device__ void DistributeReferences(
 		if ( !spatialSplit )
 		{
 			float3 k = ( 1.0f - SbvhEpsilon ) * ( static_cast<float>( binCount ) / ( task.m_box.m_max - task.m_box.m_min ) );
-			int3   binIndex =
-				clamp( make_int3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_int3( 0 ), make_int3( binCount - 1 ) );
+			uint3  binIndex = clamp(
+				 make_uint3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_uint3( 0 ), make_uint3( binCount - 1 ) );
 
 			bool onLeft;
 			if ( splitAxis < 3 )

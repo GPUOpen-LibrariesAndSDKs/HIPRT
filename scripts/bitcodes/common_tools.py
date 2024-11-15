@@ -9,7 +9,7 @@ def getVCPath():
         vswhere_default_path = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
         
         if not os.path.exists(vswhere_default_path):
-            raise FileNotFoundError(f"vswhere not found at the default location: {vswhere_default_path}")
+            raise IOError("vswhere not found at the default location: {}".format(vswhere_default_path))
 
         vswhere_command = [
             vswhere_default_path,
@@ -25,12 +25,12 @@ def getVCPath():
         vswhere_output = subprocess.check_output(vswhere_command, encoding='utf-8').strip()
 
         if not vswhere_output:
-            raise FileNotFoundError("Visual Studio installation not found.")
+            raise IOError("Visual Studio installation not found.")
 
         vctools_version_file = os.path.join(vswhere_output, "VC", "Auxiliary", "Build", "Microsoft.VCToolsVersion.default.txt")
 
         if not os.path.exists(vctools_version_file):
-            raise FileNotFoundError("Microsoft.VCToolsVersion.default.txt file not found.")
+            raise IOError("Microsoft.VCToolsVersion.default.txt file not found.")
 
         with open(vctools_version_file, "r") as file:
             vc_tools_version = file.read().strip()
@@ -42,9 +42,9 @@ def getVCPath():
         return cl_exe_path
 
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"vswhere command failed: {e}")
+        raise RuntimeError("vswhere command failed: {}".format(e))
     except Exception as e:
-        raise RuntimeError(f"An error occurred: {e}")
+        raise RuntimeError("An error occurred: {}".format(e))
 
 
 

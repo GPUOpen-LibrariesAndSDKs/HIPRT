@@ -76,17 +76,17 @@ HIPRT_INLINE HIPRT_HOST_DEVICE size_t getPrimNodeSize( const hiprtGeometryBuildI
 HIPRT_INLINE HIPRT_HOST_DEVICE size_t
 getGeometryStorageBufferSize( const size_t primNodeCount, const size_t boxNodeCount, const size_t primNodeSize )
 {
-	return roundUp( sizeof( GeomHeader ), DefaultAlignment ) + roundUp( primNodeCount * primNodeSize, DefaultAlignment ) +
-		   roundUp( boxNodeCount * sizeof( BoxNode ), DefaultAlignment );
+	return RoundUp( sizeof( GeomHeader ), DefaultAlignment ) + RoundUp( primNodeCount * primNodeSize, DefaultAlignment ) +
+		   RoundUp( boxNodeCount * sizeof( BoxNode ), DefaultAlignment );
 }
 
 HIPRT_INLINE HIPRT_HOST_DEVICE size_t getSceneStorageBufferSize(
 	const size_t primCount, const size_t primNodeCount, const size_t boxNodeCount, const size_t frameCount )
 {
-	return roundUp( sizeof( SceneHeader ), DefaultAlignment ) + roundUp( boxNodeCount * sizeof( BoxNode ), DefaultAlignment ) +
-		   roundUp( primNodeCount * sizeof( InstanceNode ), DefaultAlignment ) +
-		   roundUp( primCount * sizeof( Instance ), DefaultAlignment ) +
-		   roundUp( frameCount * sizeof( Frame ), DefaultAlignment );
+	return RoundUp( sizeof( SceneHeader ), DefaultAlignment ) + RoundUp( boxNodeCount * sizeof( BoxNode ), DefaultAlignment ) +
+		   RoundUp( primNodeCount * sizeof( InstanceNode ), DefaultAlignment ) +
+		   RoundUp( primCount * sizeof( Instance ), DefaultAlignment ) +
+		   RoundUp( frameCount * sizeof( Frame ), DefaultAlignment );
 }
 
 HIPRT_INLINE HIPRT_HOST_DEVICE bool

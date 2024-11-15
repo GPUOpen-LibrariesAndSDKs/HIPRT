@@ -36,13 +36,13 @@ size_t SbvhBuilder::getTemporaryBufferSize( const size_t count, const hiprtBuild
 	const bool	 spatialSplits	   = !( buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits );
 	const float	 alpha			   = !spatialSplits ? 1.0f : Alpha;
 	const size_t maxReferenceCount = alpha * count;
-	return roundUp( sizeof( Aabb ), DefaultAlignment ) + roundUp( maxReferenceCount * sizeof( Task ), DefaultAlignment ) +
-		   roundUp( maxReferenceCount * sizeof( ScratchNode ), DefaultAlignment ) +
-		   roundUp( maxReferenceCount * sizeof( ReferenceNode ), DefaultAlignment ) +
-		   roundUp( maxReferenceCount * sizeof( uint32_t ), DefaultAlignment ) +
+	return RoundUp( sizeof( Aabb ), DefaultAlignment ) + RoundUp( maxReferenceCount * sizeof( Task ), DefaultAlignment ) +
+		   RoundUp( maxReferenceCount * sizeof( ScratchNode ), DefaultAlignment ) +
+		   RoundUp( maxReferenceCount * sizeof( ReferenceNode ), DefaultAlignment ) +
+		   RoundUp( maxReferenceCount * sizeof( uint32_t ), DefaultAlignment ) +
 		   ( !spatialSplits ? 1 : 2 ) *
-			   roundUp( ( maxReferenceCount / 2 ) * sizeof( Bin ) * 3 * MinBinCount, DefaultAlignment ) +
-		   3 * roundUp( sizeof( uint32_t ), DefaultAlignment );
+			   RoundUp( ( maxReferenceCount / 2 ) * sizeof( Bin ) * 3 * MinBinCount, DefaultAlignment ) +
+		   3 * RoundUp( sizeof( uint32_t ), DefaultAlignment );
 }
 
 size_t SbvhBuilder::getTemporaryBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
@@ -55,7 +55,7 @@ size_t SbvhBuilder::getTemporaryBufferSize( const hiprtGeometryBuildInput& build
 		const hiprtTriangleMeshPrimitive& mesh	   = buildInput.primitive.triangleMesh;
 		const bool						  pairable = mesh.triangleCount > 2 && mesh.trianglePairCount == 0;
 		pairTriangles = pairable && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableTrianglePairing );
-		if ( pairTriangles ) size += roundUp( sizeof( int2 ) * primCount, DefaultAlignment );
+		if ( pairTriangles ) size += RoundUp( sizeof( uint2 ) * primCount, DefaultAlignment );
 	}
 	return size;
 }
@@ -71,7 +71,7 @@ size_t SbvhBuilder::getStorageBufferSize( const hiprtGeometryBuildInput& buildIn
 	const size_t primCount		   = getPrimCount( buildInput );
 	const size_t primNodeSize	   = getPrimNodeSize( buildInput );
 	const size_t maxReferenceCount = alpha * primCount;
-	const size_t boxNodeCount	   = divideRoundUp( 2 * maxReferenceCount, 3 );
+	const size_t boxNodeCount	   = DivideRoundUp( 2 * maxReferenceCount, 3 );
 	return getGeometryStorageBufferSize( maxReferenceCount, boxNodeCount, primNodeSize );
 }
 
@@ -81,7 +81,7 @@ size_t SbvhBuilder::getStorageBufferSize( const hiprtSceneBuildInput& buildInput
 	const size_t frameCount		   = buildInput.frameCount;
 	const size_t primCount		   = buildInput.instanceCount;
 	const size_t maxReferenceCount = alpha * primCount;
-	const size_t boxNodeCount	   = divideRoundUp( 2 * maxReferenceCount, 3 );
+	const size_t boxNodeCount	   = DivideRoundUp( 2 * maxReferenceCount, 3 );
 	return getSceneStorageBufferSize( primCount, maxReferenceCount, boxNodeCount, frameCount );
 }
 

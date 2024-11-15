@@ -148,7 +148,7 @@ void SbvhBuilder::build(
 	float		   alpha			 = spatialSplits ? Alpha : 1.0f;
 	size_t		   maxReferenceCount = alpha * primitives.getCount();
 	Header*		   header			 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes			 = storageMemoryArena.allocate<BoxNode>( divideRoundUp( 2 * maxReferenceCount, 3 ) );
+	BoxNode*	   boxNodes			 = storageMemoryArena.allocate<BoxNode>( DivideRoundUp( 2 * maxReferenceCount, 3 ) );
 	PrimitiveNode* primNodes		 = storageMemoryArena.allocate<PrimitiveNode>( maxReferenceCount );
 
 	Aabb*		   box			= temporaryMemoryArena.allocate<Aabb>();
@@ -189,7 +189,7 @@ void SbvhBuilder::build(
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -204,7 +204,7 @@ void SbvhBuilder::build(
 		const uint32_t primCount	  = pairTriangles ? 0u : primitives.getCount();
 		Kernel		   initDataKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"InitGeomData",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -217,7 +217,7 @@ void SbvhBuilder::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -231,11 +231,11 @@ void SbvhBuilder::build(
 	{
 		if ( pairTriangles )
 		{
-			int2* pairIndices = temporaryMemoryArena.allocate<int2>( primitives.getCount() );
+			uint2* pairIndices = temporaryMemoryArena.allocate<uint2>( primitives.getCount() );
 			checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( uint32_t ), stream ) );
 			Kernel pairTrianglesKernel = compiler.getKernel(
 				context,
-				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+				Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 				"PairTriangles",
 				opts,
 				GET_ARG_LIST( BvhBuilderKernels ) );
@@ -256,7 +256,7 @@ void SbvhBuilder::build(
 
 	Kernel computeBoxKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 		"ComputeBox_" + containerParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
@@ -270,7 +270,7 @@ void SbvhBuilder::build(
 	// STEP 3: Setup references
 	Kernel setupReferencesKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+		Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 		"SetupLeavesAndReferences_" + containerParam,
 		opts,
 		GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -301,7 +301,7 @@ void SbvhBuilder::build(
 		// Reset bins
 		Kernel resetBinsKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 			"ResetBins_" + spatialSplitsString,
 			opts,
 			GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -311,7 +311,7 @@ void SbvhBuilder::build(
 		// Object bin references
 		Kernel binReferencesObjectKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 			"BinReferencesObject",
 			opts,
 			GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -330,7 +330,7 @@ void SbvhBuilder::build(
 		// Find object split
 		Kernel findObjectSplitKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 			"FindObjectSplit",
 			opts,
 			GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -342,7 +342,7 @@ void SbvhBuilder::build(
 		{
 			Kernel binReferencesSpatialKernel = compiler.getKernel(
 				context,
-				Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+				Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 				"BinReferencesSpatial_" + containerParam,
 				opts,
 				GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -368,7 +368,7 @@ void SbvhBuilder::build(
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( refOffsetCounter ), 0, sizeof( uint32_t ), stream ) );
 		Kernel splitKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 			"SplitReferences_" + spatialSplitsString,
 			opts,
 			GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -397,7 +397,7 @@ void SbvhBuilder::build(
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( referenceCounter ), 0, sizeof( uint32_t ), stream ) );
 		Kernel distributeReferencesKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/SbvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/SbvhBuilderKernels.h",
 			"DistributeReferences_" + containerParam,
 			opts,
 			GET_ARG_LIST( SbvhBuilderKernels ) );
@@ -438,12 +438,12 @@ void SbvhBuilder::build(
 
 	// STEP 5: Collapse
 	uint32_t one			  = 1;
-	int3	 rootCollapseTask = make_int3( encodeNodeIndex( 0, BoxType ), 0, 0 );
-	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( int3 ), stream ) );
+	uint3	 rootCollapseTask = { encodeNodeIndex( 0, BoxType ), 0, 0 };
+	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( uint3 ), stream ) );
 	checkOro( oroMemsetD8Async(
-		reinterpret_cast<oroDeviceptr>( reinterpret_cast<int3*>( taskQueue ) + 1 ),
+		reinterpret_cast<oroDeviceptr>( reinterpret_cast<uint3*>( taskQueue ) + 1 ),
 		0xFF,
-		sizeof( int3 ) * ( referenceCount - 1 ),
+		sizeof( uint3 ) * ( referenceCount - 1 ),
 		stream ) );
 	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskCounter ), &one, sizeof( uint32_t ), stream ) );
 
@@ -466,7 +466,7 @@ void SbvhBuilder::build(
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"ComputeCost",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -515,7 +515,7 @@ void SbvhBuilder::update(
 	typedef typename std::conditional<std::is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
 
 	Header*		   header	 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( divideRoundUp( 2 * primitives.getCount(), 3 ) );
+	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( DivideRoundUp( 2 * primitives.getCount(), 3 ) );
 	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
 
 	std::string containerParam	   = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
@@ -532,7 +532,7 @@ void SbvhBuilder::update(
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -543,7 +543,7 @@ void SbvhBuilder::update(
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"ResetCounters",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -553,7 +553,7 @@ void SbvhBuilder::update(
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

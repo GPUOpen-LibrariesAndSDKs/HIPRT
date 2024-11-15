@@ -23,7 +23,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#include <hiprt/impl/Math.h>
+#include <hiprt/hiprt_math.h>
 
 namespace hiprt
 {
@@ -90,7 +90,7 @@ class Aabb
 		float3 tmin = min( f, n );
 		float  t1	= fminf( fminf( fminf( tmax.x, tmax.y ), tmax.z ), maxT );
 		float  t0	= fmaxf( fmaxf( fmaxf( tmin.x, tmin.y ), tmin.z ), 0.0f );
-		return make_float2( t0, t1 );
+		return float2{ t0, t1 };
 	}
 
 #if defined( __KERNELCC__ )

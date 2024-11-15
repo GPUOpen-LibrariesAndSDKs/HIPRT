@@ -66,7 +66,7 @@ __device__ float3 sampleLightVertex( const Light& light, float3 x, float3& lVtxO
 extern "C" __global__ void __launch_bounds__( 64 ) ShadowRayKernel(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -96,7 +96,7 @@ extern "C" __global__ void __launch_bounds__( 64 ) ShadowRayKernel(
 	hiprtSceneTraversalClosestCustomStack<Stack, InstanceStack> tr( scene, ray, stack, instanceStack );
 	hiprtHit													hit = tr.getNextHit();
 
-	int3 color{};
+	uint3 color{};
 	if ( hit.hasHit() )
 	{
 		const uint32_t idxOffset = indxOffsets[hit.instanceID];

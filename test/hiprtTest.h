@@ -55,7 +55,8 @@ void checkOro( oroError res, const source_location& location = source_location::
 void checkOrortc( orortcResult res, const source_location& location = source_location::current() );
 void checkHiprt( hiprtError res, const source_location& location = source_location::current() );
 
-std::string getEnvVariable( const std::string& key );
+std::string			  getEnvVariable( const std::string& key );
+std::filesystem::path getRootDir();
 
 namespace
 {
@@ -68,11 +69,11 @@ constexpr bool UseBitcode = false;
 
 struct CmdArguments
 {
-	uint32_t	m_ww					 = 512u;
-	uint32_t	m_wh					 = 512u;
-	std::string m_referencePath			 = getEnvVariable( "HIPRT_PATH" ) + "/test/references/";
-	uint32_t	m_deviceIdx				 = 0u;
-	bool		m_usePrecompiledBitcodes = false;
+	uint32_t			  m_ww					   = 512u;
+	uint32_t			  m_wh					   = 512u;
+	std::filesystem::path m_referencePath		   = getRootDir() / "test/references/";
+	uint32_t			  m_deviceIdx			   = 0u;
+	bool				  m_usePrecompiledBitcodes = false;
 };
 
 extern CmdArguments g_parsedArgs;
@@ -112,12 +113,7 @@ class hiprtTest : public ::testing::Test
 		std::optional<std::vector<std::filesystem::path>> includes = std::nullopt );
 
 	void validateAndWriteImage(
-		const std::filesystem::path&		 imgPath,
-		uint32_t							 width,
-		uint32_t							 height,
-		uint8_t*							 data,
-		std::optional<std::filesystem::path> refPath	 = std::nullopt,
-		std::optional<std::filesystem::path> refFilename = std::nullopt );
+		const std::filesystem::path& imgPath, uint8_t* data, std::optional<std::filesystem::path> refFilename = std::nullopt );
 
 	void writeImage( const std::filesystem::path& imgPath, uint32_t width, uint32_t height, uint8_t* data );
 
@@ -259,20 +255,20 @@ class ObjTestCases : public hiprtTest
 
 		if constexpr ( T == TestCasesType::TestCornellBox )
 		{
-			camera.m_translation = make_float3( 0.0f, 2.5f, 5.8f );
-			camera.m_rotation	 = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+			camera.m_translation = { 0.0f, 2.5f, 5.8f };
+			camera.m_rotation	 = { 0.0f, 0.0f, 1.0f, 0.0f };
 			camera.m_fov		 = 45.0f * hiprt::Pi / 180.f;
 		}
 		else if constexpr ( T == TestCasesType::TestBistro )
 		{
-			camera.m_translation = make_float3( -1200.0f, 254.0f, -260.0f );
-			camera.m_rotation	 = make_float4( 0.0f, 1.0f, 0.0f, -1.4f );
+			camera.m_translation = { -1200.0f, 254.0f, -260.0f };
+			camera.m_rotation	 = { 0.0f, 1.0f, 0.0f, -1.4f };
 			camera.m_fov		 = 60.0f * hiprt::Pi / 180.f;
 		}
 		else if constexpr ( T == TestCasesType::TestHairball )
 		{
-			camera.m_translation = make_float3( 0.0f, 0.0f, 15.0f );
-			camera.m_rotation	 = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+			camera.m_translation = { 0.0f, 0.0f, 15.0f };
+			camera.m_rotation	 = { 0.0f, 0.0f, 1.0f, 0.0f };
 			camera.m_fov		 = 45.0f * hiprt::Pi / 180.f;
 		}
 		else
@@ -285,8 +281,7 @@ class ObjTestCases : public hiprtTest
 
 	void createScene(
 		SceneData&					 scene,
-		const std::string&			 filename,
-		const std::string&			 mtlBaseDir,
+		const std::filesystem::path& filename,
 		bool						 enableRayMask = false,
 		std::optional<hiprtFrameSRT> frame		   = std::nullopt,
 		hiprtBuildFlags				 bvhBuildFlag  = hiprtBuildFlagBitPreferFastBuild,
@@ -294,8 +289,7 @@ class ObjTestCases : public hiprtTest
 
 	void setupScene(
 		Camera&						 camera,
-		const std::string&			 filePath,
-		const std::string&			 dirPath,
+		const std::filesystem::path& filename,
 		bool						 enableRayMask = false,
 		std::optional<hiprtFrameSRT> frame		   = std::nullopt,
 		hiprtBuildFlags				 bvhBuildFlag  = hiprtBuildFlagBitPreferFastBuild,

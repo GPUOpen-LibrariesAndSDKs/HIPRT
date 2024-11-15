@@ -25,7 +25,7 @@
 #pragma once
 #include <hiprt/hiprt_common.h>
 #include <hiprt/hiprt_vec.h>
-#include <hiprt/impl/Math.h>
+#include <hiprt/hiprt_math.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/AabbList.h>
 #include <hiprt/impl/Triangle.h>

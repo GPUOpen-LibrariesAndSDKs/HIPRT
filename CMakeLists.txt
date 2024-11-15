@@ -1,14 +1,29 @@
 cmake_minimum_required(VERSION 3.10)
 project(hiprt)
 
+#
 # Options
-option(BAKE_KERNEL "Enable the use of encrypted and baked kernels" OFF)
-option(BITCODE "Enable bitcode linking" OFF)
+#
+
+# Only one of those 3 flags should be ON at a time, or none. Multiple flags ON are untested and may cause issues.
+option(BAKE_KERNEL "Enable the use of encrypted and baked kernels source code" OFF)
+option(BAKE_COMPILED_KERNEL "If enabled, the kernels will be compiled and embedded as a buffer inside the binary. if you do that, you should also enable the flag 'PRECOMPILE'" OFF)
+option(BITCODE "Enable bitcode linking: when running the program, it's expected to find precompiled kernels as external files." OFF)
+
 option(PRECOMPILE "Precompile kernels" OFF)
 option(HIPRTEW "Use hiprtew" OFF)
 option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
 option(NO_UNITTEST "Don't build unit tests" OFF)
 option(HIPRT_PREFER_HIP_5 "Prefer HIP 5" OFF)
+
+
+
+find_program(PYTHON_EXECUTABLE
+	NAMES python
+	PATHS /usr/bin /usr/local/bin /opt/local/bin
+)
+message(STATUS "Python path = ${PYTHON_EXECUTABLE}")
+
 
 
 # GENERATE_BAKE_KERNEL is enabled by default if we use the flags 'BAKE_KERNEL' or 'BITCODE'.
@@ -28,6 +43,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Define GTEST_HAS_TR1_TUPLE=0 globally
 add_definitions(-DGTEST_HAS_TR1_TUPLE=0)
+
 
 
 
@@ -183,6 +199,10 @@ function(get_hip_sdk_version result)
 endfunction()
 
 
+# fill the HIP_VERSION_STR variable, it will look like: "6.2"
+get_hip_sdk_version(HIP_VERSION_STR)
+message(STATUS "HIP_VERSION_STR = ${HIP_VERSION_STR}")
+
 
 function(write_version_info in_file header_file version_file version_str_out)
 
@@ -228,7 +248,6 @@ function(write_version_info in_file header_file version_file version_str_out)
 	string(REPLACE "@HIPRT_API_VERSION@" "${HIPRT_API_VERSION}" header_content "${header_content}")
 
 	# Get HIP SDK version and replace placeholder
-	get_hip_sdk_version(HIP_VERSION_STR)
 	string(REPLACE "@HIP_VERSION_STR@" "\"${HIP_VERSION_STR}\"" header_content "${header_content}")
 
 	# Write the modified content to the header file
@@ -325,21 +344,49 @@ if(HIPRT_PREFER_HIP_5)
 endif()
 
 
-# precompile kernels
+# precompile kernels:
 if(PRECOMPILE)
 	execute_process(
-		COMMAND python compile.py --nvidia --hipSdkPath ${HIP_PATH}
+		COMMAND ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath ${HIP_PATH}
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 		)
-
+		
 	if(NOT NO_UNITTEST)
 		execute_process(
-			COMMAND python precompile_bitcode.py --nvidia --hipSdkPath ${HIP_PATH}
+			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath ${HIP_PATH}
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			)
 	endif()
+	
 
 endif()
+
+
+
+# convert the binary to a buffer that will be embeded inside the binary
+# it's expected the step 'PRECOMPILE' has been executed.
+if ( BAKE_COMPILED_KERNEL )
+	
+	message(">> Generate embedded precompiled")
+	
+	set(PYTHON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi/scripts/convert_binary_to_array.py")
+
+	set(KERNEL_HIPRT_COMP "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/hiprt${version_str_}_${HIP_VERSION_STR}_amd.hipfb")
+	set(KERNEL_HIPRT_H "${CMAKE_CURRENT_SOURCE_DIR}/hiprt/impl/bvh_build_array.h")
+	execute_process(
+		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_H}
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		)
+
+	set(KERNEL_OROCHI_COMP "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/oro_compiled_kernels.hipfb")
+	set(KERNEL_OROCHI_H "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi/ParallelPrimitives/cache/oro_compiled_kernels.h")
+	execute_process(
+		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_H}
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		)
+
+endif()
+
 
 
 if(BAKE_KERNEL OR GENERATE_BAKE_KERNEL)
@@ -367,6 +414,17 @@ if(BAKE_KERNEL OR GENERATE_BAKE_KERNEL)
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BAKE_KERNEL_GENERATED)
 
 endif()
+
+
+
+if ( BAKE_COMPILED_KERNEL )
+	# enable the 'BAKE_COMPILED_KERNEL' on Orochi:  this mode is activated by adding those 2 defines.
+	target_compile_definitions(${HIPRT_NAME} PRIVATE ORO_PP_LOAD_FROM_STRING ORO_PRECOMPILED)
+	
+	#enable the 'BAKE_COMPILED_KERNEL' on HIPRT: 
+	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BAKE_COMPILED_KERNEL )
+endif()
+
 
 if(BAKE_KERNEL)
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_LOAD_FROM_STRING ORO_PP_LOAD_FROM_STRING)
