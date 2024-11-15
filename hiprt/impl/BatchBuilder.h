@@ -58,8 +58,8 @@ class BatchBuilder
 	template <typename BuildInput>
 	static size_t getTemporaryBufferSize( const std::vector<BuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 	{
-		return roundUp( sizeof( BuildInput ) * buildInputs.size(), DefaultAlignment ) +
-			   roundUp( sizeof( hiprtDevicePtr ) * buildInputs.size(), DefaultAlignment );
+		return RoundUp( sizeof( BuildInput ) * buildInputs.size(), DefaultAlignment ) +
+			   RoundUp( sizeof( hiprtDevicePtr ) * buildInputs.size(), DefaultAlignment );
 	}
 
 	static size_t getStorageBufferSize( const hiprtGeometryBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
@@ -109,8 +109,8 @@ void BatchBuilder::build(
 	std::string buildInputParam = Compiler::kernelNameSufix( Traits<BuildInput>::TYPE_NAME );
 
 	uint32_t gridSize  = context.getMaxGridSize();
-	uint32_t gridSizeY = std::max( 1u, divideRoundUp( static_cast<uint32_t>( buildInputs.size() ), gridSize ) );
-	uint32_t gridSizeX = divideRoundUp( static_cast<uint32_t>( buildInputs.size() ), gridSizeY );
+	uint32_t gridSizeY = std::max( 1u, DivideRoundUp( static_cast<uint32_t>( buildInputs.size() ), gridSize ) );
+	uint32_t gridSizeX = DivideRoundUp( static_cast<uint32_t>( buildInputs.size() ), gridSizeY );
 
 	uint32_t blockSize = 64;
 	while ( blockSize < buildOptions.batchBuildMaxPrimCount )
@@ -118,7 +118,7 @@ void BatchBuilder::build(
 
 	Kernel batchBuildKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BatchBuilderKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BatchBuilderKernels.h",
 		"BatchBuild_" + buildInputParam,
 		opts,
 		GET_ARG_LIST( BatchBuilderKernels ) );

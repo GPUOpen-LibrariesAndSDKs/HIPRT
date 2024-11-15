@@ -25,7 +25,7 @@
 #pragma once
 #include <hiprt/hiprt_common.h>
 #include <hiprt/hiprt_vec.h>
-#include <hiprt/impl/Math.h>
+#include <hiprt/hiprt_math.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/AabbList.h>
 #include <hiprt/impl/Triangle.h>
@@ -246,7 +246,7 @@ extern "C" __global__ void SingletonConstruction_InstanceList_MatrixFrame_Instan
 	SingletonConstruction<InstanceList<MatrixFrame>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, uint32_t* pairCounter )
+extern "C" __global__ void PairTriangles( TriangleMesh mesh, uint2* pairIndices, uint32_t* pairCounter )
 {
 	const uint32_t index	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
@@ -255,7 +255,7 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, 
 	uint32_t pairedIndex = InvalidValue;
 	uint64_t activeMask	 = __ballot( valid );
 
-	int3 triIndices;
+	uint3 triIndices;
 	if ( valid ) triIndices = mesh.fetchTriangleIndices( index );
 
 	while ( activeMask )
@@ -268,10 +268,10 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, 
 		activeMask &= activeMask - 1;
 
 		const uint32_t broadcastIndex	   = __shfl( index, broadcastLane );
-		const int3	   triIndicesBroadcast = make_int3(
-			__shfl( triIndices.x, broadcastLane ),
-			__shfl( triIndices.y, broadcastLane ),
-			__shfl( triIndices.z, broadcastLane ) );
+		const uint3	   triIndicesBroadcast = {
+			   __shfl( triIndices.x, broadcastLane ),
+			   __shfl( triIndices.y, broadcastLane ),
+			   __shfl( triIndices.z, broadcastLane ) };
 
 		bool pairable = false;
 		if ( index != broadcastIndex && valid )
@@ -294,7 +294,7 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, int2* pairIndices, 
 
 	bool	 pairing   = index < mesh.getCount() && pairedIndex != InvalidValue;
 	uint32_t pairIndex = warpOffset( pairing, pairCounter );
-	if ( pairing ) pairIndices[pairIndex] = make_int2( index, pairedIndex );
+	if ( pairing ) pairIndices[pairIndex] = make_uint2( index, pairedIndex );
 }
 
 template <typename PrimitiveContainer>
@@ -452,7 +452,7 @@ __device__ void FitBounds( PrimitiveContainer& primitives, BoxNode* boxNodes, Pr
 	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
 	{
 		primNodes[index] =
-			primitives.fetchTriangleNode( make_int2( primNodes[index].m_primIndex0, primNodes[index].m_primIndex1 ) );
+			primitives.fetchTriangleNode( make_uint2( primNodes[index].m_primIndex0, primNodes[index].m_primIndex1 ) );
 		primNodes[index].m_parentAddr = parentAddr;
 	}
 	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
@@ -524,7 +524,7 @@ __device__ void Collapse(
 	PrimitiveNode*		primNodes,
 	PrimitiveContainer& primitives,
 	uint32_t*			taskCounter,
-	int3*				taskQueue )
+	uint3*				taskQueue )
 {
 	bool done = index >= leafCount;
 	while ( __any( !done ) )
@@ -533,7 +533,7 @@ __device__ void Collapse(
 
 		if ( done ) continue;
 
-		int3	 task		= taskQueue[index];
+		uint3	 task		= taskQueue[index];
 		uint32_t nodeIndex	= task.x;
 		uint32_t nodeAddr	= task.y;
 		uint32_t parentAddr = task.z;
@@ -600,7 +600,7 @@ __device__ void Collapse(
 					childIndices[i]		= encodeNodeIndex( childAddr, getNodeType( childIndex ) );
 
 					uint32_t taskAddr	= i == 0 ? index : taskOffset++;
-					taskQueue[taskAddr] = make_int3( childIndex, childAddr, nodeAddr );
+					taskQueue[taskAddr] = make_uint3( childIndex, childAddr, nodeAddr );
 					__threadfence();
 				}
 
@@ -653,7 +653,7 @@ extern "C" __global__ void Collapse_TriangleMesh_TriangleNode(
 	TriangleNode*  primNodes,
 	TriangleMesh   primitives,
 	uint32_t*	   taskCounter,
-	int3*		   taskQueue )
+	uint3*		   taskQueue )
 {
 	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	Collapse<TriangleMesh, TriangleNode>(
@@ -669,7 +669,7 @@ extern "C" __global__ void Collapse_AabbList_CustomNode(
 	CustomNode*	   primNodes,
 	AabbList	   primitives,
 	uint32_t*	   taskCounter,
-	int3*		   taskQueue )
+	uint3*		   taskQueue )
 {
 	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	Collapse<AabbList, CustomNode>(
@@ -685,7 +685,7 @@ extern "C" __global__ void Collapse_InstanceList_SRTFrame_InstanceNode(
 	InstanceNode*		   primNodes,
 	InstanceList<SRTFrame> primitives,
 	uint32_t*			   taskCounter,
-	int3*				   taskQueue )
+	uint3*				   taskQueue )
 {
 	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	Collapse<InstanceList<SRTFrame>, InstanceNode>(
@@ -701,7 +701,7 @@ extern "C" __global__ void Collapse_InstanceList_MatrixFrame_InstanceNode(
 	InstanceNode*			  primNodes,
 	InstanceList<MatrixFrame> primitives,
 	uint32_t*				  taskCounter,
-	int3*					  taskQueue )
+	uint3*					  taskQueue )
 {
 	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	Collapse<InstanceList<MatrixFrame>, InstanceNode>(

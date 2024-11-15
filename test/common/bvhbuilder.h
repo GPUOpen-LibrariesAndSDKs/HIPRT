@@ -71,8 +71,8 @@ struct Aabb
 
 	void reset( void )
 	{
-		m_min = make_float3( FLT_MAX, FLT_MAX, FLT_MAX );
-		m_max = make_float3( -FLT_MAX, -FLT_MAX, -FLT_MAX );
+		m_min = { FLT_MAX, FLT_MAX, FLT_MAX };
+		m_max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 	}
 
 	Aabb& grow( const float3& p )

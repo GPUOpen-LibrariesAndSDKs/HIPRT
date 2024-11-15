@@ -27,90 +27,68 @@
 #include <hiprt/hiprt_common.h>
 
 #if !defined( __KERNELCC__ )
-struct hiprtInt2
+namespace hiprt
 {
-	int x, y;
+template <typename T, uint32_t N>
+struct Vector;
+
+template <typename T>
+struct alignas( 2 * sizeof( T ) ) Vector<T, 2>
+{
+	T x, y;
 };
 
-struct hiprtFloat2
+template <typename T>
+struct Vector<T, 3>
 {
-	float x, y;
+	T x, y, z;
 };
 
-struct hiprtInt3
+template <typename T>
+struct alignas( 4 * sizeof( T ) ) Vector<T, 4>
 {
-	int x, y, z;
+	T x, y, z, w;
 };
+} // namespace hiprt
 
-struct hiprtFloat3
-{
-	float x, y, z;
-};
-
-struct hiprtInt4
-{
-	int x, y, z, w;
-};
-
-struct hiprtFloat4
-{
-	float x, y, z, w;
-};
-
-struct hiprtUint2
-{
-	unsigned int x, y;
-};
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtInt2 make_hiprtInt2( int x, int y ) { return { x, y }; }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtFloat2 make_hiprtFloat2( float x, float y ) { return { x, y }; }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtInt3 make_hiprtInt3( int x, int y, int z ) { return { x, y, z }; }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtFloat3 make_hiprtFloat3( float x, float y, float z ) { return { x, y, z }; }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtInt4 make_hiprtInt4( int x, int y, int z, int w ) { return { x, y, z, w }; }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtFloat4 make_hiprtFloat4( float x, float y, float z, float w ) { return { x, y, z, w }; }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE hiprtUint2 make_hiprtUint2( unsigned int x, unsigned int y ) { return { x, y }; }
-
+using hiprtInt2	  = hiprt::Vector<int, 2>;
+using hiprtInt3	  = hiprt::Vector<int, 3>;
+using hiprtInt4	  = hiprt::Vector<int, 4>;
+using hiprtUint2  = hiprt::Vector<unsigned int, 2>;
+using hiprtUint3  = hiprt::Vector<unsigned int, 3>;
+using hiprtUint4  = hiprt::Vector<unsigned int, 4>;
+using hiprtFloat2 = hiprt::Vector<float, 2>;
+using hiprtFloat3 = hiprt::Vector<float, 3>;
+using hiprtFloat4 = hiprt::Vector<float, 4>;
 #if defined( HIPRT_EXPORTS )
-#define int2 hiprtInt2
-#define int3 hiprtInt3
-#define int4 hiprtInt4
-#define uint2 hiprtUint2
-
-#define float2 hiprtFloat2
-#define float3 hiprtFloat3
-#define float4 hiprtFloat4
-
-#define make_int2 make_hiprtInt2
-#define make_int3 make_hiprtInt3
-#define make_int4 make_hiprtInt4
-#define make_uint2 make_hiprtUint2
-
-#define make_float2 make_hiprtFloat2
-#define make_float3 make_hiprtFloat3
-#define make_float4 make_hiprtFloat4
+using int2	 = hiprtInt2;
+using int3	 = hiprtInt3;
+using int4	 = hiprtInt4;
+using uint2	 = hiprtUint2;
+using uint3	 = hiprtUint3;
+using uint4	 = hiprtUint4;
+using float2 = hiprtFloat2;
+using float3 = hiprtFloat3;
+using float4 = hiprtFloat4;
 #endif
 #else
-#define hiprtInt2 int2
-#define hiprtInt3 int3
-#define hiprtInt4 int4
-#define hiprtUint2 uint2
-
-#define hiprtFloat2 float2
-#define hiprtFloat3 float3
-#define hiprtFloat4 float4
-
-#define make_hiprtInt2 make_int2
-#define make_hiprtInt3 make_int3
-#define make_hiprtInt4 make_int4
-#define make_hiprtUint2 make_uint2
-
-#define make_hiprtFloat2 make_float2
-#define make_hiprtFloat3 make_float3
-#define make_hiprtFloat4 make_float4
+using hiprtInt2	  = int2;
+using hiprtInt3	  = int3;
+using hiprtInt4	  = int4;
+using hiprtUint2  = uint2;
+using hiprtUint3  = uint3;
+using hiprtUint4  = uint4;
+using hiprtFloat2 = float2;
+using hiprtFloat3 = float3;
+using hiprtFloat4 = float4;
 #endif
+
+HIPRT_STATIC_ASSERT( sizeof( hiprtInt2 ) == 8 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtInt3 ) == 12 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtInt4 ) == 16 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtUint2 ) == 8 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtUint3 ) == 12 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtUint4 ) == 16 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtFloat2 ) == 8 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtFloat3 ) == 12 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtFloat4 ) == 16 );

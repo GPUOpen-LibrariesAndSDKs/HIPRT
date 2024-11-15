@@ -38,7 +38,7 @@ HIPRT_DEVICE bool intersectSphere( const hiprtRay& ray, const void* data, void* 
 	const float3 dir  = ray.direction;
 
 	const float4 sphere = reinterpret_cast<const float4*>( data )[hit.primID];
-	const float3 center = make_float3( sphere );
+	const float3 center = hiprt::make_float3( sphere );
 	const float	 radius = sphere.w;
 
 	const float3 O = orig - center;
@@ -67,11 +67,11 @@ HIPRT_DEVICE bool intersectCircle( const hiprtRay& ray, const void* data, void* 
 	const float2 c = { o[hit.primID] - ray.origin.x, 0.5f - ray.origin.y };
 	const float	 d = sqrtf( c.x * c.x + c.y * c.y );
 
-	int2 colors[] = { { 255, 0 }, { 0, 255 }, { 255, 255 } };
+	uint2 colors[] = { { 255, 0 }, { 0, 255 }, { 255, 255 } };
 	if ( payload )
 	{
-		int2* color = reinterpret_cast<int2*>( payload );
-		*color		= colors[hit.primID];
+		uint2* color = reinterpret_cast<uint2*>( payload );
+		*color		 = colors[hit.primID];
 	}
 
 	bool hasHit = d < R;
@@ -91,10 +91,8 @@ HIPRT_DEVICE bool cutoutFilter( const hiprtRay& ray, const void* data, void* pay
 	const float	  SCALE = 16.0f;
 	const float2& uv	= hit.uv;
 	float2		  texCoord[2];
-	texCoord[0] = ( 1.0f - uv.x - uv.y ) * make_float2( 0.0f, 0.0f ) + uv.x * make_float2( 0.0f, 1.0f ) +
-				  uv.y * make_float2( 1.0f, 1.0f );
-	texCoord[1] = ( 1.0f - uv.x - uv.y ) * make_float2( 0.0f, 0.0f ) + uv.x * make_float2( 1.0f, 1.0f ) +
-				  uv.y * make_float2( 1.0f, 0.0f );
+	texCoord[0] = ( 1.0f - uv.x - uv.y ) * float2{ 0.0f, 0.0f } + uv.x * float2{ 0.0f, 1.0f } + uv.y * float2{ 1.0f, 1.0f };
+	texCoord[1] = ( 1.0f - uv.x - uv.y ) * float2{ 0.0f, 0.0f } + uv.x * float2{ 1.0f, 1.0f } + uv.y * float2{ 1.0f, 0.0f };
 	if ( ( static_cast<uint32_t>( SCALE * texCoord[hit.primID].x ) + static_cast<uint32_t>( SCALE * texCoord[hit.primID].y ) ) &
 		 1 )
 		return true;
@@ -118,7 +116,7 @@ TraceKernel( hiprtScene scene, uint32_t numOfRays, hiprtGlobalStackBuffer global
 }
 
 extern "C" __global__ void CornellBoxKernel(
-	hiprtGeometry geom, uint8_t* image, hiprtFuncTable table, int2 resolution, uint32_t* matIndices, float3* diffusColors )
+	hiprtGeometry geom, uint8_t* image, hiprtFuncTable table, uint2 resolution, uint32_t* matIndices, float3* diffusColors )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -145,7 +143,7 @@ extern "C" __global__ void CornellBoxKernel(
 	{
 		hiprtHit hit = tr.getNextHit();
 
-		int3 color{};
+		uint3 color{};
 		if ( hit.hasHit() )
 		{
 			const uint32_t matIndex		= matIndices[hit.primID];
@@ -165,7 +163,7 @@ extern "C" __global__ void CornellBoxKernel(
 	}
 }
 
-extern "C" __global__ void MeshIntersectionKernel( hiprtGeometry geom, uint8_t* image, int2 resolution )
+extern "C" __global__ void MeshIntersectionKernel( hiprtGeometry geom, uint8_t* image, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -186,7 +184,7 @@ extern "C" __global__ void MeshIntersectionKernel( hiprtGeometry geom, uint8_t* 
 	image[index * 4 + 3] = 255;
 }
 
-extern "C" __global__ void PairTrianglesKernel( hiprtScene scene, uint8_t* image, int2 resolution )
+extern "C" __global__ void PairTrianglesKernel( hiprtScene scene, uint8_t* image, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -198,8 +196,8 @@ extern "C" __global__ void PairTrianglesKernel( hiprtScene scene, uint8_t* image
 	ray.origin	   = o;
 	ray.direction  = d;
 
-	const int3 colors[] = { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 } };
-	int3	   color	= { 0, 0, 0 };
+	const uint3 colors[] = { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 } };
+	uint3		color	 = { 0, 0, 0 };
 
 	hiprtSceneTraversalAnyHit tr( scene, ray );
 	while ( true )
@@ -215,7 +213,7 @@ extern "C" __global__ void PairTrianglesKernel( hiprtScene scene, uint8_t* image
 	image[index * 4 + 3] = 255;
 }
 
-extern "C" __global__ void CutoutKernel( hiprtGeometry geom, uint8_t* image, hiprtFuncTable table, int2 resolution )
+extern "C" __global__ void CutoutKernel( hiprtGeometry geom, uint8_t* image, hiprtFuncTable table, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -236,7 +234,8 @@ extern "C" __global__ void CutoutKernel( hiprtGeometry geom, uint8_t* image, hip
 	image[index * 4 + 3] = 255;
 }
 
-extern "C" __global__ void CustomIntersectionKernel( hiprtGeometry geom, uint8_t* image, hiprtFuncTable table, int2 resolution )
+extern "C" __global__ void
+CustomIntersectionKernel( hiprtGeometry geom, uint8_t* image, hiprtFuncTable table, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -249,7 +248,7 @@ extern "C" __global__ void CustomIntersectionKernel( hiprtGeometry geom, uint8_t
 	ray.direction  = d;
 	ray.maxT	   = 1000.0f;
 
-	int2	 color;
+	uint2	 color;
 	uint32_t hitIdx = hiprtInvalidValue;
 
 	hiprtGeomCustomTraversalClosest tr( geom, ray, hiprtTraversalHintDefault, &color, table );
@@ -262,7 +261,7 @@ extern "C" __global__ void CustomIntersectionKernel( hiprtGeometry geom, uint8_t
 	image[index * 4 + 3] = 255;
 }
 
-extern "C" __global__ void SceneIntersectionSingleton( hiprtScene scene, uint8_t* image, int2 resolution )
+extern "C" __global__ void SceneIntersectionSingleton( hiprtScene scene, uint8_t* image, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -284,7 +283,7 @@ extern "C" __global__ void SceneIntersectionSingleton( hiprtScene scene, uint8_t
 	image[index * 4 + 3] = 255;
 }
 
-extern "C" __global__ void SceneIntersectionKernel( hiprtScene scene, uint8_t* image, hiprtFuncTable table, int2 resolution )
+extern "C" __global__ void SceneIntersectionKernel( hiprtScene scene, uint8_t* image, hiprtFuncTable table, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -307,7 +306,7 @@ extern "C" __global__ void SceneIntersectionKernel( hiprtScene scene, uint8_t* i
 	{
 		hiprtHit hit = tr.getNextHit();
 
-		int3 color = { 0, 0, 0 };
+		uint3 color = { 0, 0, 0 };
 		if ( hit.hasHit() )
 		{
 			const uint32_t instanceID	= hit.instanceIDs[1] != hiprtInvalidValue ? hit.instanceIDs[1] : hit.instanceIDs[0];
@@ -326,7 +325,7 @@ extern "C" __global__ void SceneIntersectionKernel( hiprtScene scene, uint8_t* i
 	}
 }
 
-extern "C" __global__ void MotionBlurKernel( hiprtScene scene, uint8_t* image, int2 resolution )
+extern "C" __global__ void MotionBlurKernel( hiprtScene scene, uint8_t* image, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -359,7 +358,7 @@ extern "C" __global__ void MotionBlurKernel( hiprtScene scene, uint8_t* image, i
 	image[index * 4 + 3] = 255;
 }
 
-extern "C" __global__ void MotionBlurSlerpKernel( hiprtScene scene, uint8_t* image, hiprtFuncTable table, int2 resolution )
+extern "C" __global__ void MotionBlurSlerpKernel( hiprtScene scene, uint8_t* image, hiprtFuncTable table, uint2 resolution )
 {
 	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
@@ -375,14 +374,15 @@ extern "C" __global__ void MotionBlurSlerpKernel( hiprtScene scene, uint8_t* ima
 
 	hiprtRay	 ray;
 	const float3 o = { 0.0f, 0.0f, 5.0f };
-	const float2 d = 2.0f * make_float2(
-								( static_cast<float>( x ) + randf( seed ) ) / static_cast<float>( resolution.x ),
-								( static_cast<float>( y ) + randf( seed ) ) / static_cast<float>( resolution.y ) ) -
+	const float2 d = 2.0f *
+						 float2{
+							 ( static_cast<float>( x ) + randf( seed ) ) / static_cast<float>( resolution.x ),
+							 ( static_cast<float>( y ) + randf( seed ) ) / static_cast<float>( resolution.y ) } -
 					 1.0f;
 	ray.origin	  = o;
 	ray.direction = hiprt::normalize( d.x * U + d.y * V + W );
 
-	int2   payload;
+	uint2  payload;
 	float3 color{};
 
 	for ( uint32_t i = 0; i < Samples; ++i )

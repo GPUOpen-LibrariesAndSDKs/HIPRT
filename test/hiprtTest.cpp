@@ -46,7 +46,7 @@ void checkOro( oroError res, const source_location& location )
 		oroGetErrorString( res, &msg );
 		std::cerr << "Orochi error: '" << msg << "' on line " << location.line() << " "
 				  << " in '" << location.file_name() << "'." << std::endl;
-		exit( EXIT_FAILURE );
+		std::abort();
 	}
 }
 
@@ -57,7 +57,7 @@ void checkOrortc( orortcResult res, const source_location& location )
 		std::cerr << "Orortc error: '" << orortcGetErrorString( res ) << "' [ " << res << " ] on line " << location.line()
 				  << " "
 				  << " in '" << location.file_name() << "'." << std::endl;
-		exit( EXIT_FAILURE );
+		std::abort();
 	}
 }
 
@@ -67,7 +67,7 @@ void checkHiprt( hiprtError res, const source_location& location )
 	{
 		std::cerr << "Hiprt error: '" << res << "' on line " << location.line() << " "
 				  << " in '" << location.file_name() << "'." << std::endl;
-		exit( EXIT_FAILURE );
+		std::abort();
 	}
 }
 
@@ -83,10 +83,17 @@ std::string getEnvVariable( const std::string& key )
 	const char* const env = getenv( key.c_str() );
 	const std::string val = ( env == nullptr ) ? std::string() : std::string( env );
 #endif
-	return val.empty() ? ".." : val;
+	return val;
 }
 
-inline float3 operator-( float3& a, float3& b ) { return make_float3( a.x - b.x, a.y - b.y, a.z - b.z ); }
+std::filesystem::path getRootDir()
+{
+	std::string val = getEnvVariable( "HIPRT_PATH" );
+	if ( val.empty() ) val = "..";
+	return std::filesystem::path( val );
+}
+
+inline float3 operator-( float3& a, float3& b ) { return float3{ a.x - b.x, a.y - b.y, a.z - b.z }; }
 
 struct BuilderContext
 {
@@ -99,7 +106,7 @@ struct GeometryData
 {
 	const float3*	m_vertices;
 	const uint32_t* m_indices;
-	const int2*		m_pairIndices = nullptr;
+	const uint2*	m_pairIndices = nullptr;
 };
 
 void hiprtTest::SetUp()
@@ -160,8 +167,8 @@ void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 			buildInput.primitive.triangleMesh.triangleCount * buildInput.primitive.triangleMesh.triangleStride );
 		for ( uint32_t i = 0; i < buildInput.primitive.triangleMesh.triangleCount; ++i )
 		{
-			int3 triangle =
-				*reinterpret_cast<int3*>( trianglesRaw.data() + i * buildInput.primitive.triangleMesh.triangleStride );
+			uint3 triangle =
+				*reinterpret_cast<uint3*>( trianglesRaw.data() + i * buildInput.primitive.triangleMesh.triangleStride );
 			float3 v0 = *reinterpret_cast<const float3*>(
 				verticesRaw.data() + triangle.x * buildInput.primitive.triangleMesh.vertexStride );
 			float3 v1 = *reinterpret_cast<const float3*>(
@@ -186,8 +193,8 @@ void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 		for ( uint32_t i = 0; i < buildInput.primitive.aabbList.aabbCount; ++i )
 		{
 			float4* ptr = reinterpret_cast<float4*>( primBoxesRaw.data() + i * buildInput.primitive.aabbList.aabbStride );
-			primBoxes[i].m_min = make_float3( ptr[0] );
-			primBoxes[i].m_max = make_float3( ptr[1] );
+			primBoxes[i].m_min = hiprt::make_float3( ptr[0] );
+			primBoxes[i].m_max = hiprt::make_float3( ptr[1] );
 		}
 		BvhBuilder::build( buildInput.primitive.aabbList.aabbCount, primBoxes, nodes );
 	}
@@ -251,8 +258,8 @@ void hiprtTest::buildEmbreeBvh(
 		hiprtBvhNode*	node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
 		for ( uint32_t i = 0; i < childCount; i++ )
 		{
-			node->childAabbsMin[i] = make_float3( bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z );
-			node->childAabbsMax[i] = make_float3( bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z );
+			node->childAabbsMin[i] = float3{ bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z };
+			node->childAabbsMax[i] = float3{ bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z };
 		}
 	};
 
@@ -324,12 +331,12 @@ void hiprtTest::buildEmbreeBvh(
 					rightBox.intersect( box );
 				};
 
-			int2 primID = make_int2( primitive->primID );
+			uint2 primID = hiprt::make_uint2( primitive->primID );
 			if ( geomData->m_pairIndices != nullptr ) primID = geomData->m_pairIndices[primitive->primID];
 
 			Aabb box, leftBox, rightBox;
-			box.grow( make_float3( primitive->lower_x, primitive->lower_y, primitive->lower_z ) );
-			box.grow( make_float3( primitive->upper_x, primitive->upper_y, primitive->upper_z ) );
+			box.grow( float3{ primitive->lower_x, primitive->lower_y, primitive->lower_z } );
+			box.grow( float3{ primitive->upper_x, primitive->upper_y, primitive->upper_z } );
 
 			float3 vertices[3];
 			vertices[0] = geomData->m_vertices[geomData->m_indices[3 * primID.x + 0]];
@@ -400,8 +407,8 @@ void hiprtTest::buildEmbreeGeometryBvh(
 
 	if ( triangleCount > 2 )
 	{
-		auto tryPairTriangles = [&]( const int3& a, const int3& b ) {
-			int3 lb = make_int3( 3 );
+		auto tryPairTriangles = [&]( const uint3& a, const uint3& b ) {
+			uint3 lb = hiprt::make_uint3( 3 );
 
 			lb.x = ( b.x == a.x ) ? 0 : lb.x;
 			lb.y = ( b.y == a.x ) ? 0 : lb.y;
@@ -416,11 +423,11 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			lb.z = ( b.z == a.z ) ? 2 : lb.z;
 
 			if ( ( lb.x == 3 ) + ( lb.y == 3 ) + ( lb.z == 3 ) <= 1 ) return lb;
-			return make_int3( hiprt::InvalidValue );
+			return hiprt::make_uint3( hiprt::InvalidValue );
 		};
 
-		std::vector<int2> pairIndices;
-		uint32_t		  groups = hiprt::DivideRoundUp( triangleCount, 32 );
+		std::vector<uint2> pairIndices;
+		uint32_t		   groups = hiprt::DivideRoundUp( triangleCount, 32 );
 		for ( uint32_t i = 0; i < groups; ++i )
 		{
 			const uint32_t	  offset = i * 32;
@@ -431,13 +438,13 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			for ( uint32_t j = 0; j < 32; ++j )
 			{
 				if ( !active[j] ) continue;
-				int2 pair		= make_int2( offset + j );
-				int3 triIndices = *reinterpret_cast<const int3*>( &indices[3 * ( offset + j )] );
+				uint2 pair		 = hiprt::make_uint2( offset + j );
+				uint3 triIndices = *reinterpret_cast<const uint3*>( &indices[3 * ( offset + j )] );
 				for ( uint32_t k = j + 1; k < 32; ++k )
 				{
 					if ( !active[k] ) continue;
-					int3 secondTriIndices = *reinterpret_cast<const int3*>( &indices[3 * ( offset + k )] );
-					bool pairable		  = tryPairTriangles( secondTriIndices, triIndices ).x != hiprt::InvalidValue;
+					uint3 secondTriIndices = *reinterpret_cast<const uint3*>( &indices[3 * ( offset + k )] );
+					bool  pairable		   = tryPairTriangles( secondTriIndices, triIndices ).x != hiprt::InvalidValue;
 					if ( pairable )
 					{
 						pair.y	  = offset + k;
@@ -451,9 +458,9 @@ void hiprtTest::buildEmbreeGeometryBvh(
 		}
 
 		buildInput.primitive.triangleMesh.trianglePairCount = static_cast<uint32_t>( pairIndices.size() );
-		malloc( reinterpret_cast<int2*&>( buildInput.primitive.triangleMesh.trianglePairIndices ), pairIndices.size() );
+		malloc( reinterpret_cast<uint2*&>( buildInput.primitive.triangleMesh.trianglePairIndices ), pairIndices.size() );
 		copyHtoD(
-			reinterpret_cast<int2*>( buildInput.primitive.triangleMesh.trianglePairIndices ),
+			reinterpret_cast<uint2*>( buildInput.primitive.triangleMesh.trianglePairIndices ),
 			pairIndices.data(),
 			pairIndices.size() );
 
@@ -463,7 +470,7 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			Aabb box;
 			for ( uint32_t j = 0; j < 2; ++j )
 			{
-				int3 triIndices = *reinterpret_cast<const int3*>( &indices[3 * ( &pairIndices[i].x )[j]] );
+				uint3 triIndices = *reinterpret_cast<const uint3*>( &indices[3 * ( &pairIndices[i].x )[j]] );
 				box.grow( vertices[triIndices.x] );
 				box.grow( vertices[triIndices.y] );
 				box.grow( vertices[triIndices.z] );
@@ -549,12 +556,12 @@ void hiprtTest::buildEmbreeSceneBvh(
 
 			float3 p[8];
 			p[0] = geomBox.m_min;
-			p[1] = make_float3( geomBox.m_min.x, geomBox.m_min.y, geomBox.m_max.z );
-			p[2] = make_float3( geomBox.m_min.x, geomBox.m_max.y, geomBox.m_min.z );
-			p[3] = make_float3( geomBox.m_min.x, geomBox.m_max.y, geomBox.m_max.z );
-			p[4] = make_float3( geomBox.m_max.x, geomBox.m_min.y, geomBox.m_max.z );
-			p[5] = make_float3( geomBox.m_max.x, geomBox.m_max.y, geomBox.m_min.z );
-			p[6] = make_float3( geomBox.m_max.x, geomBox.m_max.y, geomBox.m_max.z );
+			p[1] = float3{ geomBox.m_min.x, geomBox.m_min.y, geomBox.m_max.z };
+			p[2] = float3{ geomBox.m_min.x, geomBox.m_max.y, geomBox.m_min.z };
+			p[3] = float3{ geomBox.m_min.x, geomBox.m_max.y, geomBox.m_max.z };
+			p[4] = float3{ geomBox.m_max.x, geomBox.m_min.y, geomBox.m_max.z };
+			p[5] = float3{ geomBox.m_max.x, geomBox.m_max.y, geomBox.m_min.z };
+			p[6] = float3{ geomBox.m_max.x, geomBox.m_max.y, geomBox.m_max.z };
 			p[7] = geomBox.m_max;
 
 			for ( uint32_t i = 0; i < 8; ++i )
@@ -664,11 +671,9 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	std::vector<const char*> includeNames;
 	for ( size_t i = 0; i < includeNamesData.size(); i++ )
 	{
-		if ( !readSourceCode(
-				 std::filesystem::path( getEnvVariable( "HIPRT_PATH" ) + "/" ) / includeNamesData[i], headersData[i] ) )
+		if ( !readSourceCode( getRootDir() / includeNamesData[i], headersData[i] ) )
 		{
-			std::cerr << "Unable to find header '" << includeNamesData[i] << "' at " << getEnvVariable( "HIPRT_PATH" ) << "/"
-					  << std::endl;
+			std::cerr << "Unable to find header '" << includeNamesData[i] << "' at " << getRootDir() << "/" << std::endl;
 			return hiprtErrorInternal;
 		}
 		includeNames.push_back( includeNamesData[i].string().c_str() );
@@ -699,7 +704,7 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	}
 	options.push_back( "-std=c++17" );
 
-	std::string includePath = ( "-I" + getEnvVariable( "HIPRT_PATH" ) + "/" );
+	std::string includePath = "-I" + getRootDir().string();
 	options.push_back( includePath.c_str() );
 
 	orortcProgram prog;
@@ -811,8 +816,8 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 			}
 		};
 
-		std::filesystem::path path = std::string( getEnvVariable( "HIPRT_PATH" ) + "/dist/bin/Release/hiprt" ) +
-									 HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
+		std::filesystem::path path =
+			( getRootDir() / "dist/bin/Release/hiprt" ).string() + HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
 #if !defined( __GNUC__ )
 		path += "precompiled_bitcode_win.hipfb";
 #else
@@ -853,7 +858,7 @@ hiprtError hiprtTest::buildTraceKernels(
 	std::vector<const char*> includeNames;
 	for ( size_t i = 0; i < includeNamesData.size(); i++ )
 	{
-		readSourceCode( std::filesystem::path( getEnvVariable( "HIPRT_PATH" ) + "/" ) / includeNamesData[i], headersData[i] );
+		readSourceCode( getRootDir() / includeNamesData[i], headersData[i] );
 		includeNames.push_back( includeNamesData[i].string().c_str() );
 		headers.push_back( headersData[i].c_str() );
 	}
@@ -897,24 +902,19 @@ hiprtError hiprtTest::buildTraceKernel(
 }
 
 void hiprtTest::validateAndWriteImage(
-	const std::filesystem::path&		 imgPath,
-	uint32_t							 width,
-	uint32_t							 height,
-	uint8_t*							 data,
-	std::optional<std::filesystem::path> refPath,
-	std::optional<std::filesystem::path> refFilename )
+	const std::filesystem::path& imgPath, uint8_t* data, std::optional<std::filesystem::path> refFilename )
 {
-	std::vector<uint8_t> image( width * height * 4 );
-	copyDtoH( image.data(), data, width * height * 4 );
-	writeImage( imgPath, width, height, image.data() );
+	std::vector<uint8_t> image( g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
+	copyDtoH( image.data(), data, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
+	writeImage( imgPath, g_parsedArgs.m_ww, g_parsedArgs.m_wh, image.data() );
 
-	if ( refFilename && refPath )
+	if ( refFilename )
 	{
 		int refW;
 		int refH;
 		int refB;
 
-		std::filesystem::path fullRefFilename = refPath.value() / refFilename.value();
+		std::filesystem::path fullRefFilename = g_parsedArgs.m_referencePath / refFilename.value();
 		uint8_t*			  ref			  = stbi_load( fullRefFilename.string().c_str(), &refW, &refH, &refB, 0 );
 		if ( ref == 0 )
 		{
@@ -923,7 +923,7 @@ void hiprtTest::validateAndWriteImage(
 			return;
 		}
 
-		if ( refW != width || refH != height )
+		if ( refW != g_parsedArgs.m_ww || refH != g_parsedArgs.m_wh )
 		{
 			std::cerr << "Framebuffer resolution does not match!" << std::endl;
 			EXPECT_FALSE( 1 );
@@ -934,7 +934,7 @@ void hiprtTest::validateAndWriteImage(
 		uint32_t maxDiff		= 0;
 		uint32_t nDiffPixels	= 0;
 
-		for ( uint32_t i = 0; i < width * height; i++ )
+		for ( uint32_t i = 0; i < g_parsedArgs.m_ww * g_parsedArgs.m_wh; i++ )
 		{
 			uint32_t r = abs( image[i * 4 + 0] - ref[i * 4 + 0] );
 			uint32_t g = abs( image[i * 4 + 1] - ref[i * 4 + 1] );
@@ -948,7 +948,7 @@ void hiprtTest::validateAndWriteImage(
 			}
 		}
 
-		const float fail = 100.0f * nDiffPixels / ( static_cast<float>( width * height ) );
+		const float fail = 100.0f * nDiffPixels / ( static_cast<float>( g_parsedArgs.m_ww * g_parsedArgs.m_wh ) );
 		if ( nDiffPixels != 0 )
 			std::cerr << "Pixel difference: " << nDiffPixels << " (" << std::setprecision( 1 ) << fail
 					  << "%)	(max diff: " << maxDiff << "/255)" << std::endl;
@@ -971,23 +971,22 @@ void hiprtTest::launchKernel( oroFunction func, uint32_t nx, uint32_t ny, void**
 {
 	constexpr uint32_t tx  = 16u;
 	constexpr uint32_t ty  = 16u;
-	uint32_t		   nbx = hiprt::divideRoundUp( nx, tx );
-	uint32_t		   nby = hiprt::divideRoundUp( ny, ty );
+	uint32_t		   nbx = hiprt::DivideRoundUp( nx, tx );
+	uint32_t		   nby = hiprt::DivideRoundUp( ny, ty );
 	checkOro( oroModuleLaunchKernel( func, nbx, nby, 1, tx, ty, 1, sharedMemoryBytes, 0, args, 0 ) );
 }
 
 void hiprtTest::launchKernel(
 	oroFunction func, uint32_t nx, uint32_t ny, uint32_t tx, uint32_t ty, void** args, uint32_t sharedMemoryBytes )
 {
-	uint32_t nbx = hiprt::divideRoundUp( nx, tx );
-	uint32_t nby = hiprt::divideRoundUp( ny, ty );
+	uint32_t nbx = hiprt::DivideRoundUp( nx, tx );
+	uint32_t nby = hiprt::DivideRoundUp( ny, ty );
 	checkOro( oroModuleLaunchKernel( func, nbx, nby, 1, tx, ty, 1, sharedMemoryBytes, 0, args, 0 ) );
 }
 
 void ObjTestCases::createScene(
 	SceneData&					 scene,
-	const std::string&			 filename,
-	const std::string&			 mtlBaseDir,
+	const std::filesystem::path& filename,
 	bool						 enableRayMask,
 	std::optional<hiprtFrameSRT> frame,
 	hiprtBuildFlags				 bvhBuildFlag,
@@ -1001,7 +1000,8 @@ void ObjTestCases::createScene(
 	std::string						 err;
 	std::string						 warning;
 
-	bool ret = tinyobj::LoadObj( &attrib, &shapes, &materials, &warning, &err, filename.c_str(), mtlBaseDir.c_str() );
+	bool ret = tinyobj::LoadObj(
+		&attrib, &shapes, &materials, &warning, &err, filename.string().c_str(), filename.parent_path().string().c_str() );
 
 	if ( !warning.empty() )
 	{
@@ -1011,19 +1011,19 @@ void ObjTestCases::createScene(
 	if ( !err.empty() )
 	{
 		std::cerr << "OBJ Loader ERROR : " << err << std::endl;
-		std::exit( EXIT_FAILURE );
+		std::abort();
 	}
 
 	if ( !ret )
 	{
 		std::cerr << "Failed to load obj file" << std::endl;
-		std::exit( EXIT_FAILURE );
+		std::abort();
 	}
 
 	if ( shapes.empty() )
 	{
 		std::cerr << "No shapes in obj file (run 'git lfs fetch' and 'git lfs pull' in 'test/common/meshes/lfs')" << std::endl;
-		std::exit( EXIT_FAILURE );
+		std::abort();
 	}
 
 	std::vector<Material> shapeMaterials; // materials for all instances
@@ -1143,10 +1143,10 @@ void ObjTestCases::createScene(
 			if ( !shapeMaterials.empty() && shapeMaterials[shapes[i].mesh.material_ids[face]].light() )
 			{
 				Light l;
-				l.m_le = make_float3(
+				l.m_le = float3{
 					shapeMaterials[shapes[i].mesh.material_ids[face]].m_emission.x + 40.f,
 					shapeMaterials[shapes[i].mesh.material_ids[face]].m_emission.y + 40.f,
-					shapeMaterials[shapes[i].mesh.material_ids[face]].m_emission.z + 40.f );
+					shapeMaterials[shapes[i].mesh.material_ids[face]].m_emission.z + 40.f };
 
 				size_t idx = indices.size() - 1;
 				l.m_lv0	   = vertices[indices[idx - 2]];
@@ -1347,8 +1347,8 @@ void ObjTestCases::createScene(
 	if ( shapeMaterials.empty() )
 	{ // default material to prevent crash
 		Material mat;
-		mat.m_diffuse  = make_float3( 1.0f );
-		mat.m_emission = make_float3( 0.0f );
+		mat.m_diffuse  = hiprt::make_float3( 1.0f );
+		mat.m_emission = hiprt::make_float3( 0.0f );
 		shapeMaterials.push_back( mat );
 	}
 	malloc( scene.m_bufMaterials, shapeMaterials.size() );
@@ -1431,15 +1431,14 @@ void ObjTestCases::createScene(
 
 void ObjTestCases::setupScene(
 	Camera&						 camera,
-	const std::string&			 filePath,
-	const std::string&			 dirPath,
+	const std::filesystem::path& filename,
 	bool						 enableRayMask,
 	std::optional<hiprtFrameSRT> frame,
 	hiprtBuildFlags				 bvhBuildFlag,
 	bool						 time )
 {
 	m_camera = camera;
-	createScene( m_scene, filePath, dirPath, enableRayMask, frame, bvhBuildFlag, time );
+	createScene( m_scene, filename, enableRayMask, frame, bvhBuildFlag, time );
 }
 
 void ObjTestCases::deleteScene( SceneData& scene )
@@ -1512,7 +1511,7 @@ void ObjTestCases::render(
 			buildTraceKernel( m_scene.m_ctx, kernelPath, funcName, func, opts );
 	}
 
-	int2  res	 = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res	 = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 	void* args[] = {
 		&m_scene.m_scene,
 		&dst,
@@ -1552,7 +1551,5 @@ void ObjTestCases::render(
 		std::cout << "Ray cast time: " << std::chrono::duration_cast<std::chrono::milliseconds>( end - begin ).count() << " ms"
 				  << std::endl;
 
-	if ( imgPath )
-		validateAndWriteImage(
-			imgPath.value(), g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, refFilename );
+	if ( imgPath ) validateAndWriteImage( imgPath.value(), dst, refFilename );
 }

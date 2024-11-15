@@ -39,7 +39,7 @@ struct alignas( 64 ) Frame
 		m_scale		  = make_float3( 1.0f );
 		m_shear		  = make_float3( 0.0f );
 		m_translation = make_float3( 0.0f );
-		m_rotation	  = make_float4( 0.0f, 0.0f, 0.0f, 1.0f );
+		m_rotation	  = { 0.0f, 0.0f, 0.0f, 1.0f };
 	}
 
 	HIPRT_HOST_DEVICE float3 transform( const float3& p ) const
@@ -47,7 +47,7 @@ struct alignas( 64 ) Frame
 		if ( identity() ) return p;
 		float3 result = p;
 		result *= m_scale;
-		result += make_float3( p.y * m_shear.x + p.z * m_shear.y, p.z * m_shear.z, 0.0f );
+		result += float3{ p.y * m_shear.x + p.z * m_shear.y, p.z * m_shear.z, 0.0f };
 		result = qtRotate( m_rotation, result );
 		result += m_translation;
 		return result;
@@ -82,7 +82,7 @@ struct alignas( 64 ) Frame
 		float3 result = v;
 		result		  = qtInvRotate( m_rotation, result );
 		result *= m_scale;
-		result += make_float3( 0.0f, v.x * m_shear.x, v.x * m_shear.y + v.y * m_shear.z );
+		result += float3{ 0.0f, v.x * m_shear.x, v.x * m_shear.y + v.y * m_shear.z };
 		return result;
 	}
 
@@ -165,10 +165,10 @@ struct alignas( 64 ) MatrixFrame
 
 		Frame frame;
 		frame.m_time		= m_time;
-		frame.m_translation = make_float3( m_matrix[0][3], m_matrix[1][3], m_matrix[2][3] );
+		frame.m_translation = { m_matrix[0][3], m_matrix[1][3], m_matrix[2][3] };
 		frame.m_rotation	= qtFromRotationMatrix( Q );
-		frame.m_scale		= make_float3( R[0][0], R[1][1], R[2][2] );
-		frame.m_shear		= make_float3( R[0][1], R[0][2], R[1][2] );
+		frame.m_scale		= { R[0][0], R[1][1], R[2][2] };
+		frame.m_shear		= { R[0][1], R[0][2], R[1][2] };
 		return frame;
 	}
 
@@ -404,12 +404,12 @@ class Transform
 	HIPRT_HOST_DEVICE Aabb motionBounds( const Aabb& aabb ) const
 	{
 		float3 p0 = aabb.m_min;
-		float3 p1 = make_float3( aabb.m_min.x, aabb.m_min.y, aabb.m_max.z );
-		float3 p2 = make_float3( aabb.m_min.x, aabb.m_max.y, aabb.m_min.z );
-		float3 p3 = make_float3( aabb.m_min.x, aabb.m_max.y, aabb.m_max.z );
-		float3 p4 = make_float3( aabb.m_max.x, aabb.m_min.y, aabb.m_max.z );
-		float3 p5 = make_float3( aabb.m_max.x, aabb.m_max.y, aabb.m_min.z );
-		float3 p6 = make_float3( aabb.m_max.x, aabb.m_max.y, aabb.m_max.z );
+		float3 p1 = { aabb.m_min.x, aabb.m_min.y, aabb.m_max.z };
+		float3 p2 = { aabb.m_min.x, aabb.m_max.y, aabb.m_min.z };
+		float3 p3 = { aabb.m_min.x, aabb.m_max.y, aabb.m_max.z };
+		float3 p4 = { aabb.m_max.x, aabb.m_min.y, aabb.m_max.z };
+		float3 p5 = { aabb.m_max.x, aabb.m_max.y, aabb.m_min.z };
+		float3 p6 = { aabb.m_max.x, aabb.m_max.y, aabb.m_max.z };
 		float3 p7 = aabb.m_max;
 
 		Aabb outAabb;

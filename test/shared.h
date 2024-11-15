@@ -40,26 +40,20 @@ typedef typename hiprt::conditional<UseDynamicStack, hiprtDynamicStack, hiprtGlo
 typedef hiprtEmptyInstanceStack																	InstanceStack;
 #endif
 
-#define int2 hiprtInt2
-#define int3 hiprtInt3
-#define int4 hiprtInt4
-#define uint2 hiprtUint2
-
-#define float2 hiprtFloat2
-#define float3 hiprtFloat3
-#define float4 hiprtFloat4
-
-#define make_int2 make_hiprtInt2
-#define make_int3 make_hiprtInt3
-#define make_int4 make_hiprtInt4
-#define make_uint2 make_hiprtUint2
-
-#define make_float2 make_hiprtFloat2
-#define make_float3 make_hiprtFloat3
-#define make_float4 make_hiprtFloat4
+#if !defined( __KERNELCC__ )
+using int2	 = hiprt::Vector<int, 2>;
+using int3	 = hiprt::Vector<int, 3>;
+using int4	 = hiprt::Vector<int, 4>;
+using uint2	 = hiprt::Vector<unsigned int, 2>;
+using uint3	 = hiprt::Vector<unsigned int, 3>;
+using uint4	 = hiprt::Vector<unsigned int, 4>;
+using float2 = hiprt::Vector<float, 2>;
+using float3 = hiprt::Vector<float, 3>;
+using float4 = hiprt::Vector<float, 4>;
+#endif
 
 #if !defined( __KERNELCC__ ) || defined( HIPRT_BITCODE_LINKING )
-#include <test/Math.h>
+#include <hiprt/hiprt_math.h>
 #endif
 
 enum
@@ -130,7 +124,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE uint2 tea( uint32_t val0, uint32_t val1 )
 		v1 += ( ( v0 << 4 ) + 0xad90777d ) ^ ( v0 + s0 ) ^ ( ( v0 >> 5 ) + 0x7e95761e );
 	}
 
-	return make_uint2( v0, v1 );
+	return uint2{ v0, v1 };
 }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float3 sampleHemisphereCosine( float3 n, uint32_t& seed )
@@ -139,7 +133,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float3 sampleHemisphereCosine( float3 n, uint32_t
 	float sinThetaSqr = randf( seed );
 	float sinTheta	  = sqrt( sinThetaSqr );
 
-	float3 axis = fabs( n.x ) > 0.001f ? make_float3( 0.0f, 1.0f, 0.0f ) : make_float3( 1.0f, 0.0f, 0.0f );
+	float3 axis = fabs( n.x ) > 0.001f ? float3{ 0.0f, 1.0f, 0.0f } : float3{ 1.0f, 0.0f, 0.0f };
 	float3 t	= hiprt::cross( axis, n );
 	t			= hiprt::normalize( t );
 	float3 s	= hiprt::cross( n, t );
@@ -149,23 +143,22 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float3 sampleHemisphereCosine( float3 n, uint32_t
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float3 rotate( const float4& rotation, const float3& p )
 {
-	float3 a = sinf( rotation.w / 2.0f ) * hiprt::normalize( make_float3( rotation ) );
+	float3 a = sinf( rotation.w / 2.0f ) * hiprt::normalize( hiprt::make_float3( rotation ) );
 	float  c = cosf( rotation.w / 2.0f );
 	return 2.0f * hiprt::dot( a, p ) * a + ( c * c - hiprt::dot( a, a ) ) * p + 2.0f * c * hiprt::cross( a, p );
 }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE hiprtRay
-generateRay( float x, float y, int2 res, const Camera& camera, uint32_t& seed, bool isMultiSamples )
+generateRay( float x, float y, uint2 res, const Camera& camera, uint32_t& seed, bool isMultiSamples )
 {
 	const float	 offset		= ( isMultiSamples ) ? randf( seed ) : 0.5f;
-	const float2 sensorSize = make_float2( 0.024f * ( res.x / static_cast<float>( res.y ) ), 0.024f );
-	const float2 xy			= make_float2( ( x + offset ) / res.x, ( y + offset ) / res.y ) - make_float2( 0.5f, 0.5f );
-	const float3 dir =
-		make_float3( xy.x * sensorSize.x, xy.y * sensorSize.y, sensorSize.y / ( 2.0f * tan( camera.m_fov / 2.0f ) ) );
+	const float2 sensorSize = float2{ 0.024f * ( res.x / static_cast<float>( res.y ) ), 0.024f };
+	const float2 xy			= float2{ ( x + offset ) / res.x, ( y + offset ) / res.y } - float2{ 0.5f, 0.5f };
+	const float3 dir = float3{ xy.x * sensorSize.x, xy.y * sensorSize.y, sensorSize.y / ( 2.0f * tan( camera.m_fov / 2.0f ) ) };
 
-	const float3 holDir	 = rotate( camera.m_rotation, make_float3( 1.0f, 0.0f, 0.0f ) );
-	const float3 upDir	 = rotate( camera.m_rotation, make_float3( 0.0f, -1.0f, 0.0f ) );
-	const float3 viewDir = rotate( camera.m_rotation, make_float3( 0.0f, 0.0f, -1.0f ) );
+	const float3 holDir	 = rotate( camera.m_rotation, float3{ 1.0f, 0.0f, 0.0f } );
+	const float3 upDir	 = rotate( camera.m_rotation, float3{ 0.0f, -1.0f, 0.0f } );
+	const float3 viewDir = rotate( camera.m_rotation, float3{ 0.0f, 0.0f, -1.0f } );
 
 	hiprtRay ray;
 	ray.origin	  = camera.m_translation;

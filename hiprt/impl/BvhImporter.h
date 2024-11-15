@@ -143,7 +143,7 @@ void BvhImporter::build(
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"InitSceneData_" + containerParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -157,7 +157,7 @@ void BvhImporter::build(
 		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
 		Kernel initDataKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"InitGeomData",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -171,7 +171,7 @@ void BvhImporter::build(
 	{
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"SingletonConstruction_" + containerNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -183,7 +183,7 @@ void BvhImporter::build(
 	// STEP 1: Setup leaves
 	Kernel setupLeavesKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BvhImporterKernels.h",
 		"SetupLeaves_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhImporterKernels ) );
@@ -193,7 +193,7 @@ void BvhImporter::build(
 	// STEP 2: Convert to internal format
 	Kernel convertKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhImporterKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BvhImporterKernels.h",
 		"Convert_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhImporterKernels ) );
@@ -208,7 +208,7 @@ void BvhImporter::build(
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( costCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"ComputeCost",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -253,7 +253,7 @@ void BvhImporter::update(
 		primitives.setFrames( frames );
 		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"ResetCountersAndUpdateFrames",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -264,7 +264,7 @@ void BvhImporter::update(
 	{
 		Kernel resetCountersKernel = compiler.getKernel(
 			context,
-			Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 			"ResetCounters",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
@@ -274,7 +274,7 @@ void BvhImporter::update(
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
-		Utility::getEnvVariable( "HIPRT_PATH" ) + "/hiprt/impl/BvhBuilderKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 		"FitBounds" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

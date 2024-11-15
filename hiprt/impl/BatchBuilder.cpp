@@ -36,7 +36,7 @@ size_t BatchBuilder::getStorageBufferSize( const hiprtGeometryBuildInput& buildI
 {
 	const size_t primCount	  = getPrimCount( buildInput );
 	const size_t primNodeSize = getPrimNodeSize( buildInput );
-	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
 	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
 }
 
@@ -44,7 +44,7 @@ size_t BatchBuilder::getStorageBufferSize( const hiprtSceneBuildInput& buildInpu
 {
 	const size_t frameCount	  = buildInput.frameCount;
 	const size_t primCount	  = buildInput.instanceCount;
-	const size_t boxNodeCount = divideRoundUp( 2 * primCount, 3 );
+	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
 	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
 }
 } // namespace hiprt

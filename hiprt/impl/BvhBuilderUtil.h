@@ -179,7 +179,7 @@ HIPRT_DEVICE T blockMin( T blockVal, T* blockCache )
 {
 	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpMin( blockVal );
 	if ( laneIndex == 0 ) blockCache[warpIndex] = blockVal;
@@ -199,7 +199,7 @@ HIPRT_DEVICE T blockMax( T blockVal, T* blockCache )
 {
 	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpMax( blockVal );
 	if ( laneIndex == 0 ) blockCache[warpIndex] = blockVal;
@@ -219,7 +219,7 @@ HIPRT_DEVICE T blockSum( T blockVal, T* blockCache )
 {
 	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpSum( blockVal );
 	if ( laneIndex == 0 ) blockCache[warpIndex] = blockVal;
@@ -237,7 +237,7 @@ HIPRT_DEVICE Aabb blockUnion( Aabb blockVal, Aabb* blockCache )
 {
 	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpUnion( blockVal );
 	if ( laneIndex == 0 ) blockCache[warpIndex] = blockVal;
@@ -256,7 +256,7 @@ HIPRT_DEVICE T blockScan( T blockVal, T* blockCache )
 {
 	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	T blockValue = blockVal;
 	T warpSum	 = warpScan( blockValue );
@@ -286,7 +286,7 @@ HIPRT_DEVICE T blockScan( bool blockVal, T* blockCache )
 {
 	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
-	const uint32_t warpsPerBlock = divideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
+	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	T			   blockValue = blockVal;
 	const uint64_t warpBallot = __ballot( blockVal );

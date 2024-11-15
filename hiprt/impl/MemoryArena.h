@@ -39,7 +39,7 @@ class MemoryArena
 	{
 		if ( size == 0 ) return nullptr;
 		T* p = reinterpret_cast<T*>( reinterpret_cast<uint8_t*>( m_data ) + m_offset );
-		m_offset += roundUp( sizeof( T ) * size, m_alignment );
+		m_offset += RoundUp( sizeof( T ) * size, m_alignment );
 		HIPRT_ASSERT( m_offset <= m_storageSize );
 		return p;
 	}

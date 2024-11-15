@@ -23,7 +23,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#include <hiprt/impl/Math.h>
+#include <hiprt/hiprt_math.h>
 
 namespace hiprt
 {
@@ -44,7 +44,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtToAxisAngle( const float4& q )
 {
 	float3 axis = make_float3( q );
 	float  norm = sqrtf( dot( axis, axis ) );
-	if ( norm == 0.0f ) return make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+	if ( norm == 0.0f ) return float4{ 0.0f, 0.0f, 1.0f, 0.0f };
 	float angle = 2.0f * atan2f( norm, q.w );
 	return make_float4( axis / norm, angle );
 }
@@ -91,7 +91,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromRotationMatrix( const float R[3][3] 
 
 HIPRT_HOST_DEVICE HIPRT_INLINE void qtToRotationMatrix( const float4& q, float R[3][3] )
 {
-	float4 q2 = make_float4( q.x * q.x, q.y * q.y, q.z * q.z, 0.0f );
+	float4 q2{ q.x * q.x, q.y * q.y, q.z * q.z, 0.0f };
 
 	R[0][0] = 1 - 2 * q2.y - 2 * q2.z;
 	R[0][1] = 2 * q.x * q.y - 2 * q.w * q.z;
@@ -106,7 +106,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE void qtToRotationMatrix( const float4& q, float R
 	R[2][2] = 1 - 2 * q2.x - 2 * q2.y;
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtGetIdentity() { return make_float4( 0.0f, 0.0f, 0.0f, 1.0f ); }
+HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtGetIdentity() { return float4{ 0.0f, 0.0f, 0.0f, 1.0f }; }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float qtDot( const float4& q0, const float4& q1 )
 {
@@ -120,8 +120,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMul( const float4& a, const float4& b )
 	float4 ans;
 	ans = make_float4( cross( make_float3( a ), make_float3( b ) ), 0.0f );
 	// ans += a.w * b + b.w * a;
-	ans = ans + make_float4( a.w * b.x, a.w * b.y, a.w * b.z, a.w * b.w ) +
-		  make_float4( b.w * a.x, b.w * a.y, b.w * a.z, b.w * a.w );
+	ans	  = ans + float4{ a.w * b.x, a.w * b.y, a.w * b.z, a.w * b.w } + float4{ b.w * a.x, b.w * a.y, b.w * a.z, b.w * a.w };
 	ans.w = a.w * b.w - dot( make_float3( a ), make_float3( b ) );
 	return ans;
 }

@@ -581,8 +581,7 @@ hiprtError hiprtLoadScene( hiprtContext context, hiprtScene& sceneOut, const cha
 	return hiprtSuccess;
 }
 
-hiprtError
-hiprtExportGeometryAabb( hiprtContext context, hiprtGeometry geometry, hiprtFloat3& aabbMinOut, hiprtFloat3& aabbMaxOut )
+hiprtError hiprtExportGeometryAabb( hiprtContext context, hiprtGeometry geometry, float3& aabbMinOut, float3& aabbMaxOut )
 {
 	if ( !context || !geometry ) return hiprtErrorInvalidParameter;
 	try
@@ -597,7 +596,7 @@ hiprtExportGeometryAabb( hiprtContext context, hiprtGeometry geometry, hiprtFloa
 	return hiprtSuccess;
 }
 
-hiprtError hiprtExportSceneAabb( hiprtContext context, hiprtScene scene, hiprtFloat3& aabbMinOut, hiprtFloat3& aabbMaxOut )
+hiprtError hiprtExportSceneAabb( hiprtContext context, hiprtScene scene, float3& aabbMinOut, float3& aabbMaxOut )
 {
 	if ( !context || !scene ) return hiprtErrorInvalidParameter;
 	try

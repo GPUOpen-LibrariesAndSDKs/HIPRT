@@ -41,7 +41,7 @@ __device__ bool filter( const hiprtRay& ray, const void* data, void* payload, co
 extern "C" __global__ void __launch_bounds__( 64 ) AoRayKernel(
 	hiprtScene			   scene,
 	uint8_t*			   image,
-	int2				   resolution,
+	uint2				   resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
 	Camera				   camera,
 	uint32_t*			   matIndices,
@@ -63,8 +63,8 @@ extern "C" __global__ void __launch_bounds__( 64 ) AoRayKernel(
 	constexpr uint32_t Spp		 = 512;
 	constexpr uint32_t AoSamples = 32;
 
-	int3   color{};
-	float3 diffuseColor = make_float3( 1.0f );
+	uint3  color{};
+	float3 diffuseColor = hiprt::make_float3( 1.0f );
 	float  ao			= 0.0f;
 
 	__shared__ uint32_t	   sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];

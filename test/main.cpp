@@ -44,15 +44,14 @@ TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 	Camera camera = createCamera<TestCasesType::TestHairball>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/hairball.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/",
+		getRootDir() / "test/common/meshes/lfs/hairball/hairball.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitCustomBvhImport,
 		Timings );
 	render(
 		"AoRayHairball.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayHairball.png",
 		Timings,
@@ -70,15 +69,14 @@ TEST_F( PerformanceTestCases, AoRayHairball )
 	Camera camera = createCamera<TestCasesType::TestHairball>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/hairball.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/hairball/",
+		getRootDir() / "test/common/meshes/lfs/hairball/hairball.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferBalancedBuild,
 		Timings );
 	render(
 		"AoRayHairball.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayHairball.png",
 		Timings,
@@ -96,15 +94,14 @@ TEST_F( PerformanceTestCases, AoRayEmbreeBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitCustomBvhImport,
 		Timings );
 	render(
 		"AoRayEmbreeBistro.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayBistro.png",
 		Timings,
@@ -122,19 +119,13 @@ TEST_F( PerformanceTestCases, AoRayBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferHighQualityBuild,
 		Timings );
 	render(
-		"AoRayBistro.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
-		"AoRayKernel",
-		"AoRayBistro.png",
-		Timings,
-		AoRadius );
+		"AoRayBistro.png", getRootDir() / "test/kernels/AoRayKernel.h", "AoRayKernel", "AoRayBistro.png", Timings, AoRadius );
 	deleteScene( m_scene );
 }
 #endif
@@ -149,18 +140,13 @@ TEST_F( PerformanceTestCases, PrimaryRayBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
 	render(
-		"PrimaryRayBistro.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"PrimaryRayBistro.png",
-		Timings );
+		"PrimaryRayBistro.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
 	deleteScene( m_scene );
 }
 #endif
@@ -175,18 +161,13 @@ TEST_F( PerformanceTestCases, BvhFastBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
 	render(
-		"BvhFastBistro.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"PrimaryRayBistro.png",
-		Timings );
+		"BvhFastBistro.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
 	deleteScene( m_scene );
 }
 #endif
@@ -201,18 +182,13 @@ TEST_F( PerformanceTestCases, BvhHighQBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferHighQualityBuild,
 		Timings );
 	render(
-		"BvhHighQBistro.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"PrimaryRayBistro.png",
-		Timings );
+		"BvhHighQBistro.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayBistro.png", Timings );
 	deleteScene( m_scene );
 }
 #endif
@@ -227,15 +203,14 @@ TEST_F( PerformanceTestCases, BvhBalancedBistro )
 	Camera camera = createCamera<TestCasesType::TestBistro>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/lfs/bistro_full/Exterior/",
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferBalancedBuild,
 		getTimings );
 	render(
 		"BvhBalancedBistro.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		getRootDir() / "test/kernels/PrimaryRayKernel.h",
 		kernelName,
 		"PrimaryRayBistro.png",
 		getTimings );
@@ -249,22 +224,14 @@ TEST_F( ObjTestCases, TranslateCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	hiprtFrameSRT transform;
-	transform.translation = make_float3( 0.0f, 0.0f, -5.0f );
-	transform.scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-	transform.rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+	transform.translation = { 0.0f, 0.0f, -5.0f };
+	transform.scale		  = { 1.0f, 1.0f, 1.0f };
+	transform.rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
-		false,
-		transform );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj", false, transform );
 	render(
-		"TranslateCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"TranslateCornellBox.png" );
+		"TranslateCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "TranslateCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -274,22 +241,13 @@ TEST_F( ObjTestCases, ScaleCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	hiprtFrameSRT transform;
-	transform.translation = make_float3( 0.0f, 0.0f, 0.0f );
-	transform.scale		  = make_float3( 2.0f, 2.0f, 2.0f );
-	transform.rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+	transform.translation = { 0.0f, 0.0f, 0.0f };
+	transform.scale		  = { 2.0f, 2.0f, 2.0f };
+	transform.rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
-		false,
-		transform );
-	render(
-		"ScaleCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"ScaleCornellBox.png" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj", false, transform );
+	render( "ScaleCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "ScaleCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -299,22 +257,13 @@ TEST_F( ObjTestCases, RotateCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	hiprtFrameSRT transform;
-	transform.translation = make_float3( 0.0f, 0.0f, -3.0f );
-	transform.scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-	transform.rotation	  = make_float4( 0.0f, 1.0f, 0.0f, 0.5f );
+	transform.translation = { 0.0f, 0.0f, -3.0f };
+	transform.scale		  = { 1.0f, 1.0f, 1.0f };
+	transform.rotation	  = { 0.0f, 1.0f, 0.0f, 0.5f };
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
-		false,
-		transform );
-	render(
-		"RotateCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"RotateCornellBox.png" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj", false, transform );
+	render( "RotateCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "RotateCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -326,43 +275,36 @@ TEST_F( ObjTestCases, BvhUpdateCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	hiprtFrameSRT transform;
-	transform.translation = make_float3( 0.0f, 0.0f, -3.0f );
-	transform.scale		  = make_float3( 1.0f, 1.0f, 1.0f );
+	transform.translation = { 0.0f, 0.0f, -3.0f };
+	transform.scale		  = { 1.0f, 1.0f, 1.0f };
 	Camera camera		  = createCamera<TestCasesType::TestCornellBox>();
 
 	float angle = 0.0f;
 	for ( uint32_t i = 0; i < FrameCount; i++, angle += 0.1 )
 	{
-		transform.rotation = make_float4( 0.0f, 1.0f, 0.0f, angle );
+		transform.rotation = { 0.0f, 1.0f, 0.0f, angle };
 		setupScene(
 			camera,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-			getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+			getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj",
 			false,
 			transform,
 			hiprtBuildFlagBitPreferFastBuild,
 			Timings );
-		render(
-			std::nullopt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-			kernelName,
-			std::nullopt,
-			Timings );
+		render( std::nullopt, getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, std::nullopt, Timings );
 		deleteScene( m_scene );
 	}
 
-	transform.rotation = make_float4( 0.0f, 1.0f, 0.0f, angle );
+	transform.rotation = { 0.0f, 1.0f, 0.0f, angle };
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj",
 		false,
 		transform,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
 	render(
 		"BvhUpdateCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		getRootDir() / "test/kernels/PrimaryRayKernel.h",
 		kernelName,
 		"BvhUpdateCornellBox.png",
 		Timings );
@@ -378,15 +320,14 @@ TEST_F( ObjTestCases, BvhFastCornellBox )
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferFastBuild,
 		Timings );
 	render(
 		"BvhFastCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		getRootDir() / "test/kernels/PrimaryRayKernel.h",
 		kernelName,
 		"PrimaryRayCornellBox.png",
 		Timings );
@@ -402,15 +343,14 @@ TEST_F( ObjTestCases, BvhHighQCornellBox )
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferHighQualityBuild,
 		Timings );
 	render(
 		"BvhHighQCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		getRootDir() / "test/kernels/PrimaryRayKernel.h",
 		kernelName,
 		"PrimaryRayCornellBox.png",
 		Timings );
@@ -426,15 +366,14 @@ TEST_F( ObjTestCases, BvhBalancedCornellBox )
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
 	setupScene(
 		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/",
+		getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj",
 		false,
 		std::nullopt,
 		hiprtBuildFlagBitPreferBalancedBuild,
 		Timings );
 	render(
 		"BvhBalancedCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
+		getRootDir() / "test/kernels/PrimaryRayKernel.h",
 		kernelName,
 		"PrimaryRayCornellBox.png",
 		Timings );
@@ -444,13 +383,10 @@ TEST_F( ObjTestCases, BvhBalancedCornellBox )
 TEST_F( ObjTestCases, ShadowRayCornellBox )
 {
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
 	render(
 		"ShadowRayCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/ShadowRayKernel.h",
+		getRootDir() / "test/kernels/ShadowRayKernel.h",
 		"ShadowRayKernel",
 		"ShadowRayCornellBox.png" );
 	deleteScene( m_scene );
@@ -462,13 +398,10 @@ TEST_F( ObjTestCases, AoRayCornellBox )
 	constexpr float AoRadius = 1.4f;
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
 	render(
 		"AoRayCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/AoRayKernel.h",
+		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayCornellBox.png",
 		Timings,
@@ -482,15 +415,9 @@ TEST_F( ObjTestCases, PrimaryRayCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
 	render(
-		"PrimaryRayCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"PrimaryRayCornellBox.png" );
+		"PrimaryRayCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "PrimaryRayCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -500,15 +427,8 @@ TEST_F( ObjTestCases, UvsCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
-	render(
-		"UvsCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"UvsCornellBox.png" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
+	render( "UvsCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "UvsCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -518,15 +438,8 @@ TEST_F( ObjTestCases, PrimIdsCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
-	render(
-		"PrimIdsCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"PrimIdsCornellBox.png" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
+	render( "PrimIdsCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "PrimIdsCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -536,15 +449,8 @@ TEST_F( ObjTestCases, HitDistCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
-	render(
-		"HitDistCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"HitDistCornellBox.png" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
+	render( "HitDistCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "HitDistCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -554,15 +460,8 @@ TEST_F( ObjTestCases, NormalsCornellBox )
 	const std::string  kernelName = "PrimaryRayKernel_" + std::to_string( Option );
 
 	Camera camera = createCamera<TestCasesType::TestCornellBox>();
-	setupScene(
-		camera,
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/cornellBox.obj",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/common/meshes/cornellbox/" );
-	render(
-		"NormalsCornellBox.png",
-		getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/PrimaryRayKernel.h",
-		kernelName,
-		"NormalsCornellBox.png" );
+	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
+	render( "NormalsCornellBox.png", getRootDir() / "test/kernels/PrimaryRayKernel.h", kernelName, "NormalsCornellBox.png" );
 	deleteScene( m_scene );
 }
 
@@ -584,11 +483,11 @@ TEST_F( hiprtTest, MinimumCornellBox )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );
@@ -624,26 +523,12 @@ TEST_F( hiprtTest, MinimumCornellBox )
 	if constexpr ( UseBitcode )
 	{
 		buildTraceKernelFromBitcode(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			3,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
 	}
 	else
 	{
 		buildTraceKernel(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			3,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
 	}
 
 	hiprtFuncDataSet funcDataSet;
@@ -654,7 +539,7 @@ TEST_F( hiprtTest, MinimumCornellBox )
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	uint32_t* matIndices;
 	malloc( matIndices, mesh.triangleCount );
@@ -666,13 +551,7 @@ TEST_F( hiprtTest, MinimumCornellBox )
 
 	void* args[] = { &geom, &dst, &funcTable, &res, &matIndices, &diffusColors };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"MinimumCornellBox.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"MinimumCornellBox.png" );
+	validateAndWriteImage( "MinimumCornellBox.png", dst, "MinimumCornellBox.png" );
 
 	free( matIndices );
 	free( diffusColors );
@@ -692,11 +571,11 @@ TEST_F( hiprtTest, Compaction )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );
@@ -733,26 +612,12 @@ TEST_F( hiprtTest, Compaction )
 	if constexpr ( UseBitcode )
 	{
 		buildTraceKernelFromBitcode(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			3,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
 	}
 	else
 	{
 		buildTraceKernel(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			3,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 3, 1 );
 	}
 
 	hiprtFuncDataSet funcDataSet;
@@ -763,7 +628,7 @@ TEST_F( hiprtTest, Compaction )
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	uint32_t* matIndices;
 	malloc( matIndices, mesh.triangleCount );
@@ -775,8 +640,7 @@ TEST_F( hiprtTest, Compaction )
 
 	void* args[] = { &geom, &dst, &funcTable, &res, &matIndices, &diffusColors };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"Compaction.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "MinimumCornellBox.png" );
+	validateAndWriteImage( "Compaction.png", dst, "MinimumCornellBox.png" );
 
 	free( matIndices );
 	free( diffusColors );
@@ -796,11 +660,11 @@ TEST_F( hiprtTest, BatchCornellBox )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );
@@ -833,26 +697,12 @@ TEST_F( hiprtTest, BatchCornellBox )
 	if constexpr ( UseBitcode )
 	{
 		buildTraceKernelFromBitcode(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			1,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
 	}
 	else
 	{
 		buildTraceKernel(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			1,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
 	}
 
 	hiprtFuncDataSet funcDataSet;
@@ -863,7 +713,7 @@ TEST_F( hiprtTest, BatchCornellBox )
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	uint32_t* matIndices;
 	malloc( matIndices, mesh.triangleCount );
@@ -875,13 +725,7 @@ TEST_F( hiprtTest, BatchCornellBox )
 
 	void* args[] = { &geom, &dst, &funcTable, &res, &matIndices, &diffusColors };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"BatchCornellBox.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"MinimumCornellBox.png" );
+	validateAndWriteImage( "BatchCornellBox.png", dst, "MinimumCornellBox.png" );
 
 	free( matIndices );
 	free( diffusColors );
@@ -901,11 +745,11 @@ TEST_F( hiprtTest, BoundingBox )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );
@@ -947,11 +791,11 @@ TEST_F( hiprtTest, CustomBvhImport )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );
@@ -981,24 +825,10 @@ TEST_F( hiprtTest, CustomBvhImport )
 
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			1,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
 	else
 		buildTraceKernel(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			1,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
 
 	hiprtFuncDataSet funcDataSet;
 	hiprtFuncTable	 funcTable;
@@ -1008,7 +838,7 @@ TEST_F( hiprtTest, CustomBvhImport )
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	uint32_t* matIndices;
 	malloc( matIndices, mesh.triangleCount );
@@ -1020,8 +850,7 @@ TEST_F( hiprtTest, CustomBvhImport )
 
 	void* args[] = { &geom, &dst, &funcTable, &res, &matIndices, &diffusColors };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"CustomBvhImport.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "CustomBvhImport.png" );
+	validateAndWriteImage( "CustomBvhImport.png", dst, "CustomBvhImport.png" );
 
 	free( matIndices );
 	free( diffusColors );
@@ -1040,11 +869,11 @@ TEST_F( hiprtTest, BvhIoApi )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
 	std::iota( idx.begin(), idx.end(), 0 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3 * mesh.triangleCount;
 	mesh.vertexStride = sizeof( float3 );
@@ -1086,29 +915,15 @@ TEST_F( hiprtTest, BvhIoApi )
 
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			1,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
 	else
 		buildTraceKernel(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CornellBoxKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			1,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CornellBoxKernel", func, std::nullopt, funcNameSets, 1, 1 );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	uint32_t* matIndices;
 	malloc( matIndices, mesh.triangleCount );
@@ -1120,8 +935,7 @@ TEST_F( hiprtTest, BvhIoApi )
 
 	void* args[] = { &outGeom, &dst, &funcTable, &res, &matIndices, &diffusColors };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"BvhIoApi.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "BvhIoApi.png" );
+	validateAndWriteImage( "BvhIoApi.png", dst, "BvhIoApi.png" );
 
 	free( matIndices );
 	free( diffusColors );
@@ -1141,10 +955,10 @@ TEST_F( hiprtTest, MeshIntersection )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 1;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3;
 	mesh.vertexStride = sizeof( float3 );
@@ -1169,25 +983,17 @@ TEST_F( hiprtTest, MeshIntersection )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &geom, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"MeshIntersection.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"MeshIntersection.png" );
+	validateAndWriteImage( "MeshIntersection.png", dst, "MeshIntersection.png" );
 
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
@@ -1227,25 +1033,17 @@ TEST_F( hiprtTest, MeshIntersectionNonIndexed )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &geom, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"MeshIntersectionNonIndexed.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"MeshIntersection.png" );
+	validateAndWriteImage( "MeshIntersectionNonIndexed.png", dst, "MeshIntersection.png" );
 
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
@@ -1262,10 +1060,10 @@ TEST_F( hiprtTest, PairTriangles )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 3;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 0, 1, 2, 3, 4, 5 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 6;
 	mesh.vertexStride = sizeof( float3 );
@@ -1309,9 +1107,9 @@ TEST_F( hiprtTest, PairTriangles )
 	copyHtoD( reinterpret_cast<hiprtInstance*>( sceneInput.instances ), &instance, sceneInput.instanceCount );
 
 	hiprtFrameSRT frame;
-	frame.translation	  = make_float3( 0.0f, 0.0f, 0.0f );
-	frame.scale			  = make_float3( 1.0f, 1.0f, 1.0f );
-	frame.rotation		  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+	frame.translation	  = { 0.0f, 0.0f, 0.0f };
+	frame.scale			  = { 1.0f, 1.0f, 1.0f };
+	frame.rotation		  = { 0.0f, 0.0f, 1.0f, 0.0f };
 	sceneInput.frameCount = 1;
 	malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInput.instanceFrames ), 1 );
 	copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), &frame, 1 );
@@ -1325,20 +1123,17 @@ TEST_F( hiprtTest, PairTriangles )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "PairTrianglesKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"PairTriangles.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "PairTriangles.png" );
+	validateAndWriteImage( "PairTriangles.png", dst, "PairTriangles.png" );
 
 	free( sceneInput.instances );
 	free( sceneInput.instanceFrames );
@@ -1359,10 +1154,10 @@ TEST_F( hiprtTest, Cutout )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 0, 2, 3 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 4;
 	mesh.vertexStride = sizeof( float3 );
@@ -1400,24 +1195,10 @@ TEST_F( hiprtTest, Cutout )
 	// note : precompiled bitcode path is not used for this test
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CutoutKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			4,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CutoutKernel", func, std::nullopt, funcNameSets, 4, 1 );
 	else
 		buildTraceKernel(
-			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
-			"CutoutKernel",
-			func,
-			std::nullopt,
-			funcNameSets,
-			4,
-			1 );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "CutoutKernel", func, std::nullopt, funcNameSets, 4, 1 );
 
 	hiprtFuncDataSet funcDataSet;
 	hiprtFuncTable	 funcTable;
@@ -1426,12 +1207,11 @@ TEST_F( hiprtTest, Cutout )
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &geom, &dst, &funcTable, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"Cutout.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "Cutout.png" );
+	validateAndWriteImage( "Cutout.png", dst, "Cutout.png" );
 
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
@@ -1485,7 +1265,7 @@ TEST_F( hiprtTest, CustomIntersection )
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"CustomIntersectionKernel",
 			func,
 			std::nullopt,
@@ -1495,7 +1275,7 @@ TEST_F( hiprtTest, CustomIntersection )
 	else
 		buildTraceKernel(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"CustomIntersectionKernel",
 			func,
 			std::nullopt,
@@ -1517,17 +1297,11 @@ TEST_F( hiprtTest, CustomIntersection )
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &geom, &dst, &funcTable, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"CustomIntersection.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"CustomIntersection.png" );
+	validateAndWriteImage( "CustomIntersection.png", dst, "CustomIntersection.png" );
 
 	free( list.aabbs );
 	free( geomTemp );
@@ -1545,10 +1319,10 @@ TEST_F( hiprtTest, SceneIntersectionSingleton )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 3, 4, 5 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 6;
 	mesh.vertexStride = sizeof( float3 );
@@ -1594,9 +1368,9 @@ TEST_F( hiprtTest, SceneIntersectionSingleton )
 	copyHtoD( reinterpret_cast<hiprtInstance*>( sceneInput.instances ), &instance, sceneInput.instanceCount );
 
 	hiprtFrameSRT frame;
-	frame.translation	  = make_float3( 0.0f, 0.0f, 0.0f );
-	frame.scale			  = make_float3( 0.5f, 0.5f, 0.5f );
-	frame.rotation		  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+	frame.translation	  = { 0.0f, 0.0f, 0.0f };
+	frame.scale			  = { 0.5f, 0.5f, 0.5f };
+	frame.rotation		  = { 0.0f, 0.0f, 1.0f, 0.0f };
 	sceneInput.frameCount = 1;
 	malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInput.instanceFrames ), 1 );
 	copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), &frame, 1 );
@@ -1611,24 +1385,17 @@ TEST_F( hiprtTest, SceneIntersectionSingleton )
 	oroFunction func;
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"SceneIntersectionSingleton.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"SceneIntersectionSingleton.png" );
+	validateAndWriteImage( "SceneIntersectionSingleton.png", dst, "SceneIntersectionSingleton.png" );
 
 	free( sceneInput.instances );
 	free( sceneInput.instanceFrames );
@@ -1685,11 +1452,12 @@ TEST_F( hiprtTest, SceneIntersection )
 	hiprtTriangleMeshPrimitive mesh;
 	{
 		mesh.triangleCount	= 3;
-		mesh.triangleStride = sizeof( int3 );
-		malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+		mesh.triangleStride = sizeof( uint3 );
+		malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 		std::vector<uint32_t> idx( 3 * mesh.triangleCount );
 		std::iota( idx.begin(), idx.end(), 0 );
-		copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+		copyHtoD(
+			reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 		mesh.vertexCount  = 9;
 		mesh.vertexStride = sizeof( float3 );
@@ -1742,12 +1510,12 @@ TEST_F( hiprtTest, SceneIntersection )
 
 		constexpr float Offset = 0.05f;
 		hiprtFrameSRT	frames[2];
-		frames[0].translation = make_float3( 0.0f, Offset, 0.0f );
-		frames[0].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[0].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
-		frames[1].translation = make_float3( 0.0f, -Offset, 0.0f );
-		frames[1].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[1].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+		frames[0].translation = { 0.0f, Offset, 0.0f };
+		frames[0].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[0].rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
+		frames[1].translation = { 0.0f, -Offset, 0.0f };
+		frames[1].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[1].rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
 		sceneInput.frameCount = 2;
 		malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInput.instanceFrames ), sceneInput.frameCount );
 		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames, sceneInput.frameCount );
@@ -1771,7 +1539,7 @@ TEST_F( hiprtTest, SceneIntersection )
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"SceneIntersectionKernel",
 			func,
 			std::nullopt,
@@ -1781,7 +1549,7 @@ TEST_F( hiprtTest, SceneIntersection )
 	else
 		buildTraceKernel(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"SceneIntersectionKernel",
 			func,
 			std::nullopt,
@@ -1804,17 +1572,11 @@ TEST_F( hiprtTest, SceneIntersection )
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &funcTable, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"SceneIntersection.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"SceneIntersection.png" );
+	validateAndWriteImage( "SceneIntersection.png", dst, "SceneIntersection.png" );
 
 	free( sceneInput.instances );
 	free( sceneInput.instanceFrames );
@@ -1876,11 +1638,12 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 	hiprtTriangleMeshPrimitive mesh;
 	{
 		mesh.triangleCount	= 3;
-		mesh.triangleStride = sizeof( int3 );
-		malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+		mesh.triangleStride = sizeof( uint3 );
+		malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 		std::vector<uint32_t> idx( 3 * mesh.triangleCount );
 		std::iota( idx.begin(), idx.end(), 0 );
-		copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh.triangleCount );
+		copyHtoD(
+			reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh.triangleCount );
 
 		mesh.vertexCount  = 9;
 		mesh.vertexStride = sizeof( float3 );
@@ -1933,12 +1696,12 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 
 		constexpr float Offset = 0.05f;
 		hiprtFrameSRT	frames[2];
-		frames[0].translation	 = make_float3( 0.0f, Offset, 0.0f );
-		frames[0].scale			 = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[0].rotation		 = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
-		frames[1].translation	 = make_float3( 0.0f, -Offset, 0.0f );
-		frames[1].scale			 = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[1].rotation		 = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+		frames[0].translation	 = { 0.0f, Offset, 0.0f };
+		frames[0].scale			 = { 1.0f, 1.0f, 1.0f };
+		frames[0].rotation		 = { 0.0f, 0.0f, 1.0f, 0.0f };
+		frames[1].translation	 = { 0.0f, -Offset, 0.0f };
+		frames[1].scale			 = { 1.0f, 1.0f, 1.0f };
+		frames[1].rotation		 = { 0.0f, 0.0f, 1.0f, 0.0f };
 		sceneInputMid.frameCount = 2;
 		malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInputMid.instanceFrames ), sceneInputMid.frameCount );
 		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInputMid.instanceFrames ), frames, sceneInputMid.frameCount );
@@ -1971,12 +1734,12 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 
 		constexpr float Offset = 0.12f;
 		hiprtFrameSRT	frames[2];
-		frames[0].translation	 = make_float3( 0.0f, Offset, 0.0f );
-		frames[0].scale			 = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[0].rotation		 = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
-		frames[1].translation	 = make_float3( 0.0f, -Offset, 0.0f );
-		frames[1].scale			 = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[1].rotation		 = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+		frames[0].translation	 = { 0.0f, Offset, 0.0f };
+		frames[0].scale			 = { 1.0f, 1.0f, 1.0f };
+		frames[0].rotation		 = { 0.0f, 0.0f, 1.0f, 0.0f };
+		frames[1].translation	 = { 0.0f, -Offset, 0.0f };
+		frames[1].scale			 = { 1.0f, 1.0f, 1.0f };
+		frames[1].rotation		 = { 0.0f, 0.0f, 1.0f, 0.0f };
 		sceneInputTop.frameCount = 2;
 		malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInputTop.instanceFrames ), sceneInputTop.frameCount );
 		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInputTop.instanceFrames ), frames, sceneInputTop.frameCount );
@@ -2001,7 +1764,7 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"SceneIntersectionKernel",
 			func,
 			std::nullopt,
@@ -2011,7 +1774,7 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 	else
 		buildTraceKernel(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"SceneIntersectionKernel",
 			func,
 			std::nullopt,
@@ -2034,17 +1797,11 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &sceneTop, &dst, &funcTable, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"SceneIntersectionMlas.png",
-		g_parsedArgs.m_ww,
-		g_parsedArgs.m_wh,
-		dst,
-		g_parsedArgs.m_referencePath,
-		"SceneIntersectionMlas.png" );
+	validateAndWriteImage( "SceneIntersectionMlas.png", dst, "SceneIntersectionMlas.png" );
 
 	free( sceneInputMid.instances );
 	free( sceneInputMid.instanceFrames );
@@ -2074,10 +1831,10 @@ TEST_F( hiprtTest, Shear )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 0, 2, 3 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 4;
 	mesh.vertexStride = sizeof( float3 );
@@ -2135,18 +1892,17 @@ TEST_F( hiprtTest, Shear )
 	oroFunction func;
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+			ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "SceneIntersectionSingleton", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage( "Shear.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "Shear.png" );
+	validateAndWriteImage( "Shear.png", dst, "Shear.png" );
 
 	free( sceneInput.instances );
 	free( sceneInput.instanceFrames );
@@ -2170,12 +1926,12 @@ TEST_F( hiprtTest, MotionBlur )
 	hiprtTriangleMeshPrimitive mesh0;
 	{
 		mesh0.triangleCount	 = 1;
-		mesh0.triangleStride = sizeof( int3 );
-		malloc( reinterpret_cast<int3*&>( mesh0.triangleIndices ), mesh0.triangleCount );
+		mesh0.triangleStride = sizeof( uint3 );
+		malloc( reinterpret_cast<uint3*&>( mesh0.triangleIndices ), mesh0.triangleCount );
 		std::vector<uint32_t> idx( 3 * mesh0.triangleCount );
 		std::iota( idx.begin(), idx.end(), 0 );
 		copyHtoD(
-			reinterpret_cast<int3*>( mesh0.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh0.triangleCount );
+			reinterpret_cast<uint3*>( mesh0.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh0.triangleCount );
 
 		mesh0.vertexCount  = 3;
 		mesh0.vertexStride = sizeof( float3 );
@@ -2206,12 +1962,12 @@ TEST_F( hiprtTest, MotionBlur )
 	hiprtTriangleMeshPrimitive mesh1;
 	{
 		mesh1.triangleCount	 = 1;
-		mesh1.triangleStride = sizeof( int3 );
-		malloc( reinterpret_cast<int3*&>( mesh1.triangleIndices ), mesh1.triangleCount );
+		mesh1.triangleStride = sizeof( uint3 );
+		malloc( reinterpret_cast<uint3*&>( mesh1.triangleIndices ), mesh1.triangleCount );
 		std::vector<uint32_t> idx( 3 * mesh1.triangleCount );
 		std::iota( idx.begin(), idx.end(), 0 );
 		copyHtoD(
-			reinterpret_cast<int3*>( mesh1.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh1.triangleCount );
+			reinterpret_cast<uint3*>( mesh1.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh1.triangleCount );
 
 		mesh1.vertexCount  = 3;
 		mesh1.vertexStride = sizeof( float3 );
@@ -2258,25 +2014,25 @@ TEST_F( hiprtTest, MotionBlur )
 
 		constexpr float Offset = 0.3f;
 		hiprtFrameSRT	frames[5];
-		frames[0].translation = make_float3( -0.25f, -Offset, 0.0f );
-		frames[0].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[0].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+		frames[0].translation = { -0.25f, -Offset, 0.0f };
+		frames[0].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[0].rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
 		frames[0].time		  = 0.0f;
-		frames[1].translation = make_float3( 0.0f, -Offset, 0.0f );
-		frames[1].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[1].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+		frames[1].translation = { 0.0f, -Offset, 0.0f };
+		frames[1].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[1].rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
 		frames[1].time		  = 0.35f;
-		frames[2].translation = make_float3( 0.25f, -Offset, 0.0f );
-		frames[2].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[2].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, hiprt::Pi * 0.25f );
+		frames[2].translation = { 0.25f, -Offset, 0.0f };
+		frames[2].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[2].rotation	  = { 0.0f, 0.0f, 1.0f, hiprt::Pi * 0.25f };
 		frames[2].time		  = 1.0f;
-		frames[3].translation = make_float3( 0.0f, Offset, 0.0f );
-		frames[3].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[3].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, 0.0f );
+		frames[3].translation = { 0.0f, Offset, 0.0f };
+		frames[3].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[3].rotation	  = { 0.0f, 0.0f, 1.0f, 0.0f };
 		frames[3].time		  = 0.0f;
-		frames[4].translation = make_float3( 0.0f, Offset, 0.0f );
-		frames[4].scale		  = make_float3( 1.0f, 1.0f, 1.0f );
-		frames[4].rotation	  = make_float4( 0.0f, 0.0f, 1.0f, hiprt::Pi * 0.5f );
+		frames[4].translation = { 0.0f, Offset, 0.0f };
+		frames[4].scale		  = { 1.0f, 1.0f, 1.0f };
+		frames[4].rotation	  = { 0.0f, 0.0f, 1.0f, hiprt::Pi * 0.5f };
 		frames[4].time		  = 1.0f;
 
 		sceneInput.frameCount = 5;
@@ -2304,20 +2060,18 @@ TEST_F( hiprtTest, MotionBlur )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 	else
-		buildTraceKernel( ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"MotionBlur.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "MotionBlur.png" );
+	validateAndWriteImage( "MotionBlur.png", dst, "MotionBlur.png" );
 
 	free( sceneInput.instances );
 	free( sceneInput.instanceFrames );
@@ -2346,12 +2100,12 @@ TEST_F( hiprtTest, MotionBlurMatrix )
 	hiprtTriangleMeshPrimitive mesh0;
 	{
 		mesh0.triangleCount	 = 1;
-		mesh0.triangleStride = sizeof( int3 );
-		malloc( reinterpret_cast<int3*&>( mesh0.triangleIndices ), mesh0.triangleCount );
+		mesh0.triangleStride = sizeof( uint3 );
+		malloc( reinterpret_cast<uint3*&>( mesh0.triangleIndices ), mesh0.triangleCount );
 		std::vector<uint32_t> idx( 3 * mesh0.triangleCount );
 		std::iota( idx.begin(), idx.end(), 0 );
 		copyHtoD(
-			reinterpret_cast<int3*>( mesh0.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh0.triangleCount );
+			reinterpret_cast<uint3*>( mesh0.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh0.triangleCount );
 
 		mesh0.vertexCount  = 3;
 		mesh0.vertexStride = sizeof( float3 );
@@ -2382,12 +2136,12 @@ TEST_F( hiprtTest, MotionBlurMatrix )
 	hiprtTriangleMeshPrimitive mesh1;
 	{
 		mesh1.triangleCount	 = 1;
-		mesh1.triangleStride = sizeof( int3 );
-		malloc( reinterpret_cast<int3*&>( mesh1.triangleIndices ), mesh1.triangleCount );
+		mesh1.triangleStride = sizeof( uint3 );
+		malloc( reinterpret_cast<uint3*&>( mesh1.triangleIndices ), mesh1.triangleCount );
 		std::vector<uint32_t> idx( 3 * mesh1.triangleCount );
 		std::iota( idx.begin(), idx.end(), 0 );
 		copyHtoD(
-			reinterpret_cast<int3*>( mesh1.triangleIndices ), reinterpret_cast<int3*>( idx.data() ), mesh1.triangleCount );
+			reinterpret_cast<uint3*>( mesh1.triangleIndices ), reinterpret_cast<uint3*>( idx.data() ), mesh1.triangleCount );
 
 		mesh1.vertexCount  = 3;
 		mesh1.vertexStride = sizeof( float3 );
@@ -2510,20 +2264,18 @@ TEST_F( hiprtTest, MotionBlurMatrix )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 	else
-		buildTraceKernel( ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MotionBlurKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"MotionBlurMatrix.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "MotionBlur.png" );
+	validateAndWriteImage( "MotionBlurMatrix.png", dst, "MotionBlur.png" );
 
 	free( sceneInput.instances );
 	free( sceneInput.instanceFrames );
@@ -2629,7 +2381,7 @@ TEST_F( hiprtTest, MotionBlurSlerp )
 	if constexpr ( UseBitcode )
 		buildTraceKernelFromBitcode(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"MotionBlurSlerpKernel",
 			func,
 			std::nullopt,
@@ -2639,7 +2391,7 @@ TEST_F( hiprtTest, MotionBlurSlerp )
 	else
 		buildTraceKernel(
 			ctxt,
-			getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h",
+			getRootDir() / "test/kernels/HiprtTestKernel.h",
 			"MotionBlurSlerpKernel",
 			func,
 			std::nullopt,
@@ -2661,12 +2413,11 @@ TEST_F( hiprtTest, MotionBlurSlerp )
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &scene, &dst, &funcTable, &res };
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"MotionBlurSlerp.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "MotionBlurSlerp.png" );
+	validateAndWriteImage( "MotionBlurSlerp.png", dst, "MotionBlurSlerp.png" );
 
 	free( list.aabbs );
 	free( geomTemp );
@@ -2689,10 +2440,10 @@ TEST_F( hiprtTest, Rebuild )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 1;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 3, 4, 5 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3;
 	mesh.vertexStride = sizeof( float3 );
@@ -2723,29 +2474,25 @@ TEST_F( hiprtTest, Rebuild )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &geom, &dst, &res };
 
 	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), v, mesh.vertexCount );
 	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"Rebuild0.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "Rebuild0.png" );
+	validateAndWriteImage( "Rebuild0.png", dst, "Rebuild0.png" );
 
 	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), v + 3, mesh.vertexCount );
 	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"Rebuild1.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "Rebuild1.png" );
+	validateAndWriteImage( "Rebuild1.png", dst, "Rebuild1.png" );
 
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
@@ -2762,10 +2509,10 @@ TEST_F( hiprtTest, Update )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 1;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 3, 4, 5 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 3;
 	mesh.vertexStride = sizeof( float3 );
@@ -2796,29 +2543,25 @@ TEST_F( hiprtTest, Update )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 	else
-		buildTraceKernel(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "MeshIntersectionKernel", func );
 
 	uint8_t* dst;
 	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
-	int2 res = make_int2( g_parsedArgs.m_ww, g_parsedArgs.m_wh );
+	uint2 res = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
 
 	void* args[] = { &geom, &dst, &res };
 
 	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), v, mesh.vertexCount );
 	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"Update0.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "Update0.png" );
+	validateAndWriteImage( "Update0.png", dst, "Update0.png" );
 
 	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), v + 3, mesh.vertexCount );
 	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationUpdate, geomInput, options, geomTemp, 0, geom ) );
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
-	validateAndWriteImage(
-		"Update1.png", g_parsedArgs.m_ww, g_parsedArgs.m_wh, dst, g_parsedArgs.m_referencePath, "Update1.png" );
+	validateAndWriteImage( "Update1.png", dst, "Update1.png" );
 
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
@@ -2835,10 +2578,10 @@ TEST_F( hiprtTest, BatchConstruction )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	uint32_t idx[] = { 0, 1, 2, 3, 4, 5 };
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), reinterpret_cast<int3*>( idx ), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
 	mesh.vertexCount  = 6;
 	mesh.vertexStride = sizeof( float3 );
@@ -2899,12 +2642,12 @@ TEST_F( hiprtTest, PlocFallback )
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 100000u;
-	mesh.triangleStride = sizeof( int3 );
-	malloc( reinterpret_cast<int3*&>( mesh.triangleIndices ), mesh.triangleCount );
-	std::vector<int3> idx( mesh.triangleCount );
-	for ( int3& i : idx )
-		i = make_int3( 0, 1, 2 );
-	copyHtoD( reinterpret_cast<int3*>( mesh.triangleIndices ), idx.data(), mesh.triangleCount );
+	mesh.triangleStride = sizeof( uint3 );
+	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
+	std::vector<uint3> idx( mesh.triangleCount );
+	for ( uint3& i : idx )
+		i = { 0, 1, 2 };
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), idx.data(), mesh.triangleCount );
 
 	mesh.vertexCount  = 3;
 	mesh.vertexStride = sizeof( float3 );
@@ -2959,10 +2702,9 @@ TEST_F( hiprtTest, TraceKernel )
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
-		buildTraceKernelFromBitcode(
-			ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
 	else
-		buildTraceKernel( ctxt, getEnvVariable( "HIPRT_PATH" ) + "/test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "TraceKernel", func, opts );
 	int numRegs;
 	checkOro( oroFuncGetAttribute( &numRegs, ORO_FUNC_ATTRIBUTE_NUM_REGS, func ) );
 

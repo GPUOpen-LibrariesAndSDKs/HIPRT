@@ -545,7 +545,7 @@ HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix( hiprtScene scene
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3 hiprtPointObjectToWorld( hiprtFloat3 point, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+HIPRT_DEVICE float3 hiprtPointObjectToWorld( float3 point, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
 
 /** \brief Transforms a point from the world space to the object space.
  *
@@ -554,7 +554,7 @@ HIPRT_DEVICE hiprtFloat3 hiprtPointObjectToWorld( hiprtFloat3 point, hiprtScene 
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3 hiprtPointWorldToObject( hiprtFloat3 point, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+HIPRT_DEVICE float3 hiprtPointWorldToObject( float3 point, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
 
 /** \brief Transforms a vector from the object space to the world space.
  *
@@ -563,8 +563,7 @@ HIPRT_DEVICE hiprtFloat3 hiprtPointWorldToObject( hiprtFloat3 point, hiprtScene 
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3
-hiprtVectorObjectToWorld( hiprtFloat3 vector, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+HIPRT_DEVICE float3 hiprtVectorObjectToWorld( float3 vector, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
 
 /** \brief Transforms a vector from the world space to the object space.
  *
@@ -573,8 +572,7 @@ hiprtVectorObjectToWorld( hiprtFloat3 vector, hiprtScene scene, uint32_t instanc
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3
-hiprtVectorWorldToObject( hiprtFloat3 vector, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+HIPRT_DEVICE float3 hiprtVectorWorldToObject( float3 vector, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
 
 /** \brief Returns the object to world transformation for a given instance and time in the form of the SRT frame.
  *
@@ -619,8 +617,8 @@ HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3 hiprtPointObjectToWorld(
-	hiprtFloat3 point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+HIPRT_DEVICE float3 hiprtPointObjectToWorld(
+	float3 point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
 
 /** \brief Transforms a point from the world space to the object space.
  *
@@ -629,8 +627,8 @@ HIPRT_DEVICE hiprtFloat3 hiprtPointObjectToWorld(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3 hiprtPointWorldToObject(
-	hiprtFloat3 point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+HIPRT_DEVICE float3 hiprtPointWorldToObject(
+	float3 point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
 
 /** \brief Transforms a vector from the object space to the world space.
  *
@@ -639,8 +637,8 @@ HIPRT_DEVICE hiprtFloat3 hiprtPointWorldToObject(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3 hiprtVectorObjectToWorld(
-	hiprtFloat3 vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
+	float3 vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
 
 /** \brief Transforms a vector from the world space to the object space.
  *
@@ -649,5 +647,5 @@ HIPRT_DEVICE hiprtFloat3 hiprtVectorObjectToWorld(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE hiprtFloat3 hiprtVectorWorldToObject(
-	hiprtFloat3 vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+HIPRT_DEVICE float3 hiprtVectorWorldToObject(
+	float3 vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
