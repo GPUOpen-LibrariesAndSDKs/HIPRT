@@ -96,6 +96,7 @@ def compileAmd():
             'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx940', 'gfx941', 'gfx942']  # Vega
     
     if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
+        gpus.append('gfx1200')
         gpus.append('gfx1201')
 
     if hip_sdk_version_num >= 61: # Strix supported from 6.1
@@ -123,6 +124,12 @@ def compileAmd():
 
     print('export built programs ...')
     sys.stdout.flush()
+
+    if not os.path.exists(root + 'dist/bin/Debug/'):
+        os.makedirs(root + 'dist/bin/Debug/')
+    if not os.path.exists(root + 'dist/bin/Release/'):
+        os.makedirs(root + 'dist/bin/Release/')
+
     if isLinux():
         os.system('cp *.hipfb ' + root + 'dist/bin/Debug/')
         os.system('cp *.hipfb ' + root + 'dist/bin/Release/')

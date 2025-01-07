@@ -102,6 +102,7 @@ def compileAmd():
     hip_version = hip_sdk_version_major +"."+ hip_sdk_version_minor
     
     if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
+        gpus.append('gfx1200')
         gpus.append('gfx1201')
 
     if hip_sdk_version_num >= 61: # Strix supported from 6.1
@@ -134,6 +135,14 @@ def compileAmd():
 
     print('export built programs ...')
     sys.stdout.flush()
+
+    if not os.path.exists(root + 'dist/bin/Debug/'):
+        os.makedirs(root + 'dist/bin/Debug/')
+    if not os.path.exists(root + 'dist/bin/Release/'):
+        os.makedirs(root + 'dist/bin/Release/')
+    if not os.path.exists(root + 'hiprt/bitcodes/'):
+        os.makedirs(root + 'hiprt/bitcodes/')
+
     if isLinux():
         os.system('cp *.hipfb ' + root + 'dist/bin/Debug/')
         os.system('cp *.hipfb ' + root + 'dist/bin/Release/')

@@ -91,6 +91,38 @@ function get_version(file)
     return major, minor, patch
 end
 
+
+-- find the path of 'Hipcc' from PATH
+-- return nil if not exist
+-- only works for linux ( for now )
+function findHipccPath()
+
+	if os.host() ~= "linux" then
+		return nil
+	end
+
+	local cmd = 'which hipcc 2>/dev/null'
+
+	local f = io.popen(cmd)
+	local hipccPath = f:read("*a")
+	f:close()
+
+	if hipccPath == nil or hipccPath == '' then
+		print("hipccPath nil");
+		return nil
+	else
+		print("-- hipccPath = " .. hipccPath );
+		-- Remove any trailing whitespace
+		hipccPath = hipccPath:gsub("%s+$", "")
+
+		-- Extract the directory from the full path
+		local dir = hipccPath:match("(.+)/[^/]+$")
+		return dir
+	end
+end
+
+
+
 function get_hip_sdk_verion()
 	
 	if os.ishost("windows") then
@@ -100,33 +132,68 @@ function get_hip_sdk_verion()
 	hipCommand = 'hipcc'
 	HIP_PATH = os.getenv("HIP_PATH")
 	PATH = os.getenv("PATH")
-	hipInPath = false
-
-	-- check if HIP is in the PATH environement variable
-	for token in string.gmatch(PATH, "[^;]+") do
-		if string.find(token, 'hip') then
-			if os.isfile(path.join(token, 'hipcc')) then
-				hipInPath = true
-			end
-		end
+	
+	
+	
+	hipccFromPATH = findHipccPath()
+	if fromPATH ~= nil then
+		print( "hipcc found from PATH: ".. hipccFromPATH )
 	end
 	
+	
+	
 	if os.ishost("windows") then
-        if hipInPath then
-			hipCommand = 'hipcc'
-		elseif not HIP_PATH then
-			hipCommand = root .. 'hipSdk\\bin\\hipcc'
-		else
+
+
+			if not HIP_PATH then
+				-- if the HIP_PATH env var is not set, we assume there is a 'hipSdk' folder at the root of the project.
+				HIP_PATH = path.getabsolute(root .. 'hipSdk') -- convert the path to absolute
+			end
+		
             if string.sub(HIP_PATH, -1, -1) == '\\' or string.sub(HIP_PATH, -1, -1) == '/' then
                 HIP_PATH = string.sub(HIP_PATH, 1, -2)
             end
+			
 			-- HIP_PATH is expected to look like:   C:\Program Files\AMD\ROCm\5.7
-			hipCommand = '\"' .. HIP_PATH..'\\bin\\'..hipCommand .. '\"'
+			print("using HIP_PATH = " .. HIP_PATH)
+			
+			if os.isfile(HIP_PATH .. '\\bin\\hipcc.exe') then
+				-- in newer version of HIP SDK (>= 6.3), we are using 'hipcc.exe --version' to check the version
+				-- print("using hipcc.exe to get the version.")
+				hipCommand = '\"' .. HIP_PATH..'\\bin\\hipcc.exe\"'
+			elseif os.isfile(HIP_PATH .. '\\bin\\hipcc') then
+				-- in older version of HIP SDK, we are using 'perl hipcc --version' to check the version
+				-- print("using perl hipcc to get the version.")
+				hipCommand = '\"' .. HIP_PATH..'\\bin\\hipcc\"'
+			else
+				print("ERROR: hipcc.exe or hipcc not found in the SDK path.")
+				hipCommand = 'hipcc'
+			end
+	
+	-- for LINUX
+	else
+	
+		if not HIP_PATH then
+			if hipccFromPATH ~= nil then
+				hipCommand = 'hipcc'
+			end
+			
+		-- if HIP_PATH is set, we take the path from it.
+		else
+			if string.sub(HIP_PATH, -1, -1) == '\\' or string.sub(HIP_PATH, -1, -1) == '/' then
+				HIP_PATH = string.sub(HIP_PATH, 1, -2)
+			end
+			
+			hipCommand = '\"' .. HIP_PATH..'/bin/hipcc\"'
 		end
+		
 	end
 	
+	
 	tmpFile = os.tmpname ()
-	os.execute (hipCommand .. " --version > " .. tmpFile)
+	fullcommand = hipCommand .. " --version > " .. tmpFile
+	print("Executing: " .. fullcommand);
+	os.execute (fullcommand)
 	
 	local version
 	for line in io.lines (tmpFile) do
@@ -140,9 +207,19 @@ function get_hip_sdk_verion()
         version = "HIP_SDK_NOT_FOUND"
     end
 
-	return version
+	return version, HIP_PATH
 end
-	
+
+
+
+hipSdkVersion, hipFinalPath = get_hip_sdk_verion()
+print( "HIP_VERSION_STR: "..hipSdkVersion )
+if hipFinalPath ~= nil then
+	print( "HIP SDK path: " .. hipFinalPath )
+else
+	print( "no HIP SDK folder found." )
+end
+
 function write_version_info(in_file, header_file, version_file)
 	if not file_exists(version_file) then
 		print("Version.txt file missing!\n")
@@ -164,8 +241,6 @@ function write_version_info(in_file, header_file, version_file)
 	header = header:gsub("@HIPRT_PATCH_VERSION@", HIPRT_PATCH_VERSION)
 	header = header:gsub("@HIPRT_API_VERSION@", HIPRT_API_VERSION)
 	header = header:gsub("@HIPRT_VERSION_STR@", "\""..HIPRT_VERSION_STR.."\"")
-	hipSdkVersion = get_hip_sdk_verion()
-	print( "HIP_VERSION_STR: "..hipSdkVersion )	
 	header = header:gsub("@HIP_VERSION_STR@", "\""..hipSdkVersion.."\"")
 	file = io.open(header_file, "w")
 	file:write(header)
@@ -236,7 +311,12 @@ workspace "hiprt"
     end
 
     if _OPTIONS["precompile"] then
-        os.execute( "cd ./scripts/bitcodes/ && python compile.py")
+		cmdExec = "cd ./scripts/bitcodes/ && python compile.py"
+		if hipFinalPath ~= nil then
+			cmdExec = cmdExec .. " --hipSdkPath \"" .. hipFinalPath .. "\""
+		end
+		print("Executing: " .. cmdExec);
+        os.execute( cmdExec )
     end
 
     if _OPTIONS["bakeKernel"] or _OPTIONS["bitcode"] then
