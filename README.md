@@ -22,12 +22,14 @@ This is the main repository for the source code for HIPRT.
 Then, you can use either premake or cmake.
    
 &nbsp;&nbsp;&nbsp;On Windows with premake:  
-&nbsp;&nbsp;&nbsp;5. `.\tools\premake5\win\premake5.exe vs2022`  
-&nbsp;&nbsp;&nbsp;6. `Open build\hiprt.sln with Visual Studio 2022.`  
+&nbsp;&nbsp;&nbsp;5. `set HIP_PATH=C:\Program Files\AMD\ROCm\6.2\`  (optional: change default HIP SDK path)  
+&nbsp;&nbsp;&nbsp;6. `.\tools\premake5\win\premake5.exe vs2022`  
+&nbsp;&nbsp;&nbsp;7. `Open build\hiprt.sln with Visual Studio 2022.`  
 
 &nbsp;&nbsp;&nbsp;On Linux with premake:  
-&nbsp;&nbsp;&nbsp;5. `./tools/premake5/linux64/premake5 gmake`  
-&nbsp;&nbsp;&nbsp;6. `make -C build -j config=release_x64`  
+&nbsp;&nbsp;&nbsp;5. `export HIP_PATH=/opt/rocm`  (optional: change default HIP SDK path)  
+&nbsp;&nbsp;&nbsp;6. `./tools/premake5/linux64/premake5 gmake`  
+&nbsp;&nbsp;&nbsp;7. `make -C build -j config=release_x64`  
 
 &nbsp;&nbsp;&nbsp;Example with Cmake on Windows:  
 &nbsp;&nbsp;&nbsp;5. `mkdir build`  

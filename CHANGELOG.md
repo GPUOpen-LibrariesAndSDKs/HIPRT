@@ -1,3 +1,9 @@
+2.5.cfa5e2a
+- More flexible vector types
+- Unifying math into a single header
+- Collapse crash fix
+- Other minor fixes
+
 2.4.c587aa7
 - H-PLOC and improved wide BVH conversion
 - CMake support

@@ -106,8 +106,9 @@ endfunction()
 
 
 
-
-function(get_hip_sdk_version result)
+# 'result'      is the HIP version as string, for example: 6.2
+# 'result_path' is the output of the path to HIP, for example:  C:\Program Files\AMD\ROCm\6.2
+function(get_hip_sdk_version result result_path)
 	if(WIN32)
 		set(root ".\\")
 	endif()
@@ -116,7 +117,6 @@ function(get_hip_sdk_version result)
 	set(hipCommand "hipcc")
 	set(PATH $ENV{PATH})
 	set(useHipFromPATH OFF)
-
 
 
 	# Check if HIP_PATH is defined as a CMake parameter
@@ -131,8 +131,10 @@ function(get_hip_sdk_version result)
 			
 	# if HIP_PATH is not in cmake, and not in environment variable
 	else()
-		message(STATUS "WARNING: HIP_PATH is not defined as a CMake parameter or an environment variable - not recommended")
+		message(WARNING "WARNING: HIP_PATH is not defined as a CMake parameter or an environment variable - NOT RECOMMENDED")
 
+		# TODO: improve that, but it's not recommanded to use the cmake script without defining HIP_PATH anyway...
+		set(${result_path} "UNKONWN_PATH" PARENT_SCOPE)
 
 		# Check if HIP is in the PATH environment variable
 		string(REPLACE ";" "\n" PATH_LIST ${PATH})
@@ -152,6 +154,7 @@ function(get_hip_sdk_version result)
 	if ( HIP_PATH )
 		remove_trailing_slash(HIP_PATH)
 		# message(STATUS "HIP_PATH formatted: ${HIP_PATH}")
+		set(${result_path} ${HIP_PATH} PARENT_SCOPE)
 	endif()
 
 
@@ -167,8 +170,21 @@ function(get_hip_sdk_version result)
 				set(hipCommand "hipSdk\\bin\\hipcc")
 			endif()
 		else()
+		
 			# HIP_PATH is expected to look like: C:\Program Files\AMD\ROCm\5.7
-			set(hipCommand "${HIP_PATH}\\bin\\${hipCommand}")
+			
+			if(EXISTS "${HIP_PATH}\\bin\\hipcc.exe")
+				# in newer version of HIP SDK (>= 6.3), we are using 'hipcc.exe --version' to check the version
+				# message(STATUS "using hipcc.exe to get the version")
+				set(exec_perl "")
+				set(hipCommand "${HIP_PATH}\\bin\\hipcc.exe")
+			else()
+				# in older version of HIP SDK, we are using 'perl hipcc --version' to check the version
+				# message(STATUS "using perl hipcc to get the version")
+				set(hipCommand "${HIP_PATH}\\bin\\${hipCommand}")
+			endif()
+
+
 		endif()
 	endif()
 
@@ -200,9 +216,10 @@ endfunction()
 
 
 # fill the HIP_VERSION_STR variable, it will look like: "6.2"
-get_hip_sdk_version(HIP_VERSION_STR)
+# also get the path to hip that'll be used along all this cmake.
+get_hip_sdk_version(HIP_VERSION_STR HIP_FINAL_PATH)
 message(STATUS "HIP_VERSION_STR = ${HIP_VERSION_STR}")
-
+message(STATUS "HIP_FINAL_PATH = ${HIP_FINAL_PATH}")
 
 function(write_version_info in_file header_file version_file version_str_out)
 
@@ -346,14 +363,16 @@ endif()
 
 # precompile kernels:
 if(PRECOMPILE)
+	message(">> Execute: ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"")
 	execute_process(
-		COMMAND ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath ${HIP_PATH}
+		COMMAND ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 		)
-		
+	
 	if(NOT NO_UNITTEST)
+		message(">> Execute: ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"")
 		execute_process(
-			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath ${HIP_PATH}
+			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			)
 	endif()
