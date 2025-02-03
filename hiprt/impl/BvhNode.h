@@ -198,14 +198,13 @@ struct alignas( 64 ) InstanceNode
 	{
 		hiprtRay	 outRay;
 		const float3 o	   = ray.origin;
-		const float3 d	   = ray.origin + ray.direction;
+		const float3 d	   = ray.direction;
 		outRay.origin.x	   = m_matrix[0][0] * o.x + m_matrix[0][1] * o.y + m_matrix[0][2] * o.z + m_matrix[0][3];
 		outRay.origin.y	   = m_matrix[1][0] * o.x + m_matrix[1][1] * o.y + m_matrix[1][2] * o.z + m_matrix[1][3];
 		outRay.origin.z	   = m_matrix[2][0] * o.x + m_matrix[2][1] * o.y + m_matrix[2][2] * o.z + m_matrix[2][3];
-		outRay.direction.x = m_matrix[0][0] * d.x + m_matrix[0][1] * d.y + m_matrix[0][2] * d.z + m_matrix[0][3];
-		outRay.direction.y = m_matrix[1][0] * d.x + m_matrix[1][1] * d.y + m_matrix[1][2] * d.z + m_matrix[1][3];
-		outRay.direction.z = m_matrix[2][0] * d.x + m_matrix[2][1] * d.y + m_matrix[2][2] * d.z + m_matrix[2][3];
-		outRay.direction   = outRay.direction - outRay.origin;
+		outRay.direction.x = m_matrix[0][0] * d.x + m_matrix[0][1] * d.y + m_matrix[0][2] * d.z;
+		outRay.direction.y = m_matrix[1][0] * d.x + m_matrix[1][1] * d.y + m_matrix[1][2] * d.z;
+		outRay.direction.z = m_matrix[2][0] * d.x + m_matrix[2][1] * d.y + m_matrix[2][2] * d.z;
 		outRay.minT		   = ray.minT;
 		outRay.maxT		   = ray.maxT;
 		return outRay;

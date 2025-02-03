@@ -82,10 +82,10 @@ class Aabb
 		m_max = min( m_max, box.m_max );
 	}
 
-	HIPRT_HOST_DEVICE float2 intersect( const float3& invD, const float3& oxInvD, float maxT ) const
+	HIPRT_HOST_DEVICE float2 intersect( const float3& origin, const float3& invDirection, float maxT ) const
 	{
-		float3 f	= fma( m_max, invD, oxInvD );
-		float3 n	= fma( m_min, invD, oxInvD );
+		float3 f	= ( m_max - origin ) * invDirection;
+		float3 n	= ( m_min - origin ) * invDirection;
 		float3 tmax = max( f, n );
 		float3 tmin = min( f, n );
 		float  t1	= fminf( fminf( fminf( tmax.x, tmax.y ), tmax.z ), maxT );

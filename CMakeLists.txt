@@ -365,14 +365,14 @@ endif()
 if(PRECOMPILE)
 	message(">> Execute: ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"")
 	execute_process(
-		COMMAND ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"
+		COMMAND ${PYTHON_EXECUTABLE} compile.py --nvidia --hipSdkPath ${HIP_FINAL_PATH}
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 		)
 	
 	if(NOT NO_UNITTEST)
 		message(">> Execute: ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"")
 		execute_process(
-			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath \"${HIP_FINAL_PATH}\"
+			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py --nvidia --hipSdkPath ${HIP_FINAL_PATH}
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			)
 	endif()
@@ -412,18 +412,10 @@ if(BAKE_KERNEL OR GENERATE_BAKE_KERNEL)
 	message(">> BakeKernel Executed")
 	if(WIN32)
 		execute_process(
-			COMMAND mkdir -p ${CMAKE_CURRENT_SOURCE_DIR}/hiprt/cache
-			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-			)
-		execute_process(
 			COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/bakeKernel.bat
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 			)
 	else()
-		execute_process(
-			COMMAND mkdir -p ${CMAKE_CURRENT_SOURCE_DIR}/hiprt/cache
-			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-			)
 		execute_process(
 			COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tools/bakeKernel.sh
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

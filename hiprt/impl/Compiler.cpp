@@ -36,8 +36,13 @@
 #include <hiprt/cache/KernelArgs.h>
 #endif
 
+// HIPRT_BAKE_COMPILED_KERNEL means we are using a precompiled kernel that is embedded as a buffer inside the executable.
 #if defined( HIPRT_BAKE_COMPILED_KERNEL )
+constexpr auto UseBakedCompiledKernel = true;
 #include "hiprt/impl/bvh_build_array.h"
+#else
+constexpr auto		 UseBakedCompiledKernel = false;
+const unsigned char* bvh_build_array_h		= nullptr; // if bvh_build_array.h is not used, declare a nullptr precompiled data.
 #endif
 
 namespace
@@ -45,19 +50,19 @@ namespace
 #if defined( HIPRT_BITCODE_LINKING )
 constexpr auto UseBitcode = true;
 #else
-constexpr auto UseBitcode			= false;
+constexpr auto		 UseBitcode				= false;
 #endif
 
 #if defined( HIPRT_LOAD_FROM_STRING )
 constexpr auto UseBakedCode = true;
 #else
-constexpr auto UseBakedCode			= false;
+constexpr auto		 UseBakedCode			= false;
 #endif
 
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
 constexpr auto BakedCodeIsGenerated = true;
 #else
-constexpr auto BakedCodeIsGenerated = false;
+constexpr auto		 BakedCodeIsGenerated	= false;
 #endif
 HIPRT_STATIC_ASSERT( !UseBakedCode || BakedCodeIsGenerated );
 } // namespace
@@ -86,7 +91,9 @@ Kernel Compiler::getKernel(
 	if ( cacheEntry != m_kernelCache.end() ) return cacheEntry->second;
 
 	oroFunction function;
-	if constexpr ( UseBitcode )
+
+	// if we use the precompiled bitcode as file or baked as binary, we use 'getFunctionFromPrecompiledBinary'
+	if constexpr ( UseBitcode || UseBakedCompiledKernel )
 	{
 		function = getFunctionFromPrecompiledBinary( funcName );
 	}
@@ -765,13 +772,17 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 		std::ifstream file( path, std::ios::binary | std::ios::in );
 		if ( !file.is_open() )
 		{
-// Note: even if 'HIPRT_BAKE_COMPILED_KERNEL' is enable, if the file exists, it overrides the embedded precompiled kernel.
-#if defined( HIPRT_BAKE_COMPILED_KERNEL )
-			checkOro( oroModuleLoadData( &module, &bvh_build_array_h ) );
-#else
-			std::string msg = Utility::format( "Unable to open '%s'\n", path.string().c_str() );
-			throw std::runtime_error( msg );
-#endif
+			// Note: even if 'HIPRT_BAKE_COMPILED_KERNEL' is enable, if the file exists, it overrides the embedded precompiled
+			// kernel.
+			if constexpr ( UseBakedCompiledKernel )
+			{
+				checkOro( oroModuleLoadData( &module, &bvh_build_array_h ) );
+			}
+			else
+			{
+				std::string msg = Utility::format( "Unable to open '%s'\n", path.string().c_str() );
+				throw std::runtime_error( msg );
+			}
 		}
 		else
 		{

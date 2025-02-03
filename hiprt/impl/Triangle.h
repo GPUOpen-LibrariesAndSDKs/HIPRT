@@ -57,17 +57,18 @@ class alignas( alignof( float3 ) ) Triangle
 
 		if ( denom == 0.f ) return false;
 
-		float  invd = 1.0f / denom;
-		float3 d	= ray.origin - m_v0;
+		float  invDemom = 1.0f / denom;
+		float3 d		= ray.origin - m_v0;
 		float3 b;
-		b.y = dot( d, s1 ) * invd;
+		b.y = dot( d, s1 ) * invDemom;
 
 		float3 s2 = cross( d, e1 );
-		b.z		  = dot( ray.direction, s2 ) * invd;
+		b.z		  = dot( ray.direction, s2 ) * invDemom;
 
-		float t0 = dot( e2, s2 ) * invd;
+		float t0 = dot( e2, s2 ) * invDemom;
 
-		if ( ( b.y < 0.f ) || ( b.y > 1.f ) || ( b.z < 0.f ) || ( b.y + b.z > 1.f ) || ( t0 < ray.minT ) || ( t0 > ray.maxT ) )
+		if ( ( b.y < 0.0f ) || ( b.y > 1.0f ) || ( b.z < 0.0f ) || ( b.y + b.z > 1.0f ) || ( t0 < ray.minT ) ||
+			 ( t0 > ray.maxT ) )
 		{
 			return false;
 		}

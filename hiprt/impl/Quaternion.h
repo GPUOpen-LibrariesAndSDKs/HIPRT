@@ -51,47 +51,47 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtToAxisAngle( const float4& q )
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromRotationMatrix( const float R[3][3] )
 {
-	float  tr = R[0][0] + R[1][1] + R[2][2];
-	float4 q;
+	const float tr = R[0][0] + R[1][1] + R[2][2];
+	float4		q;
 
 	if ( tr > 0.0f )
 	{
-		float S = sqrtf( tr + 1.0f ) * 2.0f;
-		q.w		= 0.25f * S;
-		q.x		= ( R[2][1] - R[1][2] ) / S;
-		q.y		= ( R[0][2] - R[2][0] ) / S;
-		q.z		= ( R[1][0] - R[0][1] ) / S;
+		const float S = sqrtf( tr + 1.0f ) * 2.0f;
+		q.w			  = 0.25f * S;
+		q.x			  = ( R[2][1] - R[1][2] ) / S;
+		q.y			  = ( R[0][2] - R[2][0] ) / S;
+		q.z			  = ( R[1][0] - R[0][1] ) / S;
 	}
 	else if ( ( R[0][0] > R[1][1] ) && ( R[0][0] > R[2][2] ) )
 	{
-		float S = sqrtf( 1.0f + R[0][0] - R[1][1] - R[2][2] ) * 2.0f;
-		q.w		= ( R[2][1] - R[1][2] ) / S;
-		q.x		= 0.25f * S;
-		q.y		= ( R[0][1] + R[1][0] ) / S;
-		q.z		= ( R[0][2] + R[2][0] ) / S;
+		const float S = sqrtf( 1.0f + R[0][0] - R[1][1] - R[2][2] ) * 2.0f;
+		q.w			  = ( R[2][1] - R[1][2] ) / S;
+		q.x			  = 0.25f * S;
+		q.y			  = ( R[0][1] + R[1][0] ) / S;
+		q.z			  = ( R[0][2] + R[2][0] ) / S;
 	}
 	else if ( R[1][1] > R[2][2] )
 	{
-		float S = sqrtf( 1.0f + R[1][1] - R[0][0] - R[2][2] ) * 2.0f;
-		q.w		= ( R[0][2] - R[2][0] ) / S;
-		q.x		= ( R[0][1] + R[1][0] ) / S;
-		q.y		= 0.25f * S;
-		q.z		= ( R[1][2] + R[2][1] ) / S;
+		const float S = sqrtf( 1.0f + R[1][1] - R[0][0] - R[2][2] ) * 2.0f;
+		q.w			  = ( R[0][2] - R[2][0] ) / S;
+		q.x			  = ( R[0][1] + R[1][0] ) / S;
+		q.y			  = 0.25f * S;
+		q.z			  = ( R[1][2] + R[2][1] ) / S;
 	}
 	else
 	{
-		float S = sqrtf( 1.0f + R[2][2] - R[0][0] - R[1][1] ) * 2.0f;
-		q.w		= ( R[1][0] - R[0][1] ) / S;
-		q.x		= ( R[0][2] + R[2][0] ) / S;
-		q.y		= ( R[1][2] + R[2][1] ) / S;
-		q.z		= 0.25f * S;
+		const float S = sqrtf( 1.0f + R[2][2] - R[0][0] - R[1][1] ) * 2.0f;
+		q.w			  = ( R[1][0] - R[0][1] ) / S;
+		q.x			  = ( R[0][2] + R[2][0] ) / S;
+		q.y			  = ( R[1][2] + R[2][1] ) / S;
+		q.z			  = 0.25f * S;
 	}
 	return q;
 }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE void qtToRotationMatrix( const float4& q, float R[3][3] )
 {
-	float4 q2{ q.x * q.x, q.y * q.y, q.z * q.z, 0.0f };
+	const float4 q2{ q.x * q.x, q.y * q.y, q.z * q.z, 0.0f };
 
 	R[0][0] = 1 - 2 * q2.y - 2 * q2.z;
 	R[0][1] = 2 * q.x * q.y - 2 * q.w * q.z;
@@ -117,27 +117,17 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtNormalize( const float4& q ) { return q 
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMul( const float4& a, const float4& b )
 {
-	float4 ans;
-	ans = make_float4( cross( make_float3( a ), make_float3( b ) ), 0.0f );
-	// ans += a.w * b + b.w * a;
-	ans	  = ans + float4{ a.w * b.x, a.w * b.y, a.w * b.z, a.w * b.w } + float4{ b.w * a.x, b.w * a.y, b.w * a.z, b.w * a.w };
-	ans.w = a.w * b.w - dot( make_float3( a ), make_float3( b ) );
-	return ans;
+	const float3 c = cross( make_float3( a ), make_float3( b ) ) + a.w * make_float3( b ) + b.w * make_float3( a );
+	return { c.x, c.y, c.z, a.w * b.w - dot( make_float3( a ), make_float3( b ) ) };
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtInvert( const float4& q )
-{
-	float4 ans;
-	ans	  = -q;
-	ans.w = q.w;
-	return ans;
-}
+HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtInvert( const float4& q ) { return float4{ -q.x, -q.y, -q.z, q.w }; }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float3 qtRotate( const float4& q, const float3& p )
 {
-	float4 qp	= make_float4( p, 0.0f );
-	float4 qInv = qtInvert( q );
-	float4 out	= qtMul( qtMul( q, qp ), qInv );
+	const float4 qp	  = make_float4( p, 0.0f );
+	const float4 qInv = qtInvert( q );
+	const float4 out  = qtMul( qtMul( q, qp ), qInv );
 	return make_float3( out );
 }
 
@@ -175,13 +165,13 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMix( float4 v0, float4 v1, float t )
 	}
 
 	// Since dot is in range [0, DOT_THRESHOLD], acos is safe
-	float theta_0	  = acosf( dot );	 // theta_0 = angle between input vectors
-	float theta		  = theta_0 * t;	 // theta = angle between v0 and result
-	float sin_theta	  = sinf( theta );	 // compute this value only once
-	float sin_theta_0 = sinf( theta_0 ); // compute this value only once
+	const float theta_0		= acosf( dot );	   // theta_0 = angle between input vectors
+	const float theta		= theta_0 * t;	   // theta = angle between v0 and result
+	const float sin_theta	= sinf( theta );   // compute this value only once
+	const float sin_theta_0 = sinf( theta_0 ); // compute this value only once
 
-	float s0 = cosf( theta ) - dot * sin_theta / sin_theta_0; // == sin(theta_0 - theta) / sin(theta_0)
-	float s1 = sin_theta / sin_theta_0;
+	const float s0 = cosf( theta ) - dot * sin_theta / sin_theta_0; // == sin(theta_0 - theta) / sin(theta_0)
+	const float s1 = sin_theta / sin_theta_0;
 
 	return ( v0 * s0 ) + ( v1 * s1 );
 }
