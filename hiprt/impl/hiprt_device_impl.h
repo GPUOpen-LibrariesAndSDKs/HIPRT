@@ -37,7 +37,7 @@
 #include <hiprt/hiprt_device.h>
 
 #if __gfx1030__ || __gfx1031__ || __gfx1032__ || __gfx1033__ || __gfx1034__ || __gfx1035__ || __gfx1036__ || __gfx1100__ || \
-	__gfx1101__ || __gfx1102__ || __gfx1103__ || __gfx1150__ || __gfx1151__ || __gfx1201__
+	__gfx1101__ || __gfx1102__ || __gfx1103__ || __gfx1150__ || __gfx1151__ || __gfx1200__ || __gfx1201__
 #ifndef __USE_HWI__
 #define __USE_HWI__
 #endif
@@ -72,6 +72,15 @@ HIPRT_DEVICE bool filterFunc(
 
 namespace hiprt
 {
+HIPRT_DEVICE HIPRT_INLINE float3 rcp( const float3 a )
+{
+#if defined( __USE_HWI__ )
+	return float3{ __ocml_native_recip_f32( a.x ), __ocml_native_recip_f32( a.y ), __ocml_native_recip_f32( a.z ) };
+#else
+	return 1.0f / a;
+#endif
+}
+
 template <typename StackEntry, uint32_t StackSize>
 class PrivateStack
 {
@@ -320,12 +329,11 @@ HIPRT_DEVICE bool
 TraversalBase<Stack>::testInternalNode( const hiprtRay& ray, const float3& invD, BoxNode* nodes, uint32_t& nodeIndex )
 {
 #if !defined( __USE_HWI__ )
-	BoxNode node   = nodes[getNodeAddr( nodeIndex )];
-	float3	oxInvD = -ray.origin * invD;
-	float2	s0	   = node.m_box0.intersect( invD, oxInvD, ray.maxT );
-	float2	s1	   = node.m_box1.intersect( invD, oxInvD, ray.maxT );
-	float2	s2	   = node.m_box2.intersect( invD, oxInvD, ray.maxT );
-	float2	s3	   = node.m_box3.intersect( invD, oxInvD, ray.maxT );
+	BoxNode node = nodes[getNodeAddr( nodeIndex )];
+	float2	s0	 = node.m_box0.intersect( ray.origin, invD, ray.maxT );
+	float2	s1	 = node.m_box1.intersect( ray.origin, invD, ray.maxT );
+	float2	s2	 = node.m_box2.intersect( ray.origin, invD, ray.maxT );
+	float2	s3	 = node.m_box3.intersect( ray.origin, invD, ray.maxT );
 
 	uint32_t result[4];
 	result[0] = s0.x <= s0.y ? node.m_childIndex0 : InvalidValue;
@@ -514,7 +522,7 @@ template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalTy
 HIPRT_DEVICE hiprtHit GeomTraversal<Stack, PrimitiveNode, TraversalType>::getNextHit()
 {
 	hiprtRay ray  = m_ray;
-	float3	 invD = safeInv( m_ray.direction );
+	float3	 invD = rcp( m_ray.direction );
 
 	if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 	{
@@ -695,7 +703,7 @@ HIPRT_DEVICE void SceneTraversal<Stack, InstanceStack, TraversalType>::transform
 			Transform tr( m_frames, instanceNode.m_transform.frameIndex, instanceNode.m_transform.frameCount );
 			ray = tr.transformRay( ray, m_time );
 		}
-		invD = safeInv( ray.direction );
+		invD = rcp( ray.direction );
 	}
 }
 
@@ -704,7 +712,7 @@ HIPRT_DEVICE void SceneTraversal<Stack, InstanceStack, TraversalType>::restoreRa
 {
 	ray.origin	  = m_ray.origin;
 	ray.direction = m_ray.direction;
-	invD		  = safeInv( m_ray.direction );
+	invD		  = rcp( m_ray.direction );
 }
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
@@ -782,7 +790,7 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 
 	hiprtRay ray = m_ray;
 	float3	 invD;
-	if ( instanceId() == InvalidValue ) invD = safeInv( m_ray.direction );
+	if ( instanceId() == InvalidValue ) invD = rcp( m_ray.direction );
 
 	if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 	{

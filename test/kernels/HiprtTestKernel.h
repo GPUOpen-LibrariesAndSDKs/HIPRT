@@ -64,17 +64,17 @@ HIPRT_DEVICE bool intersectCircle( const hiprtRay& ray, const void* data, void* 
 	const float*	o = reinterpret_cast<const float*>( data );
 	constexpr float R = 0.1f;
 
-	const float2 c = { o[hit.primID] - ray.origin.x, 0.5f - ray.origin.y };
-	const float	 d = sqrtf( c.x * c.x + c.y * c.y );
+	const float2 c		= { o[hit.primID] - ray.origin.x, 0.5f - ray.origin.y };
+	const float	 d		= sqrtf( c.x * c.x + c.y * c.y );
+	const bool	 hasHit = d < R;
 
 	uint2 colors[] = { { 255, 0 }, { 0, 255 }, { 255, 255 } };
-	if ( payload )
+	if ( hasHit && payload )
 	{
 		uint2* color = reinterpret_cast<uint2*>( payload );
 		*color		 = colors[hit.primID];
 	}
 
-	bool hasHit = d < R;
 	return hasHit;
 }
 

@@ -76,6 +76,8 @@ def compileAmd():
         if hipSdkPathFromArgument != '': # if the hip path it given as an argument
             hipccpath = hipSdkPathFromArgument + '/bin/hipcc'
 
+    # encapsulate the full path in quote, in case we have some spaces in it.
+    hipccpath = '\"' + hipccpath + '\"'
 
     cmd = hipccpath + ' --version'
     return_code = subprocess.call(cmd, shell=True)

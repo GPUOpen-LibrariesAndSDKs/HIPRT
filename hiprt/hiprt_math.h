@@ -1568,27 +1568,32 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float3 fma( const float3& a, const float3& b, con
 	return float3{ x, y, z };
 }
 
+HIPRT_HOST_DEVICE HIPRT_INLINE float sumOfProducts( const float a, const float b, const float c, const float d )
+{
+	const float cd = c * d;
+	return fmaf( a, b, cd ) + fmaf( c, d, -cd );
+}
+
+HIPRT_HOST_DEVICE HIPRT_INLINE float differenceOfProducts( const float a, const float b, const float c, const float d )
+{
+	const float cd = c * d;
+	return fmaf( a, b, -cd ) - fmaf( c, d, -cd );
+}
+
 HIPRT_HOST_DEVICE HIPRT_INLINE float3 cross( const float3& a, const float3& b )
 {
-	return float3{ a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+	return {
+		differenceOfProducts( a.y, b.z, a.z, b.y ),
+		differenceOfProducts( a.z, b.x, a.x, b.z ),
+		differenceOfProducts( a.x, b.y, a.y, b.x ) };
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float dot( const float3& a, const float3& b ) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+HIPRT_HOST_DEVICE HIPRT_INLINE float dot( const float3& a, const float3& b )
+{
+	return fmaf( a.x, b.x, sumOfProducts( a.y, b.y, a.z, b.z ) );
+}
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float3 normalize( const float3& a ) { return a / sqrtf( dot( a, a ) ); }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE float3 safeInv( float3 d )
-{
-	float  x	 = d.x;
-	float  y	 = d.y;
-	float  z	 = d.z;
-	float  ooeps = 1e-5f;
-	float3 invd;
-	invd.x = 1.0 / ( abs( x ) > ooeps ? x : copysign( ooeps, x ) );
-	invd.y = 1.0 / ( abs( y ) > ooeps ? y : copysign( ooeps, y ) );
-	invd.z = 1.0 / ( abs( z ) > ooeps ? z : copysign( ooeps, z ) );
-	return invd;
-}
 
 template <typename V>
 HIPRT_HOST_DEVICE HIPRT_INLINE auto* ptr( V& a )
