@@ -89,7 +89,8 @@ def compileAmd():
             clangpath = '/opt/rocm/bin/amdclang++'
 
     # encapsulate the full path in quote, in case we have some spaces in it.
-    hipccpath = '\"' + hipccpath + '\"'
+    if " " in hipccpath and not (hipccpath.startswith('"') and hipccpath.endswith('"')):
+        hipccpath = '\"' + hipccpath + '\"'
 
     # llvm.org/docs/AMDGPUUsage.html#processors
     gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103',  # Navi3

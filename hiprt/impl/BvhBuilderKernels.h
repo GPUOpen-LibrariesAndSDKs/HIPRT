@@ -202,8 +202,6 @@ SingletonConstruction( uint32_t index, PrimitiveContainer& primitives, BoxNode* 
 		leafType = InstanceType;
 	}
 
-	primNodes[0].m_parentAddr = 0;
-
 	BoxNode root;
 	root.m_box0 = primitives.fetchAabb( 0 );
 	root.m_box1.reset();
@@ -415,58 +413,78 @@ extern "C" __global__ void ComputeMortonCodes_InstanceList_MatrixFrame(
 	ComputeMortonCodes<InstanceList<MatrixFrame>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
-extern "C" __global__ void ResetCounters( uint32_t primCount, BoxNode* boxNodes )
+template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
+__device__ void ResetCountersAndUpdateLeaves(
+	const Header* header, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	if ( index < primCount ) boxNodes[index].m_updateCounter = 0;
-}
 
-template <typename InstanceList>
-__device__ void ResetCountersAndUpdateFrames( InstanceList& instanceList, BoxNode* boxNodes )
-{
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	if ( index < instanceList.getCount() ) boxNodes[index].m_updateCounter = 0;
-	if ( index < instanceList.getFrameCount() ) instanceList.convertFrame( index );
-}
+	if ( index < header->m_boxNodeCount ) boxNodes[index].m_updateCounter = 0;
 
-extern "C" __global__ void
-ResetCountersAndUpdateFrames_InstanceList_SRTFrame( InstanceList<SRTFrame> instanceList, BoxNode* boxNodes )
-{
-	ResetCountersAndUpdateFrames<InstanceList<SRTFrame>>( instanceList, boxNodes );
-}
-
-extern "C" __global__ void
-ResetCountersAndUpdateFrames_InstanceList_MatrixFrame( InstanceList<MatrixFrame> instanceList, BoxNode* boxNodes )
-{
-	ResetCountersAndUpdateFrames<InstanceList<MatrixFrame>>( instanceList, boxNodes );
-}
-
-template <typename PrimitiveContainer, typename PrimitiveNode>
-__device__ void FitBounds( PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
-{
-	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-
-	if ( index >= primitives.getCount() ) return;
-
-	uint32_t parentAddr = primNodes[index].m_parentAddr;
 	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
 	{
-		primNodes[index] =
-			primitives.fetchTriangleNode( make_uint2( primNodes[index].m_primIndex0, primNodes[index].m_primIndex1 ) );
-		primNodes[index].m_parentAddr = parentAddr;
+		if ( index < header->m_primNodeCount )
+		{
+			primNodes[index] = primitives.fetchTriangleNode( { primNodes[index].m_primIndex0, primNodes[index].m_primIndex1 } );
+		}
 	}
 	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
 	{
-		const uint32_t		 primIndex = primNodes[index].m_primIndex;
-		hiprtTransformHeader transform = primitives.fetchTransformHeader( primIndex );
-		primNodes[index].m_mask		   = primitives.fetchMask( primIndex );
-		if ( transform.frameCount == 1 )
-			primNodes[index].m_identity =
-				primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
+		if ( index < primitives.getFrameCount() ) primitives.convertFrame( index );
+
+		if ( index < header->m_primNodeCount )
+		{
+			const uint32_t		 primIndex = primNodes[index].m_primIndex;
+			hiprtTransformHeader transform = primitives.fetchTransformHeader( primIndex );
+			primNodes[index].m_mask		   = primitives.fetchMask( primIndex );
+			if ( transform.frameCount == 1 )
+				primNodes[index].m_identity =
+					primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
+		}
+	}
+}
+
+extern "C" __global__ void ResetCountersAndUpdateLeaves_TriangleMesh_TriangleNode(
+	const GeomHeader* header, TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
+{
+	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
+}
+
+extern "C" __global__ void ResetCountersAndUpdateLeaves_AabbList_CustomNode(
+	const GeomHeader* header, AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
+{
+	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
+}
+
+extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_MatrixFrame_InstanceNode(
+	const SceneHeader* header, InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+{
+	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
+}
+
+extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_SRTFrame_InstanceNode(
+	const SceneHeader* header, InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+{
+	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
+}
+
+template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
+__device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
+{
+	uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+
+	if ( index >= header->m_boxNodeCount ) return;
+
+	BoxNode	 node		   = boxNodes[index];
+	uint32_t internalCount = 0;
+	for ( uint32_t i = 0; i < node.m_childCount; ++i )
+	{
+		if ( node.getChildType( i ) == BoxType ) internalCount++;
 	}
 
-	index = parentAddr;
-	while ( index != InvalidValue && atomicAdd( &boxNodes[index].m_updateCounter, 1 ) >= boxNodes[index].m_childCount - 1 )
+	if ( internalCount > 0 ) return;
+
+	while ( true )
 	{
 		__threadfence();
 
@@ -484,33 +502,40 @@ __device__ void FitBounds( PrimitiveContainer& primitives, BoxNode* boxNodes, Pr
 		if ( node.m_childIndex3 != InvalidValue )
 			node.m_box3 = getNodeBox( node.m_childIndex3, primitives, boxNodes, primNodes );
 
-		index = boxNodes[index].m_parentAddr;
+		internalCount = 0;
+		for ( uint32_t i = 0; i < node.m_childCount; ++i )
+		{
+			if ( node.getChildType( i ) == BoxType ) internalCount++;
+		}
 
 		__threadfence();
+
+		if ( atomicAdd( &node.m_updateCounter, 1 ) < internalCount - 1 ) break;
 	}
 }
 
 extern "C" __global__ void
-FitBounds_TriangleMesh_TriangleNode( TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
+FitBounds_TriangleMesh_TriangleNode( GeomHeader* header, TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
 {
-	FitBounds<TriangleMesh, TriangleNode>( primitives, boxNodes, primNodes );
-}
-
-extern "C" __global__ void FitBounds_AabbList_CustomNode( AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
-{
-	FitBounds<AabbList, CustomNode>( primitives, boxNodes, primNodes );
+	FitBounds<TriangleMesh, TriangleNode>( header, primitives, boxNodes, primNodes );
 }
 
 extern "C" __global__ void
-FitBounds_InstanceList_SRTFrame_InstanceNode( InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+FitBounds_AabbList_CustomNode( GeomHeader* header, AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
 {
-	FitBounds<InstanceList<SRTFrame>, InstanceNode>( primitives, boxNodes, primNodes );
+	FitBounds<AabbList, CustomNode>( header, primitives, boxNodes, primNodes );
+}
+
+extern "C" __global__ void FitBounds_InstanceList_SRTFrame_InstanceNode(
+	SceneHeader* header, InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+{
+	FitBounds<InstanceList<SRTFrame>, InstanceNode>( header, primitives, boxNodes, primNodes );
 }
 
 extern "C" __global__ void FitBounds_InstanceList_MatrixFrame_InstanceNode(
-	InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+	SceneHeader* header, InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
-	FitBounds<InstanceList<MatrixFrame>, InstanceNode>( primitives, boxNodes, primNodes );
+	FitBounds<InstanceList<MatrixFrame>, InstanceNode>( header, primitives, boxNodes, primNodes );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
@@ -635,8 +660,7 @@ __device__ void Collapse(
 					else
 						primNodes[nodeAddr].m_transform = transform;
 				}
-				primNodes[nodeAddr].m_parentAddr = parentAddr;
-				done							 = true;
+				done = true;
 			}
 		}
 

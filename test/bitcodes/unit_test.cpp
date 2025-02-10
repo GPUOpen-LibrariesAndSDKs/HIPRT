@@ -32,4 +32,4 @@
 #include "../kernels/HiprtTestKernel.h"
 #include "../kernels/PrimaryRayKernel.h"
 #include "../kernels/ShadowRayKernel.h"
-#include "../kernels/AORayKernel.h"
+#include "../kernels/AoRayKernel.h"

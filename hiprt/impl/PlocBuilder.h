@@ -364,50 +364,44 @@ void PlocBuilder::update(
 {
 	typedef typename std::conditional<std::is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
 
-	Header*		   header	 = storageMemoryArena.allocate<Header>( 1 );
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( DivideRoundUp( 2 * primitives.getCount(), 3 ) );
-	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
+	Header* header = storageMemoryArena.allocate<Header>();
 
-	std::string containerParam	   = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
-	std::string containerNodeParam = containerParam + "_" + Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
+	Header h;
+	checkOro( oroMemcpyDtoHAsync( &h, reinterpret_cast<oroDeviceptr>( header ), sizeof( Header ), stream ) );
+	checkOro( oroStreamSynchronize( stream ) );
+
+	BoxNode*	   boxNodes	 = reinterpret_cast<BoxNode*>( h.m_boxNodes );
+	PrimitiveNode* primNodes = reinterpret_cast<PrimitiveNode*>( h.m_primNodes );
+
+	std::string containerParam		   = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
+	std::string containerPrimNodeParam = containerParam + "_" + Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
 
 	Compiler&				 compiler = context.getCompiler();
 	std::vector<const char*> opts;
 
+	uint32_t resetThreadCount = primitives.getCount();
 	if constexpr ( std::is_same<Header, SceneHeader>::value )
 	{
-		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		primitives.setFrames( h.m_frames );
+		resetThreadCount = std::max( primitives.getCount(), primitives.getFrameCount() );
+	}
 
-		primitives.setFrames( frames );
-		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
-			context,
-			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-			"ResetCountersAndUpdateFrames",
-			opts,
-			GET_ARG_LIST( BvhBuilderKernels ) );
-		resetCountersAndUpdateFramesKernel.setArgs( { primitives } );
-		resetCountersAndUpdateFramesKernel.launch( primitives.getFrameCount(), stream );
-	}
-	else
-	{
-		Kernel resetCountersKernel = compiler.getKernel(
-			context,
-			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-			"ResetCounters",
-			opts,
-			GET_ARG_LIST( BvhBuilderKernels ) );
-		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
-		resetCountersKernel.launch( primitives.getCount(), stream );
-	}
+	Kernel resetCountersAndUpdateLeavesKernel = compiler.getKernel(
+		context,
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+		"ResetCountersAndUpdateLeaves_" + containerPrimNodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
+	resetCountersAndUpdateLeavesKernel.setArgs( { header, primitives, boxNodes, primNodes } );
+	resetCountersAndUpdateLeavesKernel.launch( resetThreadCount, stream );
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,
 		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-		"FitBounds_" + containerNodeParam,
+		"FitBounds_" + containerPrimNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
-	fitBoundsKernel.setArgs( { primitives, boxNodes, primNodes } );
-	fitBoundsKernel.launch( primitives.getCount(), stream );
+	fitBoundsKernel.setArgs( { header, primitives, boxNodes, primNodes } );
+	fitBoundsKernel.launch( h.m_boxNodeCount, stream );
 }
 } // namespace hiprt
