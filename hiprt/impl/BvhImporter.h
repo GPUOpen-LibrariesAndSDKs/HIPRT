@@ -233,52 +233,6 @@ void BvhImporter::update(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<std::is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
-
-	Header*		   header	 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( nodes.getCount() );
-	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
-
-	std::string containerNodeParam =
-		"<" + Traits<PrimitiveContainer>::TYPE_NAME + ", " + Traits<PrimitiveNode>::TYPE_NAME + ">";
-
-	Compiler&				 compiler = context.getCompiler();
-	std::vector<const char*> opts;
-
-	if constexpr ( std::is_same<Header, SceneHeader>::value )
-	{
-		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
-
-		primitives.setFrames( frames );
-		Kernel resetCountersAndUpdateFramesKernel = compiler.getKernel(
-			context,
-			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-			"ResetCountersAndUpdateFrames",
-			opts,
-			GET_ARG_LIST( BvhBuilderKernels ) );
-		resetCountersAndUpdateFramesKernel.setArgs( { primitives } );
-		resetCountersAndUpdateFramesKernel.launch( primitives.getFrameCount(), stream );
-	}
-	else
-	{
-		Kernel resetCountersKernel = compiler.getKernel(
-			context,
-			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-			"ResetCounters",
-			opts,
-			GET_ARG_LIST( BvhBuilderKernels ) );
-		resetCountersKernel.setArgs( { primitives.getCount(), boxNodes } );
-		resetCountersKernel.launch( primitives.getCount(), stream );
-	}
-
-	Kernel fitBoundsKernel = compiler.getKernel(
-		context,
-		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-		"FitBounds" + containerNodeParam,
-		opts,
-		GET_ARG_LIST( BvhBuilderKernels ) );
-	fitBoundsKernel.setArgs( { primitives, boxNodes, primNodes } );
-	fitBoundsKernel.launch( primitives.getCount(), stream );
+	throw std::runtime_error( "Not supported. Use a different BVH builder." );
 }
 } // namespace hiprt

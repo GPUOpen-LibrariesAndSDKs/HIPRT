@@ -150,7 +150,7 @@ struct alignas( DefaultAlignment ) TriangleNode
 	HIPRT_HOST_DEVICE float area() const { return aabb().area(); }
 
 	TrianglePair m_triPair;
-	uint32_t	 m_parentAddr = InvalidValue;
+	uint32_t	 padding;
 	uint32_t	 m_primIndex0 = InvalidValue;
 	uint32_t	 m_primIndex1 = InvalidValue;
 	uint32_t	 m_flags;
@@ -158,12 +158,11 @@ struct alignas( DefaultAlignment ) TriangleNode
 HIPRT_STATIC_ASSERT( sizeof( TriangleNode ) == 64 );
 
 // 8B
-struct alignas( 8 ) CustomNode
+struct alignas( 4 ) CustomNode
 {
-	uint32_t m_parentAddr = InvalidValue;
-	uint32_t m_primIndex  = InvalidValue;
+	uint32_t m_primIndex = InvalidValue;
 };
-HIPRT_STATIC_ASSERT( sizeof( CustomNode ) == 8 );
+HIPRT_STATIC_ASSERT( sizeof( CustomNode ) == 4 );
 
 // 64B
 struct alignas( 64 ) InstanceNode
@@ -179,12 +178,12 @@ struct alignas( 64 ) InstanceNode
 		GeomHeader*	 m_geometry;
 		SceneHeader* m_scene;
 	};
-	uint32_t m_parentAddr = InvalidValue;
+	uint32_t m_mask = InvalidValue;
 	uint32_t m_primIndex : 21;
 	uint32_t m_type : 1;
 	uint32_t m_static : 1;
 	uint32_t m_identity : 1;
-	uint32_t m_mask : 8;
+	uint32_t : 8;
 
 	HIPRT_HOST_DEVICE const BoxNode* getBoxNodes() const
 	{
