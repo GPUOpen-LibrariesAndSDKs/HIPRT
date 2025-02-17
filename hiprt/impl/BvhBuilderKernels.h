@@ -191,14 +191,22 @@ SingletonConstruction( uint32_t index, PrimitiveContainer& primitives, BoxNode* 
 		primNodes[0].m_mask		 = primitives.fetchMask( 0 );
 		primNodes[0].m_type		 = instance.type;
 		primNodes[0].m_static	 = primitives.getCount() == primitives.getFrameCount() ? 1 : 0;
+
 		if ( instance.type == hiprtInstanceTypeScene )
 			primNodes[0].m_scene = reinterpret_cast<SceneHeader*>( instance.scene );
 		else
 			primNodes[0].m_geometry = reinterpret_cast<GeomHeader*>( instance.geometry );
+
 		if ( primitives.getFrameCount() == 1 )
+		{
 			primNodes[0].m_identity = primitives.copyInvTransformMatrix( 0, primNodes[0].m_matrix ) ? 1 : 0;
+		}
 		else
+		{
 			primNodes[0].m_transform = primitives.fetchTransformHeader( 0 );
+			primNodes[0].m_identity	 = 0;
+		}
+
 		leafType = InstanceType;
 	}
 
@@ -440,6 +448,8 @@ __device__ void ResetCountersAndUpdateLeaves(
 			if ( transform.frameCount == 1 )
 				primNodes[index].m_identity =
 					primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
+			else
+				primNodes[index].m_identity = 0;
 		}
 	}
 }
@@ -650,15 +660,22 @@ __device__ void Collapse(
 					primNodes[nodeAddr].m_mask		= primitives.fetchMask( reference.m_primIndex );
 					primNodes[nodeAddr].m_type		= instance.type;
 					primNodes[nodeAddr].m_static	= transform.frameCount == 1 ? 1 : 0;
+
 					if ( instance.type == hiprtInstanceTypeScene )
 						primNodes[nodeAddr].m_scene = reinterpret_cast<SceneHeader*>( instance.scene );
 					else
 						primNodes[nodeAddr].m_geometry = reinterpret_cast<GeomHeader*>( instance.geometry );
+
 					if ( transform.frameCount == 1 )
+					{
 						primNodes[nodeAddr].m_identity =
 							primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[nodeAddr].m_matrix ) ? 1 : 0;
+					}
 					else
+					{
 						primNodes[nodeAddr].m_transform = transform;
+						primNodes[nodeAddr].m_identity	= 0;
+					}
 				}
 				done = true;
 			}
