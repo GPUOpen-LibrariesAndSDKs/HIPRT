@@ -590,7 +590,11 @@ if(PRECOMPILE)
 			DESTINATION bin)
 endif()
 
-
+# Baked headers.
+if(BAKE_COMPILED_KERNEL)
+	install(FILES ${KERNEL_HIPRT_H}
+			DESTINATION include/hiprt/impl)
+endif()
 
 # Project: Unit Test
 if(NOT NO_UNITTEST)
