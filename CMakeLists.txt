@@ -503,7 +503,7 @@ if ( BAKE_COMPILED_KERNEL )
 
 	# Create the 'bake_compiled_kernels' project
 	add_custom_target(bake_compiled_kernels ALL
-		DEPENDS ${KERNEL_HIPRT_H} ${KERNEL_OROCHI_H}
+		DEPENDS ${KERNEL_HIPRT_H} ${KERNEL_OROCHI_H} precompile_kernels
 	)
 
 	add_dependencies(${HIPRT_NAME} precompile_kernels bake_compiled_kernels)
