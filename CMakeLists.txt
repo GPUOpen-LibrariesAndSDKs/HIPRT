@@ -585,10 +585,10 @@ install(FILES ${HIPRT_ORO_HEADERS}
 		DESTINATION include/contrib/Orochi/ParallelPrimitives)
 
 # add hipfb files
-file(GLOB HIPRT_HIPFB_FILES "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/*.hipfb")
-install(FILES ${HIPRT_HIPFB_FILES}
-		DESTINATION bin)
-
+if(PRECOMPILE)
+	install(FILES ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP}
+			DESTINATION bin)
+endif()
 
 
 
