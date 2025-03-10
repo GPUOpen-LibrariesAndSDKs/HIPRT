@@ -27,63 +27,47 @@
 #include <iostream>
 #include <numeric>
 
-// if ORO_PP_LOAD_FROM_STRING &&     ORO_PRECOMPILED -> we load the precompiled/baked kernels.
-// if ORO_PP_LOAD_FROM_STRING && NOT ORO_PRECOMPILED -> we load the baked source code kernels (from Kernels.h / KernelArgs.h)
-#if !defined( ORO_PRECOMPILED ) && defined( ORO_PP_LOAD_FROM_STRING )
+#if defined( ORO_PP_LOAD_FROM_STRING )
+
 // Note: the include order must be in this particular form.
 // clang-format off
 #include <ParallelPrimitives/cache/Kernels.h>
 #include <ParallelPrimitives/cache/KernelArgs.h>
 // clang-format on
-#else
-// if Kernels.h / KernelArgs.h are not included, declare nullptr strings
-static const char* hip_RadixSortKernels = nullptr;
-namespace hip
-{
-static const char** RadixSortKernelsArgs = nullptr;
-static const char** RadixSortKernelsIncludes = nullptr;
-}
 #endif
 
 #if defined( __GNUC__ )
 #include <dlfcn.h>
 #endif
 
-#if defined( ORO_PRECOMPILED ) && defined( ORO_PP_LOAD_FROM_STRING ) 
+namespace
+{
+
+#if defined( ORO_BAKE_COMPILED_KERNEL )
+constexpr auto usePrecompiledAndBakedKernel = true;
 #include <ParallelPrimitives/cache/oro_compiled_kernels.h> // generate this header with 'convert_binary_to_array.py'
 #else
+constexpr auto usePrecompiledAndBakedKernel = false;
 const unsigned char oro_compiled_kernels_h[] = "";
 const size_t oro_compiled_kernels_h_size = 0;
 #endif
 
-namespace
-{
-
-// if those 2 preprocessors are enabled, this activates the 'usePrecompiledAndBakedKernel' mode.
-#if defined( ORO_PRECOMPILED ) && defined( ORO_PP_LOAD_FROM_STRING ) 
-	
-	// this flag means that we bake the precompiled kernels
-	constexpr auto usePrecompiledAndBakedKernel = true;
-
-	constexpr auto useBitCode = false;
-	constexpr auto useBakeKernel = false;
-
+#if defined( ORO_PRECOMPILED )
+constexpr auto useBitCode = true;
 #else
+constexpr auto useBitCode = false;
+#endif
 
-	constexpr auto usePrecompiledAndBakedKernel = false;
-
-	#if defined( ORO_PRECOMPILED )
-	constexpr auto useBitCode = true; // this flag means we use the bitcode file
-	#else
-	constexpr auto useBitCode = false;
-	#endif
-
-	#if defined( ORO_PP_LOAD_FROM_STRING )
-	constexpr auto useBakeKernel = true; // this flag means we use the HIP source code embeded in the binary ( as a string ) 
-	#else
-	constexpr auto useBakeKernel = false;
-	#endif
-
+#if defined( ORO_PP_LOAD_FROM_STRING )
+constexpr auto useBakeKernel = true;
+#else
+constexpr auto useBakeKernel = false;
+static const char* hip_RadixSortKernels = nullptr;
+namespace hip
+{
+static const char** RadixSortKernelsArgs = nullptr;
+static const char** RadixSortKernelsIncludes = nullptr;
+} // namespace hip
 #endif
 
 static_assert( !( useBitCode && useBakeKernel ), "useBitCode and useBakeKernel cannot coexist" );
@@ -166,7 +150,7 @@ void RadixSort::compileKernels( const std::string& kernelPath, const std::string
 
 	std::string binaryPath{};
 	std::string log{};
-	if constexpr( useBitCode )
+	if constexpr( usePrecompiledAndBakedKernel || useBitCode )
 	{
 		const bool isAmd = oroGetCurAPI( 0 ) == ORO_API_HIP;
 		binaryPath = getCurrentDir();
@@ -240,7 +224,7 @@ void RadixSort::compileKernels( const std::string& kernelPath, const std::string
 
 	for( const auto& record : records )
 	{
-		if constexpr( usePrecompiledAndBakedKernel )
+		if constexpr ( usePrecompiledAndBakedKernel )
 		{
 			oroFunctions[record.kernelType] = m_oroutils.getFunctionFromPrecompiledBinary_asData(oro_compiled_kernels_h, oro_compiled_kernels_h_size, record.kernelName.c_str() );
 		}
@@ -262,8 +246,6 @@ void RadixSort::compileKernels( const std::string& kernelPath, const std::string
 			printKernelInfo( record.kernelName, oroFunctions[record.kernelType] );
 		}
 	}
-
-	return;
 }
 
 int RadixSort::calculateWGsToExecute( const int blockSize ) const noexcept
