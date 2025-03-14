@@ -534,7 +534,7 @@ endif()
 
 if ( BAKE_COMPILED_KERNEL )
 	# enable the 'BAKE_COMPILED_KERNEL' on Orochi:  this mode is activated by adding those 2 defines.
-	target_compile_definitions(${HIPRT_NAME} PRIVATE ORO_PP_LOAD_FROM_STRING ORO_PRECOMPILED)
+	target_compile_definitions(${HIPRT_NAME} PRIVATE ORO_BAKE_COMPILED_KERNEL)
 	
 	#enable the 'BAKE_COMPILED_KERNEL' on HIPRT: 
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BAKE_COMPILED_KERNEL )
