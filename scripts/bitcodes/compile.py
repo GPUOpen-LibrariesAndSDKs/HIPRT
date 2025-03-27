@@ -98,6 +98,10 @@ def compileAmd():
             'gfx1010', 'gfx1011', 'gfx1012', 'gfx1013',  # Navi1
             'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx940', 'gfx941', 'gfx942']  # Vega
     
+
+    if hip_sdk_version_num >= 63:
+        gpus_archs.append('gfx1152')
+
     if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
         gpus.append('gfx1200')
         gpus.append('gfx1201')
