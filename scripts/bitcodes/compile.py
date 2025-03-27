@@ -100,7 +100,7 @@ def compileAmd():
     
 
     if hip_sdk_version_num >= 63:
-        gpus_archs.append('gfx1152')
+        gpus.append('gfx1152')
 
     if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
         gpus.append('gfx1200')
