@@ -26,6 +26,7 @@
 #include <cassert>
 #include <iostream>
 #include <numeric>
+#include <vector>
 
 // if ORO_PP_LOAD_FROM_STRING &&     ORO_PRECOMPILED -> we load the precompiled/baked kernels.
 // if ORO_PP_LOAD_FROM_STRING && NOT ORO_PRECOMPILED -> we load the baked source code kernels (from Kernels.h / KernelArgs.h)
@@ -242,7 +243,16 @@ void RadixSort::compileKernels( const std::string& kernelPath, const std::string
 	{
 		if constexpr( usePrecompiledAndBakedKernel )
 		{
-			oroFunctions[record.kernelType] = m_oroutils.getFunctionFromPrecompiledBinary_asData(oro_compiled_kernels_h, oro_compiled_kernels_h_size, record.kernelName.c_str() );
+			// Copy the data into a heap memory.
+			//
+			// Otherwise it seems to be causing issues with access from the HIP SDK when the application binary is
+			// located in a directory with space in it.
+			//
+			// The speculation is that static global memory can not really be megabytes, and access to it requires
+			// mapping of the original file, and this is where things start to go wrong.
+			std::vector<unsigned char> binary(oro_compiled_kernels_h, oro_compiled_kernels_h + oro_compiled_kernels_h_size);
+
+			oroFunctions[record.kernelType] = m_oroutils.getFunctionFromPrecompiledBinary_asData(binary.data(), binary.size(), record.kernelName.c_str() );
 		}
 		else if constexpr( useBakeKernel )
 		{
