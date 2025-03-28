@@ -585,7 +585,7 @@ install(FILES ${HIPRT_ORO_HEADERS}
 		DESTINATION include/contrib/Orochi/ParallelPrimitives)
 
 # add hipfb files
-if(PRECOMPILE)
+if(PRECOMPILE AND NOT BAKE_COMPILED_KERNEL)
 	install(FILES ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP}
 			DESTINATION bin)
 endif()
