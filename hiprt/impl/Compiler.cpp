@@ -43,6 +43,7 @@ constexpr auto UseBakedCompiledKernel = true;
 #else
 constexpr auto		 UseBakedCompiledKernel = false;
 const unsigned char* bvh_build_array_h		= nullptr; // if bvh_build_array.h is not used, declare a nullptr precompiled data.
+const size_t		 bvh_build_array_h_size = 0;
 #endif
 
 namespace
