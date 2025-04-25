@@ -565,6 +565,9 @@ if ( BAKE_COMPILED_KERNEL )
 			PUBLIC
 			contrib/zstd/lib
 		)
+		
+		set_target_properties(zstd_embedded PROPERTIES POSITION_INDEPENDENT_CODE ON)  # -fPIC
+		target_compile_definitions(zstd_embedded PRIVATE ZSTD_DISABLE_ASM)  # disable ASM for easier build
 
 		#  Link against zstd_embedded
 		target_link_libraries(${HIPRT_NAME}   zstd_embedded )

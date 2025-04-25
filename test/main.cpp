@@ -2752,11 +2752,6 @@ int main( int argc, const char* argv[] )
 		parsedArgs.m_usePrecompiledBitcodes = true;
 	}
 
-// precompiled bitcode is only tested on windows for now
-#if defined( __GNUC__ )
-	parsedArgs.m_usePrecompiledBitcodes = false;
-#endif
-
 	::testing::AddGlobalTestEnvironment( new InitCommandlineArgs( parsedArgs ) );
 	int ret = RUN_ALL_TESTS();
 	return ret;
