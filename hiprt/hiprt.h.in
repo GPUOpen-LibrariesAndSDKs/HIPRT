@@ -40,6 +40,9 @@
 extern "C" {
 #endif
 
+#if defined( HIPRT_STATIC_LIBRARY )
+#define HIPRT_API
+#else
 #if defined( _MSC_VER )
 #ifdef HIPRT_EXPORTS
 #define HIPRT_API __declspec( dllexport )
@@ -55,6 +58,7 @@ extern "C" {
 #else
 #define HIPRT_API
 #pragma warning Unknown dynamic link import / export semantics.
+#endif
 #endif
 
 /** \brief Creates HIPRT API context.

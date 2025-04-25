@@ -69,7 +69,11 @@ class Utility
 
 	static std::filesystem::path getRootDir()
 	{
-		std::string val = getEnvVariable( "HIPRT_PATH" );
+#if defined( HIPRT_ROOT_DIRECTORY )
+		std::string val = HIPRT_ROOT_DIRECTORY;
+#else
+		std::string		  val = getEnvVariable( "HIPRT_PATH" );
+#endif
 		if ( val.empty() ) val = "..";
 		return std::filesystem::path( val );
 	}

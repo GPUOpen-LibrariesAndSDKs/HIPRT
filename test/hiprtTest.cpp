@@ -814,10 +814,21 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 				f.read( reinterpret_cast<char*>( dst.data() ), size );
 				f.close();
 			}
+			else
+			{
+				std::cout << "FAILED to open file: " << path.string().c_str() << std::endl;
+			}
 		};
 
-		std::filesystem::path path =
-			( getRootDir() / "dist/bin/Release/hiprt" ).string() + HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
+		std::filesystem::path path = ( getRootDir() / "dist/bin" /
+#ifdef _DEBUG
+									   "Debug"
+#else
+									   "Release"
+#endif
+									   / "hiprt" )
+										 .string() +
+									 HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
 #if !defined( __GNUC__ )
 		path += "precompiled_bitcode_win.hipfb";
 #else

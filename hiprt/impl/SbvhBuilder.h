@@ -449,7 +449,7 @@ void SbvhBuilder::build(
 
 	Kernel collapseKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
 		"Collapse_" + containerNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );

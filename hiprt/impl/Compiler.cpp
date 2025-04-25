@@ -44,6 +44,8 @@ constexpr auto UseBakedCompiledKernel = true;
 constexpr auto		 UseBakedCompiledKernel = false;
 const unsigned char* bvh_build_array_h		= nullptr; // if bvh_build_array.h is not used, declare a nullptr precompiled data.
 const size_t		 bvh_build_array_h_size = 0;
+const size_t		 bvh_build_array_h_size_uncompressed = 0;
+const bool			 bvh_build_array_h_isCompressed		 = false;
 #endif
 
 namespace
@@ -51,19 +53,19 @@ namespace
 #if defined( HIPRT_BITCODE_LINKING )
 constexpr auto UseBitcode = true;
 #else
-constexpr auto		 UseBitcode				= false;
+constexpr auto		 UseBitcode							 = false;
 #endif
 
 #if defined( HIPRT_LOAD_FROM_STRING )
 constexpr auto UseBakedCode = true;
 #else
-constexpr auto		 UseBakedCode			= false;
+constexpr auto		 UseBakedCode						 = false;
 #endif
 
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
 constexpr auto BakedCodeIsGenerated = true;
 #else
-constexpr auto		 BakedCodeIsGenerated	= false;
+constexpr auto		 BakedCodeIsGenerated				 = false;
 #endif
 HIPRT_STATIC_ASSERT( !UseBakedCode || BakedCodeIsGenerated );
 } // namespace
@@ -568,7 +570,7 @@ std::filesystem::path Compiler::getBitcodePath( bool amd )
 #if !defined( __GNUC__ )
 		filename += "_amd_lib_win.bc";
 #else
-		filename += "_amd_lib_linux.bc";
+		 filename += "_amd_lib_linux.bc";
 #endif
 	else
 		filename += "_nv_lib.fatbin";
@@ -777,14 +779,13 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 			// kernel.
 			if constexpr ( UseBakedCompiledKernel )
 			{
-				// Copy the data into a heap memory.
-				//
-				// Otherwise it seems to be causing issues with access from the HIP SDK when the application binary is
-				// located in a directory with space in it.
-				//
-				// The speculation is that static global memory can not really be megabytes, and access to it requires
-				// mapping of the original file, and this is where things start to go wrong.
-				std::vector<char> binary(bvh_build_array_h, bvh_build_array_h + bvh_build_array_h_size);
+				std::vector<unsigned char> binary;
+				OrochiUtils::HandlePrecompiled(
+					binary,
+					bvh_build_array_h,
+					bvh_build_array_h_size,
+					bvh_build_array_h_isCompressed ? std::optional<size_t>{ bvh_build_array_h_size_uncompressed }
+												   : std::nullopt );
 				checkOro( oroModuleLoadData( &module, binary.data() ) );
 			}
 			else

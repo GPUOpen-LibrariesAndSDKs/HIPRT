@@ -178,8 +178,7 @@ constexpr uint32_t BranchingFactor			 = 4u;
 constexpr uint32_t DefaultAlignment			 = 64u;
 
 #ifdef __KERNELCC__
-#if __gfx900__ || __gfx902__ || __gfx904__ || __gfx906__ || __gfx908__ || __gfx909__ || __gfx90a__ || __gfx90c__ || \
-	__gfx940__ || __gfx941__ || __gfx942__
+#if __gfx900__ || __gfx902__ || __gfx904__ || __gfx906__ || __gfx908__ || __gfx909__ || __gfx90a__ || __gfx90c__ || __gfx942__
 constexpr uint32_t WarpSize = 64;
 #else
 constexpr uint32_t WarpSize = 32;

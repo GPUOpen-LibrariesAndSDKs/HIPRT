@@ -1,3 +1,4 @@
+include "./tools/functions.lua"
 
 newoption {
     trigger = "bakeKernel",
@@ -29,223 +30,14 @@ newoption {
     description = "Don't encrypt kernel source and binaries",
 }
 
-function copydir(src_dir, dst_dir, filter, single_dst_dir)
-    filter = filter or "**"
-    src_dir = src_dir .. "/"
-    print('copy "' .. src_dir .. filter .. '" to "' .. dst_dir .. '".')
-    dst_dir = dst_dir .. "/"
-    local dir = path.rebase(".", path.getabsolute("."), src_dir) -- root dir, relative from src_dir
-
-    os.chdir(src_dir) -- change current directory to src_dir
-    local matches = os.matchfiles(filter)
-    os.chdir(dir) -- change current directory back to root
-
-    local counter = 0
-    for k, v in ipairs(matches) do
-        local target = iif(single_dst_dir, path.getname(v), v)
-        --make sure, that directory exists or os.copyfile() fails
-        os.mkdir(path.getdirectory(dst_dir .. target))
-        if os.copyfile(src_dir .. v, dst_dir .. target) then
-            counter = counter + 1
-        end
-    end
-
-    if counter == #matches then
-        print(counter .. " files copied.")
-        return true
-    else
-        print("Error: " .. counter .. "/" .. #matches .. " files copied.")
-        return nil
-    end
-end
-
-function file_exists(file)
-    local f = io.open(file, "rb")
-    if f then f:close() end
-    return f ~= nil
-  end
-  
-function lines_from(file)
-    if not file_exists(file) then return {} end
-    local lines = {}
-    for line in io.lines(file) do 
-      lines[#lines + 1] = line
-    end
-    return lines
-end
-
-function read_file(file)
-    local lines = lines_from(file)
-    str = ''
-    for num, line in pairs(lines) do
-        str = str..line.."\n"
-    end
-    return str
-end
-
-function get_version(file)
-    local lines = lines_from(file)
-    major = tonumber(lines[1])
-    minor = tonumber(lines[2])
-    patch = "0x"..(lines[3])
-    return major, minor, patch
-end
-
-
--- find the path of 'Hipcc' from PATH
--- return nil if not exist
--- only works for linux ( for now )
-function findHipccPath()
-
-	if os.host() ~= "linux" then
-		return nil
-	end
-
-	local cmd = 'which hipcc 2>/dev/null'
-
-	local f = io.popen(cmd)
-	local hipccPath = f:read("*a")
-	f:close()
-
-	if hipccPath == nil or hipccPath == '' then
-		print("hipccPath nil");
-		return nil
-	else
-		print("-- hipccPath = " .. hipccPath );
-		-- Remove any trailing whitespace
-		hipccPath = hipccPath:gsub("%s+$", "")
-
-		-- Extract the directory from the full path
-		local dir = hipccPath:match("(.+)/[^/]+$")
-		return dir
-	end
-end
-
-
-
-function get_hip_sdk_verion()
-	
-	if os.ishost("windows") then
-		root = '.\\'
-	end
-	
-	hipCommand = 'hipcc'
-	HIP_PATH = os.getenv("HIP_PATH")
-	PATH = os.getenv("PATH")
-	
-	
-	
-	hipccFromPATH = findHipccPath()
-	if fromPATH ~= nil then
-		print( "hipcc found from PATH: ".. hipccFromPATH )
-	end
-	
-	
-	
-	if os.ishost("windows") then
-
-
-			if not HIP_PATH then
-				-- if the HIP_PATH env var is not set, we assume there is a 'hipSdk' folder at the root of the project.
-				HIP_PATH = path.getabsolute(root .. 'hipSdk') -- convert the path to absolute
-			end
-		
-            if string.sub(HIP_PATH, -1, -1) == '\\' or string.sub(HIP_PATH, -1, -1) == '/' then
-                HIP_PATH = string.sub(HIP_PATH, 1, -2)
-            end
-			
-			-- HIP_PATH is expected to look like:   C:\Program Files\AMD\ROCm\5.7
-			print("using HIP_PATH = " .. HIP_PATH)
-			
-			if os.isfile(HIP_PATH .. '\\bin\\hipcc.exe') then
-				-- in newer version of HIP SDK (>= 6.3), we are using 'hipcc.exe --version' to check the version
-				-- print("using hipcc.exe to get the version.")
-				hipCommand = '\"' .. HIP_PATH..'\\bin\\hipcc.exe\"'
-			elseif os.isfile(HIP_PATH .. '\\bin\\hipcc') then
-				-- in older version of HIP SDK, we are using 'perl hipcc --version' to check the version
-				-- print("using perl hipcc to get the version.")
-				hipCommand = '\"' .. HIP_PATH..'\\bin\\hipcc\"'
-			else
-				print("ERROR: hipcc.exe or hipcc not found in the SDK path.")
-				hipCommand = 'hipcc'
-			end
-	
-	-- for LINUX
-	else
-	
-		if not HIP_PATH then
-			if hipccFromPATH ~= nil then
-				hipCommand = 'hipcc'
-			end
-			
-		-- if HIP_PATH is set, we take the path from it.
-		else
-			if string.sub(HIP_PATH, -1, -1) == '\\' or string.sub(HIP_PATH, -1, -1) == '/' then
-				HIP_PATH = string.sub(HIP_PATH, 1, -2)
-			end
-			
-			hipCommand = '\"' .. HIP_PATH..'/bin/hipcc\"'
-		end
-		
-	end
-	
-	
-	tmpFile = os.tmpname ()
-	fullcommand = hipCommand .. " --version > " .. tmpFile
-	print("Executing: " .. fullcommand);
-	os.execute (fullcommand)
-	
-	local version
-	for line in io.lines (tmpFile) do
-		print (line)
-		version =  string.sub(line, string.find(line, "%d.%d"))
-		break
-	end
-	os.remove (tmpFile)
-
-    if version == nil or version == '' then
-        version = "HIP_SDK_NOT_FOUND"
-    end
-
-	return version, HIP_PATH
-end
-
-
-
-hipSdkVersion, hipFinalPath = get_hip_sdk_verion()
-print( "HIP_VERSION_STR: "..hipSdkVersion )
-if hipFinalPath ~= nil then
-	print( "HIP SDK path: " .. hipFinalPath )
+hip_sdk_version, hip_final_path = get_hip_sdk_verion()
+print( "HIP_VERSION_STR: "..hip_sdk_version )
+if hip_final_path ~= nil then
+	print( "HIP SDK path: " .. hip_final_path )
 else
 	print( "no HIP SDK folder found." )
 end
 
-function write_version_info(in_file, header_file, version_file)
-	if not file_exists(version_file) then
-		print("Version.txt file missing!\n")
-		return
-	end
-	if not file_exists(in_file) then 
-		print(string.format("%s file is missing!\n", in_file))
-		return
-	end
-	
-	HIPRT_MAJOR_VERSION, HIPRT_MINOR_VERSION, HIPRT_PATCH_VERSION = get_version(version_file)
-	HIPRT_VERSION = HIPRT_MAJOR_VERSION * 1000 + HIPRT_MINOR_VERSION 
-	HIPRT_API_VERSION = HIPRT_VERSION 
-	HIPRT_VERSION_STR = string.format("%05d", HIPRT_VERSION)
-	print( "HIPRT_API_VERSION: "..HIPRT_VERSION_STR .."_".. HIPRT_PATCH_VERSION )
-	header = read_file(in_file)
-	header = header:gsub("@HIPRT_MAJOR_VERSION@", HIPRT_MAJOR_VERSION)
-	header = header:gsub("@HIPRT_MINOR_VERSION@", HIPRT_MINOR_VERSION)
-	header = header:gsub("@HIPRT_PATCH_VERSION@", HIPRT_PATCH_VERSION)
-	header = header:gsub("@HIPRT_API_VERSION@", HIPRT_API_VERSION)
-	header = header:gsub("@HIPRT_VERSION_STR@", "\""..HIPRT_VERSION_STR.."\"")
-	header = header:gsub("@HIP_VERSION_STR@", "\""..hipSdkVersion.."\"")
-	file = io.open(header_file, "w")
-	file:write(header)
-	file:close()
-end
 workspace "hiprt"
     configurations {"Debug", "Release", "RelWithDebInfo", "DebugGpu" }
     language "C++"
@@ -289,14 +81,17 @@ workspace "hiprt"
     -- enable CUDA if possible
     include "./contrib/Orochi/Orochi/enable_cuew"
 
-
     targetdir "dist/bin/%{cfg.buildcfg}"    
     location "build/"
     
-    write_version_info("./hiprt/hiprt.h.in", "./hiprt/hiprt.h", "version.txt")
-	write_version_info("./hiprt/hiprtew.h.in", "./hiprt/hiprtew.h", "version.txt")
+    write_version_info("./hiprt/hiprt.h.in", "./hiprt/hiprt.h", "version.txt", hip_sdk_version)
+	write_version_info("./hiprt/hiprtew.h.in", "./hiprt/hiprtew.h", "version.txt", hip_sdk_version)
 
-    HIPRT_NAME = "hiprt"..HIPRT_VERSION_STR
+	if not _OPTIONS["noUnittest"] then
+		startproject "unittest"
+	end
+
+    HIPRT_NAME = get_hiprt_library_name("version.txt")
     project( HIPRT_NAME )
         cppdialect "C++17"
         kind "SharedLib"
@@ -306,14 +101,14 @@ workspace "hiprt"
         defines {"ORO_PRECOMPILED"}
 	end
 
-    if not _OPTIONS["no-encrypt"] then
+    if not _OPTIONS["noEncrypt"] then
         defines {"HIPRT_ENCRYPT"}
     end
 
     if _OPTIONS["precompile"] then
 		cmdExec = "cd ./scripts/bitcodes/ && python compile.py"
-		if hipFinalPath ~= nil then
-			cmdExec = cmdExec .. " --hipSdkPath \"" .. hipFinalPath .. "\""
+		if hip_final_path ~= nil then
+			cmdExec = cmdExec .. " --hipSdkPath \"" .. hip_final_path .. "\""
 		end
 		print("Executing: " .. cmdExec);
         os.execute( cmdExec )
@@ -339,15 +134,13 @@ workspace "hiprt"
     end
 
     externalincludedirs {"./"}
-    files {"hiprt/**.h", "hiprt/**.cpp", "hiprt/**.inl"}
-    removefiles {"hiprt/bitcodes/**"}
+    files {"hiprt/**.h", "hiprt/**.cpp"}
     externalincludedirs { "./contrib/Orochi/" }
     files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
     files {"contrib/Orochi/contrib/cuew/**.h", "contrib/Orochi/contrib/cuew/**.cpp"}
     files {"contrib/Orochi/contrib/hipew/**.h", "contrib/Orochi/contrib/hipew/**.cpp"}
     files {"contrib/Orochi/ParallelPrimitives/**.h", "contrib/Orochi/ParallelPrimitives/**.cpp"}
 
-	
 	if not _OPTIONS["noUnittest"] then
 		project( "unittest" )
 			cppdialect "C++17"
