@@ -60,8 +60,10 @@ def compileScript(msg, cmd, dst):
     return_code = subprocess.call(cmd, shell=True)
     if return_code != 0:
         print(errorMessageHeader + ' executing command: ' + cmd)
+        sys.exit(1)
     elif not os.path.exists(dst):
         print(errorMessageHeader + ' The file ' + dst + ' does not exist.')
+        sys.exit(1)
     else:
         print('Compilation SUCCEEDED.')
     sys.stdout.flush()
