@@ -110,16 +110,20 @@ def compileAmd():
 
     # compile hiprt traversal code
     hiprt_lib = hiprtlibpath + 'hiprt' + hiprt_ver + '_' + hip_version + '_amd_lib' + postfix
-    
+ 
+    if isLinux():
+        osDef = "-DHIPCC_OS_LINUX"
+    else:
+        osDef = "-DHIPCC_OS_WINDOWS" 
 
     # compile custom function table
     hiprt_custom_func = 'hiprt' + hiprt_ver + '_' + hip_version + '_custom_func_table.bc'
-    cmd = hipccpath + ' -O3 -std=c++17 ' + targets + ' -fgpu-rdc -c --gpu-bundle-output -c -emit-llvm -I../../ -ffast-math ../../test/bitcodes/custom_func_table.cpp -parallel-jobs=15 -o ' + hiprt_custom_func
+    cmd = hipccpath + ' -O3 -std=c++17 ' + targets + ' -fgpu-rdc -c --gpu-bundle-output -c -emit-llvm -I../../ ' + osDef +  ' -ffast-math ../../test/bitcodes/custom_func_table.cpp -parallel-jobs=15 -o ' + hiprt_custom_func
     compileScript('compiling ', cmd, hiprt_custom_func)
 
     # compiling unit test
     hiprt_unit_test = 'hiprt' + hiprt_ver + '_' + hip_version + '_unit_test'+ postfix
-    cmd = hipccpath + ' -O3 -std=c++17 ' + targets + ' -fgpu-rdc -c --gpu-bundle-output -c -emit-llvm -I../../ -ffast-math -D BLOCK_SIZE=64 -D SHARED_STACK_SIZE=16 ../../test/bitcodes/unit_test.cpp -parallel-jobs=15 -o ' + hiprt_unit_test
+    cmd = hipccpath + ' -O3 -std=c++17 ' + targets + ' -fgpu-rdc -c --gpu-bundle-output -c -emit-llvm -I../../ ' + osDef +  ' -ffast-math -D BLOCK_SIZE=64 -D SHARED_STACK_SIZE=16 ../../test/bitcodes/unit_test.cpp -parallel-jobs=15 -o ' + hiprt_unit_test
     compileScript('compiling ', cmd, hiprt_unit_test)
 
     # linking
