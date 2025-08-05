@@ -32,19 +32,21 @@ DECLARE_TYPE_TRAITS( hiprtGeometryBuildInput );
 DECLARE_TYPE_TRAITS( hiprtSceneBuildInput );
 #endif
 
-size_t BatchBuilder::getStorageBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+size_t BatchBuilder::getStorageBufferSize(
+	Context& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	  = getPrimCount( buildInput );
-	const size_t primNodeSize = getPrimNodeSize( buildInput );
-	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
-	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
+	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, context.getRtip(), primCount );
+	return getGeometryStorageBufferSize(
+		primCount, boxNodeCount, getPrimNodeSize( buildInput, context.getTriangleNodeSize() ), context.getBoxNodeSize() );
 }
 
-size_t BatchBuilder::getStorageBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+size_t BatchBuilder::getStorageBufferSize(
+	Context& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
-	const size_t frameCount	  = buildInput.frameCount;
 	const size_t primCount	  = buildInput.instanceCount;
-	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
-	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
+	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, context.getRtip(), primCount );
+	return getSceneStorageBufferSize(
+		primCount, primCount, boxNodeCount, context.getInstanceNodeSize(), context.getBoxNodeSize(), buildInput.frameCount );
 }
 } // namespace hiprt

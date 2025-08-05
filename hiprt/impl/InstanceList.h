@@ -24,7 +24,7 @@
 
 #pragma once
 #include <hiprt/hiprt_types.h>
-#include <hiprt/impl/BvhNode.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/Transform.h>
 
 namespace hiprt
@@ -33,8 +33,6 @@ template <typename ApiFrame>
 class InstanceList
 {
   public:
-	static constexpr uint32_t StackSize = 2;
-
 	HIPRT_HOST_DEVICE InstanceList( const hiprtSceneBuildInput& input )
 		: m_instanceCount( input.instanceCount ), m_frameCount( input.frameCount )
 	{
@@ -44,78 +42,159 @@ class InstanceList
 		m_masks			   = reinterpret_cast<uint32_t*>( input.instanceMasks );
 	}
 
-	HIPRT_HOST_DEVICE Aabb fetchAabb( uint32_t index ) const
+#if defined( __KERNELCC__ )
+	HIPRT_DEVICE InstanceNode fetchPrimNode( const uint32_t index ) const
 	{
-		hiprtTransformHeader header = fetchTransformHeader( index );
-		Transform			 t( m_frames, header.frameIndex, header.frameCount );
-		hiprtInstance		 instance = fetchInstance( index );
-		const BoxNode*		 boxNodes = instance.type == hiprtInstanceTypeScene
-											? reinterpret_cast<SceneHeader*>( instance.scene )->m_boxNodes
-											: reinterpret_cast<GeomHeader*>( instance.geometry )->m_boxNodes;
+		const Frame				   frame	 = fetchFrame( index );
+		const hiprtInstance		   instance	 = fetchInstance( index );
+		const hiprtTransformHeader transform = fetchTransformHeader( index );
+		const uint32_t			   mask		 = fetchMask( index );
 
-		if constexpr ( StackSize == 0 )
+		InstanceNode instanceNode{};
+		if constexpr ( is_same<InstanceNode, HwInstanceNode>::value )
 		{
-			Aabb aabb = boxNodes->aabb();
-			return t.motionBounds( aabb );
+			const BoxNode root = instance.type == hiprtInstanceTypeScene
+									 ? reinterpret_cast<SceneHeader*>( instance.scene )->m_boxNodes[0]
+									 : reinterpret_cast<GeomHeader*>( instance.geometry )->m_boxNodes[0];
+
+			Aabb	 childBoxes[BranchingFactor];
+			uint32_t childIndices[BranchingFactor];
+			uint32_t childCount = root.getChildCount();
+
+			for ( uint32_t i = 0; i < childCount; ++i )
+				childBoxes[i] = root.getChildBox( i );
+
+			while ( childCount > HwInstanceNode::BranchingFactor )
+			{
+				float	 minArea = FltMax;
+				uint32_t min_i	 = InvalidValue;
+				uint32_t min_j	 = InvalidValue;
+
+				for ( uint32_t i = 0; i < childCount; ++i )
+				{
+					for ( uint32_t j = i + 1; j < childCount; ++j )
+					{
+						const Aabb	box( childBoxes[i], childBoxes[j] );
+						const float area = box.area();
+						if ( minArea > area )
+						{
+							minArea = area;
+							min_i	= i;
+							min_j	= j;
+						}
+					}
+				}
+
+				childBoxes[min_i] = Aabb( childBoxes[min_i], childBoxes[min_j] );
+				childBoxes[min_j] = childBoxes[--childCount];
+			}
+
+			for ( uint32_t i = 0; i < childCount; ++i )
+				childIndices[i] = RootIndex;
+
+			instanceNode.init( index, mask, frame, instance, transform, childCount, childIndices, childBoxes );
 		}
 		else
 		{
-			uint32_t stack[StackSize == 0 ? 1 : StackSize];
-			uint32_t stackTop = 0;
-
-			Aabb aabb;
-			stack[stackTop++] = RootIndex;
-			while ( stackTop > 0 )
-			{
-				uint32_t	   nodeAddr = getNodeAddr( stack[--stackTop] );
-				const BoxNode& node		= boxNodes[nodeAddr];
-
-				if ( node.m_childIndex0 != InvalidValue )
-				{
-					if ( stackTop < StackSize && node.getChildType( 0 ) == BoxType )
-						stack[stackTop++] = node.m_childIndex0;
-					else
-						aabb.grow( t.motionBounds( node.m_box0 ) );
-				}
-
-				if ( node.m_childIndex1 != InvalidValue )
-				{
-					if ( stackTop < StackSize && node.getChildType( 1 ) == BoxType )
-						stack[stackTop++] = node.m_childIndex1;
-					else
-						aabb.grow( t.motionBounds( node.m_box1 ) );
-				}
-
-				if ( node.m_childIndex2 != InvalidValue )
-				{
-					if ( stackTop < StackSize && node.getChildType( 2 ) == BoxType )
-						stack[stackTop++] = node.m_childIndex2;
-					else
-						aabb.grow( t.motionBounds( node.m_box2 ) );
-				}
-
-				if ( node.m_childIndex3 != InvalidValue )
-				{
-					if ( stackTop < StackSize && node.getChildType( 3 ) == BoxType )
-						stack[stackTop++] = node.m_childIndex3;
-					else
-						aabb.grow( t.motionBounds( node.m_box3 ) );
-				}
-			}
-
-			return aabb;
+			instanceNode.init( index, mask, frame, instance, transform, InvalidValue, nullptr, nullptr );
 		}
+
+		return instanceNode;
 	}
 
-	HIPRT_HOST_DEVICE float3 fetchCenter( uint32_t index ) const { return fetchAabb( index ).center(); }
+	HIPRT_DEVICE Aabb fetchAabb( const uint32_t index ) const
+	{
+		const hiprtTransformHeader header = fetchTransformHeader( index );
+		const Transform			   t( m_frames, header.frameIndex, header.frameCount );
+		const hiprtInstance		   instance = fetchInstance( index );
+		const BoxNode*			   boxNodes = instance.type == hiprtInstanceTypeScene
+												  ? reinterpret_cast<SceneHeader*>( instance.scene )->m_boxNodes
+												  : reinterpret_cast<GeomHeader*>( instance.geometry )->m_boxNodes;
+		const BoxNode&			   root		= boxNodes[0];
 
-	HIPRT_HOST_DEVICE uint32_t fetchMask( uint32_t index ) const
+		Aabb aabb;
+		for ( uint32_t i = 0; i < root.getChildCount(); ++i )
+		{
+			const Aabb childBox = root.getChildBox( i );
+			aabb.grow( t.motionBounds( childBox ) );
+		}
+		return aabb;
+	}
+
+	HIPRT_DEVICE float3 fetchCenter( const uint32_t index ) const { return fetchAabb( index ).center(); }
+
+	HIPRT_DEVICE void split(
+		const uint32_t index, const uint32_t axis, const float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
+	{
+		const hiprtTransformHeader header = fetchTransformHeader( index );
+		const Transform			   t( m_frames, header.frameIndex, header.frameCount );
+		const hiprtInstance		   instance = fetchInstance( index );
+		const BoxNode*			   boxNodes = instance.type == hiprtInstanceTypeScene
+												  ? reinterpret_cast<SceneHeader*>( instance.scene )->m_boxNodes
+												  : reinterpret_cast<GeomHeader*>( instance.geometry )->m_boxNodes;
+		const BoxNode&			   root		= boxNodes[0];
+
+		leftBox = rightBox = Aabb();
+		for ( uint32_t i = 0; i < root.getChildCount(); ++i )
+		{
+			const Aabb	childBox = t.motionBounds( root.getChildBox( i ) );
+			const float mn		 = ( &childBox.m_min.x )[axis];
+			const float mx		 = ( &childBox.m_max.x )[axis];
+			if ( position >= mx )
+			{
+				leftBox.grow( childBox );
+			}
+			else if ( position <= mn )
+			{
+				rightBox.grow( childBox );
+			}
+			else
+			{
+				Aabb leftChildBox				 = childBox;
+				Aabb rightChildBox				 = childBox;
+				( &leftChildBox.m_max.x )[axis]	 = position;
+				( &rightChildBox.m_min.x )[axis] = position;
+				leftBox.grow( leftChildBox );
+				rightBox.grow( rightChildBox );
+			}
+		}
+
+		( &leftBox.m_max.x )[axis]	= position;
+		( &rightBox.m_min.x )[axis] = position;
+		leftBox.intersect( box );
+		rightBox.intersect( box );
+	}
+
+	HIPRT_DEVICE Obb fetchObb( const uint32_t index, const uint32_t matrixIndex, const Aabb& box ) const
+	{
+		const hiprtTransformHeader header = fetchTransformHeader( index );
+		const Transform			   t( m_frames, header.frameIndex, header.frameCount );
+		const hiprtInstance		   instance = fetchInstance( index );
+		const BoxNode*			   boxNodes = instance.type == hiprtInstanceTypeScene
+												  ? reinterpret_cast<SceneHeader*>( instance.scene )->m_boxNodes
+												  : reinterpret_cast<GeomHeader*>( instance.geometry )->m_boxNodes;
+		const BoxNode&			   root		= boxNodes[0];
+
+		Obb obb( matrixIndex );
+		for ( uint32_t i = 0; i < root.getChildCount(); ++i )
+		{
+			const Aabb childBox = t.motionBounds( root.getChildBox( i ) ).intersect( box );
+			if ( childBox.valid() ) obb.grow( childBox );
+		}
+
+		if ( !obb.valid() ) obb.grow( box );
+
+		return obb;
+	}
+#endif
+
+	HIPRT_HOST_DEVICE uint32_t fetchMask( const uint32_t index ) const
 	{
 		if ( m_masks == nullptr ) return FullRayMask;
 		return m_masks[index];
 	}
 
-	HIPRT_HOST_DEVICE hiprtInstance fetchInstance( uint32_t index ) const { return m_instances[index]; }
+	HIPRT_HOST_DEVICE hiprtInstance fetchInstance( const uint32_t index ) const { return m_instances[index]; }
 
 	HIPRT_HOST_DEVICE hiprtTransformHeader fetchTransformHeader( uint32_t index ) const
 	{
@@ -123,23 +202,21 @@ class InstanceList
 		return m_transformHeaders[index];
 	}
 
-	HIPRT_HOST_DEVICE Frame fetchFrame( uint32_t index ) const
+	HIPRT_HOST_DEVICE Frame fetchFrame( const uint32_t index ) const
 	{
 		if ( m_frameCount == 0 || m_apiFrames == nullptr || m_frames == nullptr ) return Frame();
 		return m_frames[index];
 	}
 
-	HIPRT_HOST_DEVICE void convertFrame( uint32_t index )
+	HIPRT_HOST_DEVICE void convertFrame( const uint32_t index )
 	{
 		if ( m_frameCount > 0 && m_apiFrames != nullptr && m_frames != nullptr ) m_frames[index] = m_apiFrames[index].convert();
 	}
 
-	HIPRT_HOST_DEVICE bool copyInvTransformMatrix( uint32_t index, float ( &matrix )[3][4] ) const
+	HIPRT_HOST_DEVICE bool copyInvTransformMatrix( const uint32_t index, float ( &matrix )[3][4] ) const
 	{
-		Frame		frame		   = fetchFrame( index );
-		MatrixFrame invMatrixFrame = MatrixFrame::getMatrixFrameInv( frame );
-		memcpy( &matrix[0][0], &invMatrixFrame.m_matrix[0][0], sizeof( float ) * 12 );
-		return frame.identity();
+		const Frame frame = fetchFrame( index );
+		return hiprt::copyInvTransformMatrix( frame, matrix );
 	}
 
 	HIPRT_HOST_DEVICE uint32_t getCount() const { return m_instanceCount; }

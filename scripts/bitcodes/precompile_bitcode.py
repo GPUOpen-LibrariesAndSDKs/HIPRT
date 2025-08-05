@@ -87,19 +87,14 @@ def compileAmd():
         if hipSdkPathFromArgument != '': # if the hip path it given as an argument
             hipccpath = hipSdkPathFromArgument + '/bin/hipcc'
             clangpath = hipSdkPathFromArgument + '/bin/clang++'
+            if not os.path.exists(clangpath):
+                clangpath = hipSdkPathFromArgument + '/bin/amdclang++'
         else:
             clangpath = '/opt/rocm/bin/amdclang++'
 
-    # encapsulate the full path in quote, in case we have some spaces in it.
-    if " " in hipccpath and not (hipccpath.startswith('"') and hipccpath.endswith('"')):
-        hipccpath = '\"' + hipccpath + '\"'
+    hipccpath = common_tools.quoteFilepathIfNeeded(hipccpath)
+    clangpath = common_tools.quoteFilepathIfNeeded(clangpath)
 
-    # llvm.org/docs/AMDGPUUsage.html#processors
-    gpus = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103',  # Navi3
-            'gfx1030', 'gfx1031', 'gfx1032', 'gfx1033', 'gfx1034', 'gfx1035', 'gfx1036',  # Navi2
-            'gfx1010', 'gfx1011', 'gfx1012', 'gfx1013',  # Navi1
-            'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx940', 'gfx941', 'gfx942']  # Vega
-    
     result = subprocess.check_output(hipccpath + ' --version', shell=True)
     hip_sdk_version = result.decode('utf-8')
     hip_sdk_version_major = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(1) 
@@ -107,20 +102,10 @@ def compileAmd():
     hip_sdk_version_num = 10 * int(hip_sdk_version_major) + int(hip_sdk_version_minor)
     hip_version = hip_sdk_version_major +"."+ hip_sdk_version_minor
     
+    gpu_archs = common_tools.getAMDGPUArchs(hip_sdk_version_num)
 
-    if hip_sdk_version_num >= 63:
-        gpus.append('gfx1152')
-
-    if hip_sdk_version_num >= 62: # Navi4 supported from 6.2
-        gpus.append('gfx1200')
-        gpus.append('gfx1201')
-
-    if hip_sdk_version_num >= 61: # Strix supported from 6.1
-        gpus.append('gfx1150')
-        gpus.append('gfx1151')
-        
     targets = ''
-    for i in gpus:
+    for i in gpu_archs:
         targets += ' --offload-arch=' + i
 
     # compile hiprt traversal code

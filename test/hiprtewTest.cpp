@@ -26,51 +26,44 @@
 #include <test/CornellBox.h>
 #include <numeric>
 
-#define CHECK_ORO( error ) ( checkOro( error, __FILE__, __LINE__ ) )
-void checkOro( oroError res, const char* file, uint32_t line );
-
-#define CHECK_HIPRT( error ) ( checkHiprt( error, __FILE__, __LINE__ ) )
-void checkHiprt( hiprtError res, const char* file, uint32_t line );
-
-#define CHECK_ORORTC( error ) ( checkOrortc( error, __FILE__, __LINE__ ) )
-void checkOrortc( orortcResult res, const char* file, uint32_t line );
-
-void checkOro( oroError res, const char* file, uint32_t line )
+void checkOro( oroError res, const source_location& location )
 {
 	if ( res != oroSuccess )
 	{
 		const char* msg;
 		oroGetErrorString( res, &msg );
-		std::cerr << "Orochi error: '" << msg << "' on line " << line << " "
-				  << " in '" << file << "'." << std::endl;
-		exit( EXIT_FAILURE );
+		std::cerr << "Orochi error: '" << msg << "' on line " << location.line() << " "
+				  << " in '" << location.file_name() << "'." << std::endl;
+		std::abort();
 	}
 }
 
-void checkOrortc( orortcResult res, const char* file, uint32_t line )
+void checkOrortc( orortcResult res, const source_location& location )
 {
 	if ( res != ORORTC_SUCCESS )
 	{
-		std::cerr << "ORORTC error: '" << orortcGetErrorString( res ) << "' [ " << res << " ] on line " << line << " "
-				  << " in '" << file << "'." << std::endl;
-		exit( EXIT_FAILURE );
+		std::cerr << "Orortc error: '" << orortcGetErrorString( res ) << "' [ " << res << " ] on line " << location.line()
+				  << " "
+				  << " in '" << location.file_name() << "'." << std::endl;
+		std::abort();
 	}
 }
 
-void checkHiprt( hiprtError res, const char* file, uint32_t line )
+void checkHiprt( hiprtError res, const source_location& location )
 {
 	if ( res != hiprtSuccess )
 	{
-		std::cerr << "HIPRT error: '" << res << "' on line " << line << " "
-				  << " in '" << file << "'." << std::endl;
-		exit( EXIT_FAILURE );
+		std::cerr << "Hiprt error: '" << res << "' on line " << location.line() << " "
+				  << " in '" << location.file_name() << "'." << std::endl;
+		std::abort();
 	}
 }
 
 TEST_F( hiprtewTest, HiprtEwTest )
 {
 	hiprtContext ctxt;
-	CHECK_HIPRT( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -93,15 +86,15 @@ TEST_F( hiprtewTest, HiprtEwTest )
 	hiprtDevicePtr	  geomTemp;
 	hiprtBuildOptions options;
 	options.buildFlags = hiprtBuildFlagBitPreferFastBuild;
-	CHECK_HIPRT( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, options, geomTempSize ) );
+	checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, options, geomTempSize ) );
 	malloc( reinterpret_cast<uint8_t*&>( geomTemp ), geomTempSize );
 
 	hiprtGeometry geom;
-	CHECK_HIPRT( hiprtCreateGeometry( ctxt, geomInput, options, geom ) );
-	CHECK_HIPRT( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
+	checkHiprt( hiprtCreateGeometry( ctxt, geomInput, options, geom ) );
+	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
 
 	float3 aabbMin, aabbMax;
-	CHECK_HIPRT( hiprtExportGeometryAabb( ctxt, geom, aabbMin, aabbMax ) );
+	checkHiprt( hiprtExportGeometryAabb( ctxt, geom, aabbMin, aabbMax ) );
 
 	printf(
 		"Geometry bounding box: [%f %f %f] [%f %f %f]\n", aabbMin.x, aabbMin.y, aabbMin.z, aabbMax.x, aabbMax.y, aabbMax.z );
@@ -109,20 +102,20 @@ TEST_F( hiprtewTest, HiprtEwTest )
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
 	free( geomTemp );
-	CHECK_HIPRT( hiprtDestroyGeometry( ctxt, geom ) );
-	CHECK_HIPRT( hiprtDestroyContext( ctxt ) );
+	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
+	checkHiprt( hiprtDestroyContext( ctxt ) );
 }
 
 void hiprtewTest::SetUp()
 {
 	oroInitialize( (oroApi)( ORO_API_HIP | ORO_API_CUDA ), 0 );
 
-	CHECK_ORO( oroInit( 0 ) );
-	CHECK_ORO( oroDeviceGet( &m_oroDevice, 0 ) );
-	CHECK_ORO( oroCtxCreate( &m_oroCtx, 0, m_oroDevice ) );
+	checkOro( oroInit( 0 ) );
+	checkOro( oroDeviceGet( &m_oroDevice, 0 ) );
+	checkOro( oroCtxCreate( &m_oroCtx, 0, m_oroDevice ) );
 
 	oroDeviceProp props;
-	CHECK_ORO( oroGetDeviceProperties( &props, m_oroDevice ) );
+	checkOro( oroGetDeviceProperties( &props, m_oroDevice ) );
 	std::cout << "Executing on '" << props.name << "'" << std::endl;
 
 	if ( std::string( props.name ).find( "NVIDIA" ) != std::string::npos )
@@ -135,7 +128,6 @@ void hiprtewTest::SetUp()
 	int result;
 	hiprtewInit( &result );
 	ASSERT( result == HIPRTEW_SUCCESS );
-	hiprtSetLogLevel( hiprtLogLevelError | hiprtLogLevelWarn );
 }
 
 int main( int argc, const char* argv[] )

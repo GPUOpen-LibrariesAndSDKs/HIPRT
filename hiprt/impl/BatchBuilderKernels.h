@@ -32,7 +32,7 @@
 #include <hiprt/impl/BvhCommon.h>
 #include <hiprt/impl/Triangle.h>
 #include <hiprt/impl/BvhNode.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/QrDecomposition.h>
 #include <hiprt/impl/Quaternion.h>
 #include <hiprt/impl/Transform.h>
@@ -47,29 +47,29 @@
 
 using namespace hiprt;
 
-static constexpr size_t CacheAlignment = alignof( ReferenceNode ) > alignof( ScratchNode ) ? alignof( ReferenceNode )
-																						   : alignof( ScratchNode );
-
-static constexpr size_t CacheSize = RoundUp( ( BatchBuilderMaxBlockSize - 1 ) * sizeof( ScratchNode ), CacheAlignment ) +
-									RoundUp( ( BatchBuilderMaxBlockSize ) * sizeof( ReferenceNode ), CacheAlignment ) +
-									2 * RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), CacheAlignment ) +
-									RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), CacheAlignment ) +
-									RoundUp( BatchBuilderMaxBlockSize * sizeof( uint3 ), CacheAlignment );
+static constexpr size_t BatchBuildCacheAlignment = alignof( ReferenceNode ) > alignof( ScratchNode ) ? alignof( ReferenceNode )
+																									 : alignof( ScratchNode );
+static constexpr size_t BatchBuildCacheSize =
+	RoundUp( ( BatchBuilderMaxBlockSize - 1 ) * sizeof( ScratchNode ), BatchBuildCacheAlignment ) +
+	RoundUp( ( BatchBuilderMaxBlockSize ) * sizeof( ReferenceNode ), BatchBuildCacheAlignment ) +
+	4 * RoundUp( BatchBuilderMaxBlockSize * sizeof( uint32_t ), BatchBuildCacheAlignment );
 
 HIPRT_DEVICE size_t getStorageBufferSize( const hiprtGeometryBuildInput& buildInput )
 {
-	const size_t primCount	  = getPrimCount( buildInput );
-	const size_t primNodeSize = getPrimNodeSize( buildInput );
-	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
-	return getGeometryStorageBufferSize( primCount, boxNodeCount, primNodeSize );
+	const size_t primCount	   = getPrimCount( buildInput );
+	const size_t primNodeCount = getMaxPrimNodeCount( buildInput, Rtip, primCount );
+	const size_t primNodeSize  = getPrimNodeSize( buildInput, sizeof( TriangleNode ) );
+	const size_t boxNodeCount  = getMaxBoxNodeCount( buildInput, Rtip, primCount );
+	return getGeometryStorageBufferSize( primNodeCount, boxNodeCount, primNodeSize, sizeof( BoxNode ) );
 }
 
 HIPRT_DEVICE size_t getStorageBufferSize( const hiprtSceneBuildInput& buildInput )
 {
 	const size_t frameCount	  = buildInput.frameCount;
 	const size_t primCount	  = buildInput.instanceCount;
-	const size_t boxNodeCount = DivideRoundUp( 2 * primCount, 3 );
-	return getSceneStorageBufferSize( primCount, primCount, boxNodeCount, frameCount );
+	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, Rtip, primCount );
+	return getSceneStorageBufferSize(
+		primCount, primCount, boxNodeCount, sizeof( BoxNode ), sizeof( InstanceNode ), frameCount );
 }
 
 template <typename PrimitiveNode, typename PrimitiveContainer>
@@ -78,9 +78,13 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 {
 	typedef typename conditional<is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
 
+	const uint32_t maxBoxNodeCount =
+		static_cast<uint32_t>( getMaxBoxNodeCount<BoxNode, PrimitiveNode>( primitives.getCount() ) );
+	const uint32_t maxPrimNodeCount = static_cast<uint32_t>( getMaxPrimNodeCount<PrimitiveNode>( primitives.getCount() ) );
+
 	Header*		   header	 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( DivideRoundUp( 2 * primitives.getCount(), 3 ) );
-	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
+	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( maxBoxNodeCount );
+	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( maxPrimNodeCount );
 
 	uint32_t index	   = threadIdx.x;
 	uint32_t primCount = primitives.getCount();
@@ -117,12 +121,13 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
-	ReferenceNode* references		= sharedMemoryArena.allocate<ReferenceNode>( blockDim.x );
-	ScratchNode*   scratchNodes		= sharedMemoryArena.allocate<ScratchNode>( blockDim.x - 1 );
-	uint32_t*	   mortonCodeKeys	= sharedMemoryArena.allocate<uint32_t>( blockDim.x );
-	uint32_t*	   mortonCodeValues = sharedMemoryArena.allocate<uint32_t>( blockDim.x );
-	uint32_t*	   updateCounters	= sharedMemoryArena.allocate<uint32_t>( blockDim.x );
-	uint3*		   taskQueue		= sharedMemoryArena.allocate<uint3>( blockDim.x );
+	ScratchNode*   scratchNodes	  = sharedMemoryArena.allocate<ScratchNode>( blockDim.x - 1 );
+	ReferenceNode* references	  = sharedMemoryArena.allocate<ReferenceNode>( blockDim.x );
+	uint32_t*	   updateCounters = sharedMemoryArena.allocate<uint32_t>( blockDim.x );
+	uint3*		   taskQueue	  = sharedMemoryArena.allocate<uint3>( blockDim.x );
+
+	uint32_t* mortonCodeKeys   = reinterpret_cast<uint32_t*>( taskQueue + 0 * blockDim.x );
+	uint32_t* mortonCodeValues = reinterpret_cast<uint32_t*>( taskQueue + 1 * blockDim.x );
 
 	// STEP 1: Calculate centroid bounding box by reduction
 	updateCounters[index] = InvalidValue;
@@ -164,29 +169,48 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	// STEP 4: Emit topology and refit nodes
 	EmitTopologyAndFitBounds( index, mortonCodeKeys, mortonCodeValues, updateCounters, primitives, scratchNodes, references );
 	__syncthreads();
-
-	// STEP 5: Collapse
 	uint32_t rootAddr = updateCounters[primCount - 1];
+	__syncthreads();
+
+	// STEP 5: Compute fat leaves
+	if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value )
+	{
+		uint32_t* triangleCounts = reinterpret_cast<uint32_t*>( taskQueue );
+		uint32_t* parentAddrs	 = triangleCounts + primCount;
+		updateCounters[index]	 = 0;
+		ComputeParentAddrs( index, primCount, rootAddr, scratchNodes, parentAddrs );
+		__syncthreads();
+		ComputeFatLeaves( index, primCount, scratchNodes, parentAddrs, triangleCounts, updateCounters );
+		__syncthreads();
+	}
+
+	// STEP 6: Collapse
 	if ( index == 0 )
 		taskQueue[index] = make_uint3( encodeNodeIndex( rootAddr, BoxType ), 0, 0 );
 	else
 		taskQueue[index] = make_uint3( InvalidValue, InvalidValue, InvalidValue );
 	__syncthreads();
 
-	uint32_t* taskCounter = &updateCounters[0];
-	*taskCounter		  = 1;
-	__syncthreads();
-	Collapse( index, primCount, header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue );
+	uint32_t* referenceIndices = updateCounters;
+	for ( uint32_t i = index; i < BranchingFactor * maxBoxNodeCount; i += blockDim.x )
+	{
+		Collapse<PrimitiveNode>(
+			i, maxBoxNodeCount, primCount, header, scratchNodes, references, boxNodes, taskQueue, referenceIndices );
+		__syncthreads();
+	}
+
+	PackLeaves(
+		index, header->m_boxNodeCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void
-BatchBuild_hiprtGeometryBuildInput( uint32_t count, const hiprtGeometryBuildInput* buildInputs, hiprtDevicePtr* buffers )
+extern "C" __global__ void __launch_bounds__( BatchBuilderMaxBlockSize )
+	BatchBuild_hiprtGeometryBuildInput( uint32_t count, const hiprtGeometryBuildInput* buildInputs, hiprtDevicePtr* buffers )
 {
 	const uint32_t index = blockIdx.x + gridDim.x * blockIdx.y;
 	if ( index < count )
 	{
-		alignas( CacheAlignment ) __shared__ uint8_t cache[CacheSize];
-		MemoryArena									 sharedMemoryArena( cache, CacheSize, CacheAlignment );
+		alignas( BatchBuildCacheAlignment ) __shared__ uint8_t cache[BatchBuildCacheSize];
+		MemoryArena sharedMemoryArena( cache, BatchBuildCacheSize, BatchBuildCacheAlignment );
 
 		hiprtGeometryBuildInput buildInput = buildInputs[index];
 		MemoryArena				storageMemoryArena( buffers[index], getStorageBufferSize( buildInput ), DefaultAlignment );
@@ -207,14 +231,14 @@ BatchBuild_hiprtGeometryBuildInput( uint32_t count, const hiprtGeometryBuildInpu
 	}
 }
 
-extern "C" __global__ void
-BatchBuild_hiprtSceneBuildInput( uint32_t count, const hiprtSceneBuildInput* buildInputs, hiprtDevicePtr* buffers )
+extern "C" __global__ void __launch_bounds__( BatchBuilderMaxBlockSize )
+	BatchBuild_hiprtSceneBuildInput( uint32_t count, const hiprtSceneBuildInput* buildInputs, hiprtDevicePtr* buffers )
 {
 	const uint32_t index = blockIdx.x + gridDim.x * blockIdx.y;
 	if ( index < count )
 	{
-		alignas( CacheAlignment ) __shared__ uint8_t cache[CacheSize];
-		MemoryArena									 sharedMemoryArena( cache, CacheSize, CacheAlignment );
+		alignas( BatchBuildCacheAlignment ) __shared__ uint8_t cache[BatchBuildCacheSize];
+		MemoryArena sharedMemoryArena( cache, BatchBuildCacheSize, BatchBuildCacheAlignment );
 
 		hiprtSceneBuildInput buildInput = buildInputs[index];
 		MemoryArena			 storageMemoryArena( buffers[index], getStorageBufferSize( buildInput ), DefaultAlignment );

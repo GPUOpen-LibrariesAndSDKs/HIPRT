@@ -30,9 +30,11 @@ namespace hiprt
 // Cost
 static constexpr bool LogBvhCost = false;
 // BVH
-static constexpr uint32_t BvhBuilderReductionBlockSize = 256u;
-static constexpr uint32_t BatchBuilderMaxBlockSize	   = MaxBatchBuildMaxPrimCount;
-static constexpr uint32_t CollapseBlockSize			   = 1024u;
+static constexpr uint32_t BvhBuilderReductionBlockSize	= 256u;
+static constexpr uint32_t BvhBuilderCompactionBlockSize = 1024;
+static constexpr uint32_t BatchBuilderMaxBlockSize		= MaxBatchBuildMaxPrimCount;
+static constexpr uint32_t MaxFatLeafSize				= 4u;
+static constexpr uint32_t LanesPerLeafPacketTask		= 4u;
 // LBVH
 static constexpr uint32_t LbvhEmitBlockSize = 512u;
 // PLOC

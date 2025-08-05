@@ -4,6 +4,7 @@
 import os
 import subprocess
 
+
 def getVCPath():
     try:
         vswhere_default_path = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -47,4 +48,30 @@ def getVCPath():
         raise RuntimeError("An error occurred: {}".format(e))
 
 
+def getAMDGPUArchs(hip_sdk_version_num):
+    # llvm.org/docs/AMDGPUUsage.html#processors
+    gpus_archs = ['gfx1100', 'gfx1101', 'gfx1102', 'gfx1103',  # Navi3
+                  'gfx1030', 'gfx1031', 'gfx1032', 'gfx1033', 'gfx1034', 'gfx1035', 'gfx1036',  # Navi2
+                  'gfx1010', 'gfx1011', 'gfx1012', 'gfx1013',  # Navi1
+                  'gfx900', 'gfx902', 'gfx904', 'gfx906', 'gfx908', 'gfx909', 'gfx90a', 'gfx90c', 'gfx942']  # Vega
+    
+    if hip_sdk_version_num >= 64: # Navi4 and Krackan supported from 6.4
+        gpus_archs.append('gfx1200')
+        gpus_archs.append('gfx1201')
+        gpus_archs.append('gfx1153')
 
+    if hip_sdk_version_num >= 63:
+        gpus_archs.append('gfx1152')
+
+    if hip_sdk_version_num >= 61: # Strix supported from 6.1
+        gpus_archs.append('gfx1150')
+        gpus_archs.append('gfx1151')
+
+    return gpus_archs
+
+
+# encapsulate the full path in quotes if it contains spaces and is not already quoted
+def quoteFilepathIfNeeded(path: str) -> str:
+    if " " in path and not (path.startswith('"') and path.endswith('"')):
+        path = '"' + path + '"'
+    return path

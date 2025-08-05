@@ -32,17 +32,17 @@ class Aabb
   public:
 	HIPRT_HOST_DEVICE Aabb() { reset(); }
 
-	HIPRT_HOST_DEVICE Aabb( const float3& p ) : m_min( p ), m_max( p ) {}
+	HIPRT_HOST_DEVICE Aabb( const float3& point ) : m_min( point ), m_max( point ) {}
 
-	HIPRT_HOST_DEVICE Aabb( const float3& mi, const float3& ma ) : m_min( mi ), m_max( ma ) {}
+	HIPRT_HOST_DEVICE Aabb( const float3& mn, const float3& mx ) : m_min( mn ), m_max( mx ) {}
 
-	HIPRT_HOST_DEVICE Aabb( const Aabb& rhs, const Aabb& lhs )
+	HIPRT_HOST_DEVICE Aabb( const Aabb& aabb0, const Aabb& aabb1 )
 	{
-		m_min = min( lhs.m_min, rhs.m_min );
-		m_max = max( lhs.m_max, rhs.m_max );
+		m_min = min( aabb0.m_min, aabb1.m_min );
+		m_max = max( aabb0.m_max, aabb1.m_max );
 	}
 
-	HIPRT_HOST_DEVICE Aabb( const Aabb& rhs ) : m_min( rhs.m_min ), m_max( rhs.m_max ) {}
+	HIPRT_HOST_DEVICE Aabb( const Aabb& aabb ) : m_min( aabb.m_min ), m_max( aabb.m_max ) {}
 
 	HIPRT_HOST_DEVICE void reset( void )
 	{
@@ -50,17 +50,17 @@ class Aabb
 		m_max = make_float3( -FltMax );
 	}
 
-	HIPRT_HOST_DEVICE Aabb& grow( const Aabb& rhs )
+	HIPRT_HOST_DEVICE Aabb& grow( const Aabb& aabb )
 	{
-		m_min = min( m_min, rhs.m_min );
-		m_max = max( m_max, rhs.m_max );
+		m_min = min( m_min, aabb.m_min );
+		m_max = max( m_max, aabb.m_max );
 		return *this;
 	}
 
-	HIPRT_HOST_DEVICE Aabb& grow( const float3& p )
+	HIPRT_HOST_DEVICE Aabb& grow( const float3& point )
 	{
-		m_min = min( m_min, p );
-		m_max = max( m_max, p );
+		m_min = min( m_min, point );
+		m_max = max( m_max, point );
 		return *this;
 	}
 
@@ -74,12 +74,19 @@ class Aabb
 		return 2 * ( ext.x * ext.y + ext.x * ext.z + ext.y * ext.z );
 	}
 
-	HIPRT_HOST_DEVICE bool valid( void ) { return m_min.x <= m_max.x && m_min.y <= m_max.y && m_min.z <= m_max.z; }
+	HIPRT_HOST_DEVICE bool valid( void ) const { return m_min.x <= m_max.x && m_min.y <= m_max.y && m_min.z <= m_max.z; }
 
-	HIPRT_HOST_DEVICE void intersect( const Aabb& box )
+	HIPRT_HOST_DEVICE bool contains( const float3& point ) const
 	{
-		m_min = max( m_min, box.m_min );
-		m_max = min( m_max, box.m_max );
+		return m_min.x <= point.x && m_min.y <= point.y && m_min.z <= point.z && point.x <= m_max.x && point.y <= m_max.y &&
+			   point.z <= m_max.z;
+	}
+
+	HIPRT_HOST_DEVICE Aabb& intersect( const Aabb& aabb )
+	{
+		m_min = max( m_min, aabb.m_min );
+		m_max = min( m_max, aabb.m_max );
+		return *this;
 	}
 
 	HIPRT_HOST_DEVICE float2 intersect( const float3& origin, const float3& invDirection, float maxT ) const
@@ -117,12 +124,12 @@ class Aabb
 	HIPRT_DEVICE Aabb shuffle( uint32_t index )
 	{
 		Aabb aabb;
-		aabb.m_min.x = __shfl( aabb.m_min.x, index );
-		aabb.m_min.y = __shfl( aabb.m_min.x, index );
-		aabb.m_min.z = __shfl( aabb.m_min.x, index );
-		aabb.m_max.x = __shfl( aabb.m_max.x, index );
-		aabb.m_max.y = __shfl( aabb.m_max.y, index );
-		aabb.m_max.z = __shfl( aabb.m_max.z, index );
+		aabb.m_min.x = __shfl( m_min.x, index );
+		aabb.m_min.y = __shfl( m_min.x, index );
+		aabb.m_min.z = __shfl( m_min.x, index );
+		aabb.m_max.x = __shfl( m_max.x, index );
+		aabb.m_max.y = __shfl( m_max.y, index );
+		aabb.m_max.z = __shfl( m_max.z, index );
 		return aabb;
 	}
 #endif

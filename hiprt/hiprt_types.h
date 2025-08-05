@@ -24,10 +24,6 @@
 
 #pragma once
 
-#if ( defined( __CUDACC__ ) || defined( __HIPCC__ ) )
-#define __KERNELCC__
-#endif
-
 #include <hiprt/hiprt_vec.h>
 
 struct _hiprtGeometry;
@@ -95,7 +91,6 @@ enum : uint32_t
 	hiprtFullRayMask			   = hiprt::FullRayMask,
 	hiprtMaxBatchBuildMaxPrimCount = hiprt::MaxBatchBuildMaxPrimCount,
 	hiprtMaxInstanceLevels		   = hiprt::MaxInstanceLevels,
-	hiprtBranchingFactor		   = hiprt::BranchingFactor
 };
 
 /** \brief Error codes.
@@ -141,12 +136,13 @@ enum hiprtBuildOperation
  */
 enum hiprtBuildFlagBits
 {
-	hiprtBuildFlagBitPreferFastBuild		= 0,
-	hiprtBuildFlagBitPreferBalancedBuild	= 1,
-	hiprtBuildFlagBitPreferHighQualityBuild = 2,
-	hiprtBuildFlagBitCustomBvhImport		= 3,
-	hiprtBuildFlagBitDisableSpatialSplits	= 1 << 2,
-	hiprtBuildFlagBitDisableTrianglePairing = 1 << 3
+	hiprtBuildFlagBitPreferFastBuild			  = 0,
+	hiprtBuildFlagBitPreferBalancedBuild		  = 1,
+	hiprtBuildFlagBitPreferHighQualityBuild		  = 2,
+	hiprtBuildFlagBitCustomBvhImport			  = 3,
+	hiprtBuildFlagBitDisableSpatialSplits		  = 1 << 2,
+	hiprtBuildFlagBitDisableTrianglePairing		  = 1 << 3,
+	hiprtBuildFlagBitDisableOrientedBoundingBoxes = 1 << 4
 };
 
 /** \brief Geometric primitive type.
@@ -213,9 +209,9 @@ enum hiprtStackEntryType
  */
 enum hiprtBvhNodeType
 {
-	/*!< Leaf node */
-	hiprtBvhNodeTypeInternal = 0,
 	/*!< Internal node */
+	hiprtBvhNodeTypeInternal = 0,
+	/*!< Leaf node */
 	hiprtBvhNodeTypeLeaf = 1,
 };
 
@@ -391,30 +387,51 @@ struct hiprtAABBListPrimitive
 	uint32_t aabbStride;
 };
 
-/** \brief Bvh node for custom import Bvh.
+/** \brief Internal Bvh node for custom import Bvh.
  *
  */
-struct alignas( 64 ) hiprtBvhNode
+struct alignas( 64 ) hiprtInternalNode
 {
-	/*!< Child indices (empty slot needs to be marked by hiprtInvalidValue) */
-	uint32_t childIndices[hiprtBranchingFactor];
+	/*!< Node bounding box min */
+	hiprtFloat3 aabbMin;
+	/*!< Node bounding box max */
+	hiprtFloat3 aabbMax;
+	/*!< Child indices */
+	uint32_t childIndices[2];
 	/*!< Child node types */
-	hiprtBvhNodeType childNodeTypes[hiprtBranchingFactor];
-	/*!< Child node bounding box min's */
-	hiprtFloat3 childAabbsMin[hiprtBranchingFactor];
-	/*!< Child ode bounding box max's */
-	hiprtFloat3 childAabbsMax[hiprtBranchingFactor];
+	hiprtBvhNodeType childNodeTypes[2];
 };
-HIPRT_STATIC_ASSERT( sizeof( hiprtBvhNode ) == 128 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtInternalNode ) == 64 );
+
+/** \brief Leaf Bvh node for custom import Bvh.
+ *
+ * Each leaf references a single primitive.
+ * Multiple primitives can be references from different leaves.
+ */
+struct alignas( 32 ) hiprtLeafNode
+{
+	/*!< Node bounding box min's */
+	hiprtFloat3 aabbMin;
+	/*!< Node bounding box max's */
+	hiprtFloat3 aabbMax;
+	/*!< Primitive ID */
+	uint32_t primID;
+};
+HIPRT_STATIC_ASSERT( sizeof( hiprtLeafNode ) == 32 );
 
 /** \brief Bvh node list.
  *
+ * The list with nodes representing a binary BVH to be imported.
+ * The root nodes is assumed to be at the first position.
+ * The number of internal nodes is equal to the number of leaves minus one'.
  */
 struct hiprtBvhNodeList
 {
-	/*!< Array of hiprtBvhNode's */
-	hiprtDevicePtr nodes;
-	/*!< Number of nodes */
+	/*!< Array of hiprtInternalNode's */
+	hiprtDevicePtr internalNodes;
+	/*!< Array of hiprtLeafNode's */
+	hiprtDevicePtr leafNodes;
+	/*!< The number of leaf nodes */
 	uint32_t nodeCount;
 };
 
@@ -496,7 +513,7 @@ struct alignas( 16 ) hiprtSceneBuildInput
 	/*!< Frame type (SRT or matrix) */
 	hiprtFrameType frameType = hiprtFrameTypeSRT;
 };
-HIPRT_STATIC_ASSERT( sizeof( hiprtSceneBuildInput ) == 64 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtSceneBuildInput ) == 80 );
 
 /** \brief Input for the global stack buffer allocation
  *

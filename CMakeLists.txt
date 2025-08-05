@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.19)   # at least 3.19 in order to have the compression-level in Zstd
 project(hiprt)
 
 #
@@ -15,6 +15,7 @@ option(HIPRTEW "Use hiprtew" OFF)
 option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
 option(NO_UNITTEST "Don't build unit tests" OFF)
 option(HIPRT_PREFER_HIP_5 "Prefer HIP 5" OFF)
+option(COMPILED_COMPRESSION "enable compression of compiled kernels" ON) # this argument is only used if BAKE_COMPILED_KERNEL is enabled -- advised to let it 'ON' as it's the path tested by the HIPRT team.
 
 option(FORCE_DISABLE_CUDA "By default Cuda support is automatically added if a Cuda install is detected. Turn this flag to ON to force Cuda to be disabled." OFF)
 
@@ -388,6 +389,10 @@ set(KERNEL_HIPRT_COMP    "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/hiprt${version_
 set(KERNEL_UNITTEST_COMP "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/hiprt${version_str_}_${HIP_VERSION_STR}_precompiled_bitcode_${KERNEL_OS_POSTFIX}.hipfb")   # example:  hiprt02005_6.2_precompiled_bitcode_win.hipfb
 set(KERNEL_OROCHI_COMP "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/oro_compiled_kernels.hipfb")
 
+# temp files: compiled kernel, compressed.
+set(KERNEL_HIPRT_COMP_COMPRESSED  "${CMAKE_BINARY_DIR}/hiprt${version_str_}_${HIP_VERSION_STR}_amd.zstd" )
+set(KERNEL_OROCHI_COMP_COMPRESSED  "${CMAKE_BINARY_DIR}/oro_compiled_kernels.zstd" )
+
 
 # precompile kernels:
 if(PRECOMPILE)
@@ -479,11 +484,16 @@ if ( BAKE_COMPILED_KERNEL )
 	
 	set(PYTHON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi/scripts/convert_binary_to_array.py")
 
+	set(ARCHIVE_SCRIPT  "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi/scripts/create_archive.cmake")
+	
 	# HIPRT binary
 	set(KERNEL_HIPRT_H "${CMAKE_CURRENT_SOURCE_DIR}/hiprt/impl/bvh_build_array.h")
 	add_custom_command(
 		OUTPUT ${KERNEL_HIPRT_H}
-		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_H}
+		# 1) Create the Zstd archive
+		COMMAND	${CMAKE_COMMAND}  -DINPUT_FILE=${KERNEL_HIPRT_COMP} -DOUTPUT_FILE=${KERNEL_HIPRT_COMP_COMPRESSED} -DDO_COMPRESS=${COMPILED_COMPRESSION}  -P ${ARCHIVE_SCRIPT}
+		# 2) Run the Python converter on that archive
+		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_COMP_COMPRESSED} ${KERNEL_HIPRT_H} ${COMPILED_COMPRESSION}
 		DEPENDS ${KERNEL_HIPRT_COMP}  # Ensure compile.py has already run.
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMENT "Converting HIPRT compiled kernel to header"
@@ -494,7 +504,10 @@ if ( BAKE_COMPILED_KERNEL )
 	set(KERNEL_OROCHI_H "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi/ParallelPrimitives/cache/oro_compiled_kernels.h")
 	add_custom_command(
 		OUTPUT ${KERNEL_OROCHI_H}
-		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_H}
+		# 1) Create the Zstd archive
+		COMMAND	${CMAKE_COMMAND}  -DINPUT_FILE=${KERNEL_OROCHI_COMP} -DOUTPUT_FILE=${KERNEL_OROCHI_COMP_COMPRESSED} -DDO_COMPRESS=${COMPILED_COMPRESSION}  -P ${ARCHIVE_SCRIPT}
+		# 2) Run the Python converter on that archive
+		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_COMP_COMPRESSED} ${KERNEL_OROCHI_H} ${COMPILED_COMPRESSION}
 		DEPENDS ${KERNEL_OROCHI_COMP}  # Ensure compile.py has already run.
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMENT "Converting Orochi compiled kernel to header"
@@ -533,8 +546,40 @@ endif()
 
 
 if ( BAKE_COMPILED_KERNEL )
+
+
+	if ( COMPILED_COMPRESSION )
+		#  Gather minimal Zstd sources
+		file(GLOB ZSTD_SRCS
+			contrib/zstd/lib/common/*.c
+			contrib/zstd/lib/decompress/*.c
+			)
+
+		#  Build a static lib zstd_embedded
+		add_library(zstd_embedded STATIC
+			${ZSTD_SRCS}
+		)
+
+		#  Include Zstd headers
+		target_include_directories(zstd_embedded
+			PUBLIC
+			contrib/zstd/lib
+		)
+		
+		set_target_properties(zstd_embedded PROPERTIES POSITION_INDEPENDENT_CODE ON)  # -fPIC
+		target_compile_definitions(zstd_embedded PRIVATE ZSTD_DISABLE_ASM)  # disable ASM for easier build
+
+		#  Link against zstd_embedded
+		target_link_libraries(${HIPRT_NAME}   zstd_embedded )
+		
+		# the 'ORO_LINK_ZSTD' flag enables use of ZSTD API in the source code.
+		target_compile_definitions(${HIPRT_NAME} PRIVATE ORO_LINK_ZSTD)
+	endif()
+
+
+
 	# enable the 'BAKE_COMPILED_KERNEL' on Orochi:  this mode is activated by adding those 2 defines.
-	target_compile_definitions(${HIPRT_NAME} PRIVATE ORO_PP_LOAD_FROM_STRING ORO_PRECOMPILED)
+	target_compile_definitions(${HIPRT_NAME} PRIVATE ORO_PP_LOAD_FROM_STRING HIPRT_BITCODE_LINKING ORO_PRECOMPILED)
 	
 	#enable the 'BAKE_COMPILED_KERNEL' on HIPRT: 
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BAKE_COMPILED_KERNEL )
@@ -592,12 +637,17 @@ if(PRECOMPILE AND NOT BAKE_COMPILED_KERNEL)
 			DESTINATION bin)
 endif()
 
+
+
+
+
+
 # Project: Unit Test
 if(NOT NO_UNITTEST)
 
 	add_executable(unittest)
 
-	if(BITCODE)
+	if(BITCODE OR BAKE_COMPILED_KERNEL)
 		target_compile_definitions(unittest PRIVATE HIPRT_BITCODE_LINKING)
 	endif()
 	if(WIN32)

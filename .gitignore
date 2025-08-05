@@ -15,3 +15,4 @@ hiprt/cache/Kernels.h
 hiprt/cache/KernelArgs.h
 PUBLIC_OUT/
 hiprt/impl/bvh_build_array.h
+scripts/bitcodes/__pycache__/

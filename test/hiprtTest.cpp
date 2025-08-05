@@ -95,11 +95,18 @@ std::filesystem::path getRootDir()
 
 inline float3 operator-( float3& a, float3& b ) { return float3{ a.x - b.x, a.y - b.y, a.z - b.z }; }
 
+struct EmbreeBuildNode
+{
+	float3	 m_childAabbsMin[2];
+	float3	 m_childAabbsMax[2];
+	uint32_t m_childIndices[2];
+};
+
 struct BuilderContext
 {
-	PoolAllocator<hiprtBvhNode, 16> m_nodeAllocator;
-	PoolAllocator<uint32_t, 16>		m_leafAllocator;
-	void*							m_geomData;
+	PoolAllocator<EmbreeBuildNode, 16> m_nodeAllocator;
+	PoolAllocator<uint32_t, 16>		   m_leafAllocator;
+	void*							   m_geomData;
 };
 
 struct GeometryData
@@ -144,15 +151,15 @@ void hiprtTest::SetUp()
 		m_ctxtInput.deviceType = hiprtDeviceAMD;
 	m_ctxtInput.ctxt   = oroGetRawCtx( m_oroCtx );
 	m_ctxtInput.device = oroGetRawDevice( m_oroDevice );
-	hiprtSetLogLevel( hiprtLogLevelError | hiprtLogLevelWarn );
 }
 
 void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 {
-	std::vector<hiprtBvhNode> nodes;
+	std::vector<hiprtInternalNode> internalNodes;
+	std::vector<Aabb>			   primBoxes;
 	if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh )
 	{
-		std::vector<Aabb>	 primBoxes( buildInput.primitive.triangleMesh.triangleCount );
+		primBoxes.resize( buildInput.primitive.triangleMesh.triangleCount );
 		std::vector<uint8_t> verticesRaw(
 			buildInput.primitive.triangleMesh.vertexCount * buildInput.primitive.triangleMesh.vertexStride );
 		std::vector<uint8_t> trianglesRaw(
@@ -180,11 +187,11 @@ void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 			primBoxes[i].grow( v1 );
 			primBoxes[i].grow( v2 );
 		}
-		BvhBuilder::build( buildInput.primitive.triangleMesh.triangleCount, primBoxes, nodes );
+		BvhBuilder::build( buildInput.primitive.triangleMesh.triangleCount, primBoxes, internalNodes );
 	}
 	else if ( buildInput.type == hiprtPrimitiveTypeAABBList )
 	{
-		std::vector<Aabb>	 primBoxes( buildInput.primitive.aabbList.aabbCount );
+		primBoxes.resize( buildInput.primitive.aabbList.aabbCount );
 		std::vector<uint8_t> primBoxesRaw( buildInput.primitive.aabbList.aabbCount * buildInput.primitive.aabbList.aabbStride );
 		copyDtoH(
 			primBoxesRaw.data(),
@@ -196,15 +203,30 @@ void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 			primBoxes[i].m_min = hiprt::make_float3( ptr[0] );
 			primBoxes[i].m_max = hiprt::make_float3( ptr[1] );
 		}
-		BvhBuilder::build( buildInput.primitive.aabbList.aabbCount, primBoxes, nodes );
+		BvhBuilder::build( buildInput.primitive.aabbList.aabbCount, primBoxes, internalNodes );
 	}
-	malloc( reinterpret_cast<hiprtBvhNode*&>( buildInput.nodeList.nodes ), nodes.size() );
-	copyHtoD( reinterpret_cast<hiprtBvhNode*>( buildInput.nodeList.nodes ), nodes.data(), nodes.size() );
-	buildInput.nodeList.nodeCount = static_cast<uint32_t>( nodes.size() );
+
+	std::vector<hiprtLeafNode> leafNodes( primBoxes.size() );
+	for ( uint32_t i = 0; i < primBoxes.size(); ++i )
+	{
+		leafNodes[i].primID	 = i;
+		leafNodes[i].aabbMin = primBoxes[i].m_min;
+		leafNodes[i].aabbMax = primBoxes[i].m_max;
+	}
+
+	buildInput.nodeList.nodeCount = static_cast<uint32_t>( leafNodes.size() );
+
+	malloc( reinterpret_cast<hiprtLeafNode*&>( buildInput.nodeList.leafNodes ), leafNodes.size() );
+	copyHtoD( reinterpret_cast<hiprtLeafNode*>( buildInput.nodeList.leafNodes ), leafNodes.data(), leafNodes.size() );
+
+	malloc( reinterpret_cast<hiprtInternalNode*&>( buildInput.nodeList.internalNodes ), internalNodes.size() );
+	copyHtoD(
+		reinterpret_cast<hiprtInternalNode*>( buildInput.nodeList.internalNodes ), internalNodes.data(), internalNodes.size() );
 }
 
 void hiprtTest::buildEmbreeBvh(
-	RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, std::vector<hiprtBvhNode>& nodes, void* geomData )
+	RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, void* geomData, hiprtBvhNodeList& nodeList )
+
 {
 	const float Alpha = 1.5f;
 	enum
@@ -223,7 +245,7 @@ void hiprtTest::buildEmbreeBvh(
 	RTCBuildArguments embreeArgs	  = rtcDefaultBuildArguments();
 	embreeArgs.byteSize				  = sizeof( embreeArgs );
 	embreeArgs.buildQuality			  = RTC_BUILD_QUALITY_HIGH;
-	embreeArgs.maxBranchingFactor	  = 4;
+	embreeArgs.maxBranchingFactor	  = 2;
 	embreeArgs.bvh					  = embreeBvh;
 	embreeArgs.primitives			  = embreePrims.data();
 	embreeArgs.primitiveCount		  = primCount;
@@ -233,40 +255,38 @@ void hiprtTest::buildEmbreeBvh(
 	embreeArgs.splitPrimitive		  = nullptr;
 	embreeArgs.userPtr				  = &context;
 
-	embreeArgs.createNode = []( RTCThreadLocalAllocator allocator, uint32_t childCount, void* userPtr ) -> void* {
-		BuilderContext* ctxt = reinterpret_cast<BuilderContext*>( userPtr );
-		uint32_t		handle;
-		hiprtBvhNode*	ptr;
+	embreeArgs.createNode =
+		[]( [[maybe_unused]] RTCThreadLocalAllocator allocator, [[maybe_unused]] uint32_t childCount, void* userPtr ) -> void* {
+		BuilderContext*	 ctxt = reinterpret_cast<BuilderContext*>( userPtr );
+		uint32_t		 handle;
+		EmbreeBuildNode* ptr;
 		ctxt->m_nodeAllocator.allocate( &handle, &ptr );
 		return reinterpret_cast<void*>( static_cast<uintptr_t>( handle ) );
 	};
 
 	embreeArgs.setNodeChildren = []( void* nodePtr, void** children, uint32_t childCount, void* userPtr ) {
-		BuilderContext* ctxt = reinterpret_cast<BuilderContext*>( userPtr );
-		hiprtBvhNode*	node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
+		BuilderContext*	 ctxt = reinterpret_cast<BuilderContext*>( userPtr );
+		EmbreeBuildNode* node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
 		for ( uint32_t i = 0; i < childCount; i++ )
 		{
-			node->childIndices[i]	= static_cast<uint32_t>( reinterpret_cast<uintptr_t>( children[i] ) );
-			node->childNodeTypes[i] = node->childIndices[i] & LeafFlag ? hiprtBvhNodeTypeLeaf : hiprtBvhNodeTypeInternal;
+			node->m_childIndices[i] = static_cast<uint32_t>( reinterpret_cast<uintptr_t>( children[i] ) );
 		}
-		for ( uint32_t i = childCount; i < 4; i++ )
-			node->childIndices[i] = hiprtInvalidValue;
 	};
 
 	embreeArgs.setNodeBounds = []( void* nodePtr, const struct RTCBounds** bounds, uint32_t childCount, void* userPtr ) {
-		BuilderContext* ctxt = reinterpret_cast<BuilderContext*>( userPtr );
-		hiprtBvhNode*	node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
+		BuilderContext*	 ctxt = reinterpret_cast<BuilderContext*>( userPtr );
+		EmbreeBuildNode* node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
 		for ( uint32_t i = 0; i < childCount; i++ )
 		{
-			node->childAabbsMin[i] = float3{ bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z };
-			node->childAabbsMax[i] = float3{ bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z };
+			node->m_childAabbsMin[i] = float3{ bounds[i]->lower_x, bounds[i]->lower_y, bounds[i]->lower_z };
+			node->m_childAabbsMax[i] = float3{ bounds[i]->upper_x, bounds[i]->upper_y, bounds[i]->upper_z };
 		}
 	};
 
-	embreeArgs.createLeaf = []( RTCThreadLocalAllocator			allocator,
-								const struct RTCBuildPrimitive* primitives,
-								size_t							primitiveCount,
-								void*							userPtr ) -> void* {
+	embreeArgs.createLeaf = []( [[maybe_unused]] RTCThreadLocalAllocator allocator,
+								const struct RTCBuildPrimitive*			 primitives,
+								[[maybe_unused]] size_t					 primitiveCount,
+								void*									 userPtr ) -> void* {
 		BuilderContext* ctxt = reinterpret_cast<BuilderContext*>( userPtr );
 		uint32_t		handle;
 		uint32_t*		ptr;
@@ -282,7 +302,7 @@ void hiprtTest::buildEmbreeBvh(
 										float							position,
 										struct RTCBounds*				leftBounds,
 										struct RTCBounds*				rightBounds,
-										void*							userPtr ) {
+										[[maybe_unused]] void*			userPtr ) {
 			leftBounds->lower_x = rightBounds->lower_x = primitive->lower_x;
 			leftBounds->lower_y = rightBounds->lower_y = primitive->lower_y;
 			leftBounds->lower_z = rightBounds->lower_z = primitive->lower_z;
@@ -372,26 +392,59 @@ void hiprtTest::buildEmbreeBvh(
 	}
 
 	rtcBuildBVH( &embreeArgs );
-	uint32_t nodeCount = context.m_nodeAllocator.count();
-	nodes.resize( nodeCount );
 
+	const uint32_t nodeCount = context.m_nodeAllocator.count();
+	const uint32_t leafCount = context.m_leafAllocator.count();
+	uint32_t	   leafIndex = 0;
+
+	std::vector<hiprtInternalNode> internalNodes( nodeCount );
+	std::vector<hiprtLeafNode>	   leafNodes( leafCount );
 	for ( uint32_t i = 0; i < nodeCount; ++i )
 	{
-		hiprtBvhNode* node = context.m_nodeAllocator.item( i );
-		for ( uint32_t j = 0; j < 4; j++ )
+		EmbreeBuildNode* embreeNode = context.m_nodeAllocator.item( i );
+
+		hiprtInternalNode internalNode{};
+		internalNode.aabbMin = hiprt::make_float3( hiprt::FltMax );
+		internalNode.aabbMax = hiprt::make_float3( -hiprt::FltMax );
+
+		for ( uint32_t j = 0; j < 2; j++ )
 		{
-			if ( node->childIndices[j] == hiprtInvalidValue ) continue;
-			uint32_t childIndex = node->childIndices[j];
+			internalNode.aabbMin = min( internalNode.aabbMin, embreeNode->m_childAabbsMin[j] );
+			internalNode.aabbMax = max( internalNode.aabbMax, embreeNode->m_childAabbsMax[j] );
+
+			uint32_t		 childIndex = embreeNode->m_childIndices[j];
+			hiprtBvhNodeType childType	= hiprtBvhNodeTypeInternal;
 			if ( childIndex & LeafFlag )
 			{
-				uint32_t* primID	  = context.m_leafAllocator.item( childIndex & ( ~LeafFlag ) );
-				node->childIndices[j] = *primID;
+				uint32_t* primID = context.m_leafAllocator.item( childIndex & ( ~LeafFlag ) );
+				childIndex		 = leafIndex;
+				childType		 = hiprtBvhNodeTypeLeaf;
+
+				hiprtLeafNode leafNode{};
+				leafNode.aabbMin = embreeNode->m_childAabbsMin[j];
+				leafNode.aabbMax = embreeNode->m_childAabbsMax[j];
+				leafNode.primID	 = *primID;
+
+				leafNodes[leafIndex++] = leafNode;
 			}
+
+			internalNode.childIndices[j]   = childIndex;
+			internalNode.childNodeTypes[j] = childType;
 		}
-		nodes[i] = *node;
+
+		internalNodes[i] = internalNode;
 	}
+	assert( leafIndex == leafCount );
 
 	rtcReleaseBVH( embreeBvh );
+
+	nodeList.nodeCount = static_cast<uint32_t>( leafNodes.size() );
+
+	malloc( reinterpret_cast<hiprtLeafNode*&>( nodeList.leafNodes ), leafNodes.size() );
+	copyHtoD( reinterpret_cast<hiprtLeafNode*>( nodeList.leafNodes ), leafNodes.data(), leafNodes.size() );
+
+	malloc( reinterpret_cast<hiprtInternalNode*&>( nodeList.internalNodes ), internalNodes.size() );
+	copyHtoD( reinterpret_cast<hiprtInternalNode*>( nodeList.internalNodes ), internalNodes.data(), internalNodes.size() );
 }
 
 void hiprtTest::buildEmbreeGeometryBvh(
@@ -403,7 +456,7 @@ void hiprtTest::buildEmbreeGeometryBvh(
 	geomData.m_vertices = vertices;
 	geomData.m_indices	= indices;
 
-	std::vector<hiprtBvhNode> nodes;
+	std::vector<RTCBuildPrimitive> embreePrims;
 
 	if ( triangleCount > 2 )
 	{
@@ -464,7 +517,7 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			pairIndices.data(),
 			pairIndices.size() );
 
-		std::vector<RTCBuildPrimitive> embreePrims( pairIndices.size() );
+		embreePrims.resize( pairIndices.size() );
 		for ( size_t i = 0; i < pairIndices.size(); ++i )
 		{
 			Aabb box;
@@ -486,11 +539,12 @@ void hiprtTest::buildEmbreeGeometryBvh(
 		}
 
 		geomData.m_pairIndices = pairIndices.data();
-		buildEmbreeBvh( embreeDevice, embreePrims, nodes, &geomData );
+
+		if ( embreePrims.size() > 1 ) buildEmbreeBvh( embreeDevice, embreePrims, &geomData, buildInput.nodeList );
 	}
 	else
 	{
-		std::vector<RTCBuildPrimitive> embreePrims( triangleCount );
+		embreePrims.resize( triangleCount );
 		for ( uint32_t i = 0; i < triangleCount; ++i )
 		{
 			Aabb box;
@@ -507,27 +561,11 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			embreePrims[i].upper_z = box.m_max.z;
 		}
 
-		if ( embreePrims.size() == 1 )
-		{
-			hiprtBvhNode node;
-			node.childAabbsMin[0]  = { embreePrims.back().lower_x, embreePrims.back().lower_y, embreePrims.back().lower_z };
-			node.childAabbsMax[0]  = { embreePrims.back().upper_x, embreePrims.back().upper_y, embreePrims.back().upper_z };
-			node.childIndices[0]   = 0;
-			node.childIndices[1]   = hiprt::InvalidValue;
-			node.childIndices[2]   = hiprt::InvalidValue;
-			node.childIndices[3]   = hiprt::InvalidValue;
-			node.childNodeTypes[0] = hiprtBvhNodeTypeLeaf;
-			nodes.push_back( node );
-		}
+		if ( embreePrims.size() > 1 )
+			buildEmbreeBvh( embreeDevice, embreePrims, &geomData, buildInput.nodeList );
 		else
-		{
-			buildEmbreeBvh( embreeDevice, embreePrims, nodes, &geomData );
-		}
+			buildInput.nodeList.nodeCount = 1;
 	}
-
-	malloc( reinterpret_cast<hiprtBvhNode*&>( buildInput.nodeList.nodes ), nodes.size() );
-	copyHtoD( reinterpret_cast<hiprtBvhNode*>( buildInput.nodeList.nodes ), nodes.data(), nodes.size() );
-	buildInput.nodeList.nodeCount = static_cast<uint32_t>( nodes.size() );
 }
 
 void hiprtTest::buildEmbreeSceneBvh(
@@ -540,8 +578,8 @@ void hiprtTest::buildEmbreeSceneBvh(
 
 	struct BuilderContext
 	{
-		PoolAllocator<hiprtBvhNode, 16> nodeAllocator;
-		PoolAllocator<uint32_t, 16>		leafAllocator;
+		PoolAllocator<hiprtInternalNode, 16> nodeAllocator;
+		PoolAllocator<uint32_t, 16>			 leafAllocator;
 	} context;
 
 	std::vector<RTCBuildPrimitive> embreePrims( instanceCount );
@@ -564,12 +602,13 @@ void hiprtTest::buildEmbreeSceneBvh(
 			p[6] = float3{ geomBox.m_max.x, geomBox.m_max.y, geomBox.m_max.z };
 			p[7] = geomBox.m_max;
 
-			for ( uint32_t i = 0; i < 8; ++i )
+			box.reset();
+			for ( uint32_t j = 0; j < 8; ++j )
 			{
-				p[i] *= f.scale;
-				p[i] = rotate( f.rotation, p[i] );
-				p[i] += f.translation;
-				box.grow( p[i] );
+				p[j] *= f.scale;
+				p[j] = rotate( f.rotation, p[j] );
+				p[j] += f.translation;
+				box.grow( p[j] );
 			}
 		}
 
@@ -582,27 +621,10 @@ void hiprtTest::buildEmbreeSceneBvh(
 		embreePrims[i].upper_z = box.m_max.z;
 	}
 
-	std::vector<hiprtBvhNode> nodes;
-	if ( embreePrims.size() == 1 )
-	{
-		hiprtBvhNode node;
-		node.childAabbsMin[0]  = { embreePrims.back().lower_x, embreePrims.back().lower_y, embreePrims.back().lower_z };
-		node.childAabbsMax[0]  = { embreePrims.back().upper_x, embreePrims.back().upper_y, embreePrims.back().upper_z };
-		node.childIndices[0]   = 0;
-		node.childIndices[1]   = hiprt::InvalidValue;
-		node.childIndices[2]   = hiprt::InvalidValue;
-		node.childIndices[3]   = hiprt::InvalidValue;
-		node.childNodeTypes[0] = hiprtBvhNodeTypeLeaf;
-		nodes.push_back( node );
-	}
+	if ( embreePrims.size() > 1 )
+		buildEmbreeBvh( embreeDevice, embreePrims, nullptr, buildInput.nodeList );
 	else
-	{
-		buildEmbreeBvh( embreeDevice, embreePrims, nodes, nullptr );
-	}
-
-	malloc( reinterpret_cast<hiprtBvhNode*&>( buildInput.nodeList.nodes ), nodes.size() );
-	copyHtoD( reinterpret_cast<hiprtBvhNode*>( buildInput.nodeList.nodes ), nodes.data(), nodes.size() );
-	buildInput.nodeList.nodeCount = static_cast<uint32_t>( nodes.size() );
+		buildInput.nodeList.nodeCount = 1;
 }
 
 bool hiprtTest::readSourceCode(
@@ -654,9 +676,7 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	uint32_t									 numGeomTypes,
 	uint32_t									 numRayTypes )
 {
-	std::vector<const char*> options;
-
-	size_t							   binarySize = 0;
+	std::vector<const char*>		   options;
 	std::vector<std::filesystem::path> includeNamesData;
 	std::string						   sourceCode;
 
@@ -696,11 +716,13 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 		options.push_back( "-disable-llvm-passes" );
 		options.push_back( "-Xclang" );
 		options.push_back( "-mno-constructor-aliases" );
+		options.push_back( "-ffast-math" );
 	}
 	else
 	{
 		options.push_back( "--device-c" );
 		options.push_back( "-arch=compute_60" );
+		options.push_back( "--use_fast_math" );
 	}
 	options.push_back( "-std=c++17" );
 
@@ -814,10 +836,21 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 				f.read( reinterpret_cast<char*>( dst.data() ), size );
 				f.close();
 			}
+			else
+			{
+				std::cout << "FAILED to open file: " << path.string().c_str() << std::endl;
+			}
 		};
 
-		std::filesystem::path path =
-			( getRootDir() / "dist/bin/Release/hiprt" ).string() + HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
+		std::filesystem::path path = ( getRootDir() / "dist/bin" /
+#ifdef _DEBUG
+									   "Debug"
+#else
+									   "Release"
+#endif
+									   / "hiprt" )
+										 .string() +
+									 HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
 #if !defined( __GNUC__ )
 		path += "precompiled_bitcode_win.hipfb";
 #else
@@ -853,6 +886,15 @@ hiprtError hiprtTest::buildTraceKernels(
 	std::string						   sourceCode;
 	readSourceCode( srcPath, sourceCode, includeNamesData );
 
+	std::vector<const char*> options;
+	if ( opts ) options = *opts;
+
+	const bool isAmd = oroGetCurAPI( 0 ) == ORO_API_HIP;
+	if ( isAmd )
+		options.push_back( "-ffast-math" );
+	else
+		options.push_back( "--use_fast_math" );
+
 	std::vector<std::string> headersData( includeNamesData.size() );
 	std::vector<const char*> headers;
 	std::vector<const char*> includeNames;
@@ -873,8 +915,8 @@ hiprtError hiprtTest::buildTraceKernels(
 		static_cast<uint32_t>( headers.size() ),
 		headers.data(),
 		includeNames.data(),
-		opts ? static_cast<uint32_t>( opts.value().size() ) : 0,
-		opts ? opts.value().data() : nullptr,
+		static_cast<uint32_t>( options.size() ),
+		options.data(),
 		numGeomTypes,
 		numRayTypes,
 		funcNameSets ? funcNameSets.value().data() : nullptr,
@@ -923,7 +965,7 @@ void hiprtTest::validateAndWriteImage(
 			return;
 		}
 
-		if ( refW != g_parsedArgs.m_ww || refH != g_parsedArgs.m_wh )
+		if ( static_cast<uint32_t>( refW ) != g_parsedArgs.m_ww || static_cast<uint32_t>( refH ) != g_parsedArgs.m_wh )
 		{
 			std::cerr << "Framebuffer resolution does not match!" << std::endl;
 			EXPECT_FALSE( 1 );
@@ -992,7 +1034,8 @@ void ObjTestCases::createScene(
 	hiprtBuildFlags				 bvhBuildFlag,
 	bool						 time )
 {
-	hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, scene.m_ctx );
+	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, scene.m_ctx ) );
+	checkHiprt( hiprtSetLogLevel( scene.m_ctx, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	tinyobj::attrib_t				 attrib;
 	std::vector<tinyobj::shape_t>	 shapes;
@@ -1063,13 +1106,15 @@ void ObjTestCases::createScene(
 		shapeMaterials.push_back( m );
 	}
 
-	RTCDevice embreeDevice;
-	if ( bvhBuildFlag == hiprtBuildFlagBitCustomBvhImport )
+	RTCDevice embreeDevice{};
+	if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport )
 	{
 		embreeDevice = rtcNewDevice( "" );
 		rtcSetDeviceErrorFunction(
 			embreeDevice,
-			[]( void* userPtr, enum RTCError code, const char* str ) { std::cerr << str << std::endl; },
+			[]( [[maybe_unused]] void* userPtr, [[maybe_unused]] enum RTCError code, const char* str ) {
+				std::cerr << str << std::endl;
+			},
 			nullptr );
 	}
 
@@ -1182,7 +1227,7 @@ void ObjTestCases::createScene(
 	}
 
 	uint32_t threadCount = std::min( std::thread::hardware_concurrency(), 16u );
-	if ( bvhBuildFlag == hiprtBuildFlagBitCustomBvhImport ) threadCount = 1;
+	if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport ) threadCount = 1;
 	std::vector<std::thread>			  threads( threadCount );
 	std::vector<std::chrono::nanoseconds> bvhBuildTimes( threadCount );
 	std::vector<oroStream>				  streams( threadCount );
@@ -1231,7 +1276,7 @@ void ObjTestCases::createScene(
 					geomInput.primitive.triangleMesh = mesh;
 					geomInput.geomType				 = 0;
 
-					if ( bvhBuildFlag == hiprtBuildFlagBitCustomBvhImport )
+					if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport )
 						buildEmbreeGeometryBvh( embreeDevice, vertices, indices, geomInput );
 
 					geomInputs.push_back( geomInput );
@@ -1286,9 +1331,10 @@ void ObjTestCases::createScene(
 					{
 						free( geomInput.primitive.triangleMesh.triangleIndices );
 						free( geomInput.primitive.triangleMesh.vertices );
-						if ( bvhBuildFlag == hiprtBuildFlagBitCustomBvhImport )
+						if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport )
 						{
-							free( geomInput.nodeList.nodes );
+							free( geomInput.nodeList.leafNodes );
+							free( geomInput.nodeList.internalNodes );
 							free( geomInput.primitive.triangleMesh.trianglePairIndices );
 						}
 					}
@@ -1397,6 +1443,13 @@ void ObjTestCases::createScene(
 			scene.m_garbageCollector.push_back( sceneInput.instanceFrames );
 		}
 
+		if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport )
+		{
+			buildEmbreeSceneBvh( embreeDevice, geomBoxes, frames, sceneInput );
+			scene.m_garbageCollector.push_back( sceneInput.nodeList.leafNodes );
+			scene.m_garbageCollector.push_back( sceneInput.nodeList.internalNodes );
+		}
+
 		size_t			  sceneTempSize;
 		hiprtBuildOptions options;
 		options.buildFlags = bvhBuildFlag;
@@ -1405,12 +1458,6 @@ void ObjTestCases::createScene(
 		{
 			malloc( reinterpret_cast<uint8_t*&>( sceneTemp ), sceneTempSize );
 			scene.m_garbageCollector.push_back( sceneTemp );
-		}
-
-		if ( bvhBuildFlag == hiprtBuildFlagBitCustomBvhImport )
-		{
-			buildEmbreeSceneBvh( embreeDevice, geomBoxes, frames, sceneInput );
-			scene.m_garbageCollector.push_back( sceneInput.nodeList.nodes );
 		}
 
 		checkHiprt( hiprtCreateScene( scene.m_ctx, sceneInput, options, sceneLocal ) );
@@ -1426,7 +1473,7 @@ void ObjTestCases::createScene(
 		scene.m_scene = sceneLocal;
 	}
 
-	if ( bvhBuildFlag == hiprtBuildFlagBitCustomBvhImport ) rtcReleaseDevice( embreeDevice );
+	if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport ) rtcReleaseDevice( embreeDevice );
 }
 
 void ObjTestCases::setupScene(
@@ -1530,10 +1577,10 @@ void ObjTestCases::render(
 		&aoRadius,
 		&funcTable };
 
-	int numRegs;
+	int numRegs{};
 	checkOro( oroFuncGetAttribute( &numRegs, ORO_FUNC_ATTRIBUTE_NUM_REGS, func ) );
 
-	int numSmem;
+	int numSmem{};
 	checkOro( oroFuncGetAttribute( &numSmem, ORO_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, func ) );
 
 	std::cout << "Trace kernel: registers " << numRegs << ", shared memory " << numSmem << std::endl;

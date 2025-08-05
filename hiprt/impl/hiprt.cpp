@@ -26,9 +26,8 @@
 #include <hiprt/hiprt_libpath.h>
 #include <hiprt/impl/Error.h>
 #include <hiprt/impl/Context.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/Utility.h>
-#include <hiprt/impl/Logger.h>
 
 using namespace hiprt;
 
@@ -36,8 +35,18 @@ hiprtError hiprtCreateContext( uint32_t hiprtApiVersion, const hiprtContextCreat
 {
 	oroInitialize( ( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA, 0, g_hip_paths, g_hiprtc_paths );
 	if ( hiprtApiVersion != HIPRT_API_VERSION ) return hiprtErrorInvalidApiVersion;
-	Context* ctxt = new Context( input );
-	contextOut	  = reinterpret_cast<hiprtContext>( ctxt );
+
+	try
+	{
+		Context* ctxt = new Context( input );
+		contextOut	  = reinterpret_cast<hiprtContext>( ctxt );
+	}
+	catch ( std::exception& e )
+	{
+		std::cerr << e.what() << std::endl;
+		return hiprtErrorInternal;
+	}
+
 	return hiprtSuccess;
 }
 
@@ -85,7 +94,7 @@ hiprtError hiprtCreateGeometries(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -114,7 +123,7 @@ hiprtError hiprtDestroyGeometries( hiprtContext context, uint32_t numGeometries,
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -173,7 +182,7 @@ hiprtError hiprtBuildGeometries(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 
@@ -206,7 +215,7 @@ hiprtError hiprtGetGeometriesBuildTemporaryBufferSize(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 
@@ -247,7 +256,7 @@ hiprtError hiprtCompactGeometries(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -285,7 +294,7 @@ hiprtError hiprtCreateScenes(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -311,7 +320,7 @@ hiprtError hiprtDestroyScenes( hiprtContext context, uint32_t numScenes, hiprtSc
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -369,7 +378,7 @@ hiprtError hiprtBuildScenes(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 
@@ -402,7 +411,7 @@ hiprtError hiprtGetScenesBuildTemporaryBufferSize(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 
@@ -437,7 +446,7 @@ hiprtError hiprtCompactScenes(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -453,7 +462,7 @@ hiprtCreateFuncTable( hiprtContext context, uint32_t numGeomTypes, uint32_t numR
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -469,7 +478,7 @@ hiprtSetFuncTable( hiprtContext context, hiprtFuncTable funcTable, uint32_t geom
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -484,7 +493,7 @@ hiprtError hiprtDestroyFuncTable( hiprtContext context, hiprtFuncTable funcTable
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -500,7 +509,7 @@ hiprtError hiprtCreateGlobalStackBuffer(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -515,7 +524,7 @@ hiprtError hiprtDestroyGlobalStackBuffer( hiprtContext context, hiprtGlobalStack
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -530,7 +539,7 @@ hiprtError hiprtSaveGeometry( hiprtContext context, hiprtGeometry geometry, cons
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -545,7 +554,7 @@ hiprtError hiprtLoadGeometry( hiprtContext context, hiprtGeometry& geometryOut, 
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -560,7 +569,7 @@ hiprtError hiprtSaveScene( hiprtContext context, hiprtScene scene, const char* f
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -575,7 +584,7 @@ hiprtError hiprtLoadScene( hiprtContext context, hiprtScene& sceneOut, const cha
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -590,7 +599,7 @@ hiprtError hiprtExportGeometryAabb( hiprtContext context, hiprtGeometry geometry
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -605,7 +614,7 @@ hiprtError hiprtExportSceneAabb( hiprtContext context, hiprtScene scene, float3&
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 	return hiprtSuccess;
@@ -682,7 +691,7 @@ hiprtError hiprtBuildTraceKernels(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 
@@ -729,16 +738,39 @@ hiprtError hiprtBuildTraceKernelsFromBitcode(
 	}
 	catch ( std::exception& e )
 	{
-		logError( e.what() );
+		reinterpret_cast<Context*>( context )->logError( e.what() );
 		return hiprtErrorInternal;
 	}
 
 	return hiprtSuccess;
 }
 
-void hiprtSetCacheDirPath( hiprtContext context, const char* path )
+hiprtError hiprtSetCacheDirPath( hiprtContext context, const char* path )
 {
-	reinterpret_cast<Context*>( context )->setCacheDir( path );
+	if ( !context ) return hiprtErrorInvalidParameter;
+	try
+	{
+		reinterpret_cast<Context*>( context )->setCacheDir( path );
+	}
+	catch ( std::exception& e )
+	{
+		reinterpret_cast<Context*>( context )->logError( e.what() );
+		return hiprtErrorInternal;
+	}
+	return hiprtSuccess;
 }
 
-void hiprtSetLogLevel( hiprtLogLevel level ) { Logger::getInstance().setLevel( level ); }
+hiprtError hiprtSetLogLevel( hiprtContext context, hiprtLogLevel level )
+{
+	if ( !context ) return hiprtErrorInvalidParameter;
+	try
+	{
+		reinterpret_cast<Context*>( context )->setLogLevel( level );
+	}
+	catch ( std::exception& e )
+	{
+		reinterpret_cast<Context*>( context )->logError( e.what() );
+		return hiprtErrorInternal;
+	}
+	return hiprtSuccess;
+}

@@ -25,6 +25,7 @@
 #pragma once
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Aabb.h>
+#include <hiprt/impl/Obb.h>
 
 namespace hiprt
 {
@@ -34,12 +35,6 @@ class alignas( alignof( float3 ) ) Triangle
 	Triangle() = default;
 
 	HIPRT_HOST_DEVICE Triangle( const float3& v0, const float3& v1, const float3& v2 ) : m_v0( v0 ), m_v1( v1 ), m_v2( v2 ) {}
-
-	HIPRT_HOST_DEVICE Aabb aabb() const
-	{
-		Aabb aabb;
-		return aabb.grow( m_v0 ).grow( m_v1 ).grow( m_v2 );
-	}
 
 	HIPRT_HOST_DEVICE float3 normal( uint32_t flags = 0u ) const
 	{
@@ -82,7 +77,8 @@ class alignas( alignof( float3 ) ) Triangle
 		}
 	}
 
-	HIPRT_HOST_DEVICE void split( uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
+	HIPRT_HOST_DEVICE void
+	split( const uint32_t axis, const float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
 	{
 		leftBox = rightBox = Aabb();
 
@@ -93,15 +89,15 @@ class alignas( alignof( float3 ) ) Triangle
 		{
 			const float3* v0 = v1;
 			v1				 = &vertices[i];
-			float v0p		 = ( &v0->x )[axis];
-			float v1p		 = ( &v1->x )[axis];
+			const float v0p	 = ( &v0->x )[axis];
+			const float v1p	 = ( &v1->x )[axis];
 
 			if ( v0p <= position ) leftBox.grow( *v0 );
 			if ( v0p >= position ) rightBox.grow( *v0 );
 
 			if ( ( v0p < position && v1p > position ) || ( v0p > position && v1p < position ) )
 			{
-				float3 t = mix( *v0, *v1, clamp( ( position - v0p ) / ( v1p - v0p ), 0.0f, 1.0f ) );
+				const float3 t = mix( *v0, *v1, clamp( ( position - v0p ) / ( v1p - v0p ), 0.0f, 1.0f ) );
 				leftBox.grow( t );
 				rightBox.grow( t );
 			}
@@ -111,6 +107,57 @@ class alignas( alignof( float3 ) ) Triangle
 		( &rightBox.m_min.x )[axis] = position;
 		leftBox.intersect( box );
 		rightBox.intersect( box );
+	}
+
+	template <typename BoundingVolume>
+	HIPRT_HOST_DEVICE void
+	crop( const uint32_t axis, const float position, const Aabb& box, BoundingVolume& boundingVolume ) const
+	{
+		constexpr float EnlargeEpsilon	 = 0.05f;
+		constexpr float EdgeEnlargeRatio = 1.0f + 2.0f * EnlargeEpsilon;
+		constexpr float AreaEnlargeDelta = EdgeEnlargeRatio * EdgeEnlargeRatio - 1.0f;
+
+		Aabb croppedBox;
+
+		// use enlarged box to make sure that the split points are inside
+		Aabb enlargedBox = box;
+		enlargedBox.m_min -= EnlargeEpsilon * box.extent();
+		enlargedBox.m_max += EnlargeEpsilon * box.extent();
+
+		const float3* vertices = &m_v0;
+		const float3* v1	   = &vertices[2];
+		for ( uint32_t i = 0; i < 3; i++ )
+		{
+			const float3* v0 = v1;
+			v1				 = &vertices[i];
+			const float v0p	 = ( &v0->x )[axis];
+			const float v1p	 = ( &v1->x )[axis];
+
+			if ( enlargedBox.contains( *v0 ) )
+			{
+				boundingVolume.grow( *v0 );
+				croppedBox.grow( *v0 );
+			}
+
+			if ( ( v0p < position && v1p > position ) || ( v0p > position && v1p < position ) )
+			{
+				const float3 t = mix( *v0, *v1, clamp( ( position - v0p ) / ( v1p - v0p ), 0.0f, 1.0f ) );
+				if ( enlargedBox.contains( t ) )
+				{
+					boundingVolume.grow( t );
+					croppedBox.grow( t );
+				}
+			}
+		}
+
+		// fallback when the cropped box is invalid
+		if ( !croppedBox.valid() || box.area() - croppedBox.area() > AreaEnlargeDelta ) boundingVolume.grow( box );
+	}
+
+	HIPRT_HOST_DEVICE Aabb aabb() const
+	{
+		Aabb aabb;
+		return aabb.grow( m_v0 ).grow( m_v1 ).grow( m_v2 );
 	}
 
   public:
@@ -134,13 +181,6 @@ class alignas( alignof( float3 ) ) TrianglePair
 		if ( index > 0 ) return Triangle( m_v1, m_v3, m_v2 );
 		return Triangle( m_v0, m_v1, m_v2 );
 	}
-
-	HIPRT_HOST_DEVICE Aabb aabb() const
-	{
-		Aabb aabb;
-		return aabb.grow( m_v0 ).grow( m_v1 ).grow( m_v2 ).grow( m_v3 );
-	}
-
 	HIPRT_HOST_DEVICE void split( uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
 	{
 		Aabb leftBox0, rightBox0;
@@ -149,6 +189,12 @@ class alignas( alignof( float3 ) ) TrianglePair
 		fetchTriangle( 1 ).split( axis, position, box, leftBox1, rightBox1 );
 		leftBox	 = Aabb( leftBox0, leftBox1 );
 		rightBox = Aabb( rightBox0, rightBox1 );
+	}
+
+	HIPRT_HOST_DEVICE Aabb aabb() const
+	{
+		Aabb aabb;
+		return aabb.grow( m_v0 ).grow( m_v1 ).grow( m_v2 ).grow( m_v3 );
 	}
 
   public:

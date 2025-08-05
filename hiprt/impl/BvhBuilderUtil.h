@@ -42,19 +42,19 @@ template <typename T>
 HIPRT_DEVICE T warpMin( T warpVal )
 {
 	T warpValue = __shfl_xor( warpVal, 1 );
-	warpVal		= min( warpVal, warpValue );
+	warpVal		= hiprt::min( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 2 );
-	warpVal		= min( warpVal, warpValue );
+	warpVal		= hiprt::min( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 4 );
-	warpVal		= min( warpVal, warpValue );
+	warpVal		= hiprt::min( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 8 );
-	warpVal		= min( warpVal, warpValue );
+	warpVal		= hiprt::min( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 16 );
-	warpVal		= min( warpVal, warpValue );
+	warpVal		= hiprt::min( warpVal, warpValue );
 	if constexpr ( WarpSize == 64 )
 	{
 		warpValue = __shfl_xor( warpVal, 32 );
-		warpVal	  = min( warpVal, warpValue );
+		warpVal	  = hiprt::min( warpVal, warpValue );
 	}
 	warpVal = __shfl( warpVal, WarpSize - 1 );
 	return warpVal;
@@ -64,19 +64,19 @@ template <typename T>
 HIPRT_DEVICE T warpMax( T warpVal )
 {
 	T warpValue = __shfl_xor( warpVal, 1 );
-	warpVal		= max( warpVal, warpValue );
+	warpVal		= hiprt::max( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 2 );
-	warpVal		= max( warpVal, warpValue );
+	warpVal		= hiprt::max( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 4 );
-	warpVal		= max( warpVal, warpValue );
+	warpVal		= hiprt::max( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 8 );
-	warpVal		= max( warpVal, warpValue );
+	warpVal		= hiprt::max( warpVal, warpValue );
 	warpValue	= __shfl_xor( warpVal, 16 );
-	warpVal		= max( warpVal, warpValue );
+	warpVal		= hiprt::max( warpVal, warpValue );
 	if constexpr ( WarpSize == 64 )
 	{
 		warpValue = __shfl_xor( warpVal, 32 );
-		warpVal	  = max( warpVal, warpValue );
+		warpVal	  = hiprt::max( warpVal, warpValue );
 	}
 	warpVal = __shfl( warpVal, WarpSize - 1 );
 	return warpVal;
@@ -188,7 +188,7 @@ HIPRT_DEVICE T blockMin( T blockVal, T* blockCache )
 	{
 		__syncthreads();
 		if ( threadIdx.x < warpsPerBlock )
-			blockCache[threadIdx.x] = min( blockCache[threadIdx.x], blockCache[threadIdx.x ^ i] );
+			blockCache[threadIdx.x] = hiprt::min( blockCache[threadIdx.x], blockCache[threadIdx.x ^ i] );
 	}
 	__syncthreads();
 	return blockCache[0];
@@ -208,7 +208,7 @@ HIPRT_DEVICE T blockMax( T blockVal, T* blockCache )
 	{
 		__syncthreads();
 		if ( threadIdx.x < warpsPerBlock )
-			blockCache[threadIdx.x] = max( blockCache[threadIdx.x], blockCache[threadIdx.x ^ i] );
+			blockCache[threadIdx.x] = hiprt::max( blockCache[threadIdx.x], blockCache[threadIdx.x ^ i] );
 	}
 	__syncthreads();
 	return blockCache[0];
@@ -310,7 +310,7 @@ HIPRT_DEVICE T blockScan( bool blockVal, T* blockCache )
 	return blockCache[warpIndex] + warpSum - warpCount + static_cast<T>( blockVal );
 }
 
-HIPRT_DEVICE HIPRT_INLINE void SyncWarp()
+HIPRT_DEVICE HIPRT_INLINE void sync_warp()
 {
 #if defined( __CUDACC__ )
 	__syncwarp();

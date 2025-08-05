@@ -37,6 +37,7 @@ class Compiler
   public:
 	static constexpr std::string_view DecryptKey = "20220318";
 
+	Compiler();
 	~Compiler();
 
 	Kernel getKernel(
@@ -49,17 +50,13 @@ class Compiler
 		const char**				 includeNames = nullptr );
 
 	void buildProgram(
-		Context&							 context,
-		const std::vector<const char*>&		 funcNames,
-		const std::string&					 src,
-		const std::filesystem::path&		 moduleName,
-		std::vector<const char*>&			 headers,
-		std::vector<const char*>&			 includeNames,
-		std::vector<const char*>&			 options,
-		uint32_t							 numGeomTypes,
-		uint32_t							 numRayTypes,
-		const std::vector<hiprtFuncNameSet>& funcNameSets,
-		orortcProgram&						 progOut );
+		const std::vector<const char*>& funcNames,
+		const std::string&				src,
+		const std::filesystem::path&	moduleName,
+		std::vector<const char*>&		headers,
+		std::vector<const char*>&		includeNames,
+		std::vector<const char*>&		options,
+		orortcProgram&					progOut );
 
 	void buildKernels(
 		Context&							 context,
@@ -90,23 +87,26 @@ class Compiler
 
 	void setCacheDir( const std::filesystem::path& path );
 
+	bool isRtip31Supported() const { return m_rtip31Support; }
+
 	static std::string kernelNameSufix( const std::string& traits );
 
   private:
 	static std::string readSourceCode(
 		const std::filesystem::path& path, std::optional<std::vector<std::filesystem::path>> includes = std::nullopt );
 
-	static void addCommonOpts( Context& context, std::vector<const char*>& opts );
-	static void addCustomFuncsSwitchCase(
+	static std::filesystem::path getBitcodePath( bool amd );
+	static std::filesystem::path getFatbinPath( bool amd );
+
+	static bool isCachedFileUpToDate( const std::filesystem::path& cachedFile, const std::filesystem::path& moduleName );
+
+	void addCustomFuncsSwitchCase(
 		std::string&								 extSrc,
 		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
 		uint32_t									 numGeomTypes = 0,
 		uint32_t									 numRayTypes  = 1 );
 
-	static std::filesystem::path getBitcodePath( bool amd );
-	static std::filesystem::path getFatbinPath( bool amd );
-
-	static bool isCachedFileUpToDate( const std::filesystem::path& cachedFile, const std::filesystem::path& moduleName );
+	void addCommonOpts( Context& context, std::vector<const char*>& opts, bool extended );
 
 	std::string decryptSourceCode( const std::string& src );
 
@@ -129,6 +129,10 @@ class Compiler
 		Context& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets );
 
 	std::filesystem::path m_cacheDirectory = "cache";
+
+	bool m_rtip31Support = false;
+
+	std::string m_rtipStr;
 
 	std::mutex					  m_kernelMutex;
 	std::map<std::string, Kernel> m_kernelCache;

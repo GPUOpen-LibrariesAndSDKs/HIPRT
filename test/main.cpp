@@ -50,7 +50,7 @@ TEST_F( PerformanceTestCases, AoRayEmbreeHairball )
 		hiprtBuildFlagBitCustomBvhImport,
 		Timings );
 	render(
-		"AoRayHairball.png",
+		"AoRayEmbreeHairball.png",
 		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayHairball.png",
@@ -104,6 +104,37 @@ TEST_F( PerformanceTestCases, AoRayEmbreeBistro )
 		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayBistro.png",
+		Timings,
+		AoRadius );
+	deleteScene( m_scene );
+}
+#endif
+
+#ifndef HIPRT_PUBLIC_REPO
+TEST_F( PerformanceTestCases, AoRayTransformedBistro )
+{
+	constexpr bool	Timings	 = true;
+	constexpr float AoRadius = 50.0f;
+
+	Camera camera = createCamera<TestCasesType::TestBistro>();
+
+	hiprtFrameSRT transform;
+	transform.translation = { 0.0f, 0.0f, 0.0f };
+	transform.scale		  = { 1.0f, 1.0f, 1.0f };
+	transform.rotation	  = { 0.0f, 1.0f, 0.0f, 0.5f };
+
+	setupScene(
+		camera,
+		getRootDir() / "test/common/meshes/lfs/bistro_full/Exterior/exterior.obj",
+		false,
+		transform,
+		hiprtBuildFlagBitPreferHighQualityBuild,
+		Timings );
+	render(
+		"AoRayTransformedBistro.png",
+		getRootDir() / "test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayTransformedBistro.png",
 		Timings,
 		AoRadius );
 	deleteScene( m_scene );
@@ -401,6 +432,28 @@ TEST_F( ObjTestCases, AoRayCornellBox )
 	setupScene( camera, getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj" );
 	render(
 		"AoRayCornellBox.png",
+		getRootDir() / "test/kernels/AoRayKernel.h",
+		"AoRayKernel",
+		"AoRayCornellBox.png",
+		Timings,
+		AoRadius );
+	deleteScene( m_scene );
+}
+
+TEST_F( ObjTestCases, AoRayEmbreeCornellBox )
+{
+	constexpr bool	Timings	 = true;
+	constexpr float AoRadius = 1.4f;
+
+	Camera camera = createCamera<TestCasesType::TestCornellBox>();
+	setupScene(
+		camera,
+		getRootDir() / "test/common/meshes/cornellbox/cornellBox.obj",
+		false,
+		std::nullopt,
+		hiprtBuildFlagBitCustomBvhImport );
+	render(
+		"AoRayEmbreeCornellBox.png",
 		getRootDir() / "test/kernels/AoRayKernel.h",
 		"AoRayKernel",
 		"AoRayCornellBox.png",
@@ -809,9 +862,12 @@ TEST_F( hiprtTest, CustomBvhImport )
 
 	buildBvh( geomInput );
 
-	hiprtDevicePtr	  geomTemp = nullptr;
+	size_t			  geomTempSize;
+	hiprtDevicePtr	  geomTemp;
 	hiprtBuildOptions options;
 	options.buildFlags = hiprtBuildFlagBitCustomBvhImport;
+	checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, options, geomTempSize ) );
+	malloc( reinterpret_cast<uint8_t*&>( geomTemp ), geomTempSize );
 
 	hiprtGeometry geom;
 	checkHiprt( hiprtCreateGeometry( ctxt, geomInput, options, geom ) );
@@ -856,7 +912,10 @@ TEST_F( hiprtTest, CustomBvhImport )
 	free( diffusColors );
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
+	free( geomInput.nodeList.leafNodes );
+	free( geomInput.nodeList.internalNodes );
 	free( dst );
+	free( geomTemp );
 	checkHiprt( hiprtDestroyFuncTable( ctxt, funcTable ) );
 	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
 	checkHiprt( hiprtDestroyContext( ctxt ) );
@@ -1045,7 +1104,6 @@ TEST_F( hiprtTest, MeshIntersectionNonIndexed )
 	launchKernel( func, g_parsedArgs.m_ww, g_parsedArgs.m_wh, args );
 	validateAndWriteImage( "MeshIntersectionNonIndexed.png", dst, "MeshIntersection.png" );
 
-	free( mesh.triangleIndices );
 	free( mesh.vertices );
 	free( geomTemp );
 	free( dst );
@@ -1062,16 +1120,19 @@ TEST_F( hiprtTest, PairTriangles )
 	mesh.triangleCount	= 3;
 	mesh.triangleStride = sizeof( uint3 );
 	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
-	uint32_t idx[] = { 0, 1, 2, 0, 1, 2, 3, 4, 5 };
+	uint32_t idx[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), reinterpret_cast<uint3*>( idx ), mesh.triangleCount );
 
-	mesh.vertexCount  = 6;
+	mesh.vertexCount  = 9;
 	mesh.vertexStride = sizeof( float3 );
 	malloc( reinterpret_cast<float3*&>( mesh.vertices ), mesh.vertexCount );
 	float3 v[] = {
 		{ 0.0f, 0.0f, 1.0f },
 		{ 1.0f, 0.0f, 1.0f },
 		{ 0.5f, 1.0f, 1.0f },
+		{ 0.0f, 0.0f, 0.5f },
+		{ 1.0f, 0.0f, 0.5f },
+		{ 0.5f, 1.0f, 0.5f },
 		{ 0.0f, 0.0f, 0.0f },
 		{ 1.0f, 0.0f, 0.0f },
 		{ 0.5f, 1.0f, 0.0f } };
@@ -2751,11 +2812,6 @@ int main( int argc, const char* argv[] )
 	{
 		parsedArgs.m_usePrecompiledBitcodes = true;
 	}
-
-// precompiled bitcode is only tested on windows for now
-#if defined( __GNUC__ )
-	parsedArgs.m_usePrecompiledBitcodes = false;
-#endif
 
 	::testing::AddGlobalTestEnvironment( new InitCommandlineArgs( parsedArgs ) );
 	int ret = RUN_ALL_TESTS();

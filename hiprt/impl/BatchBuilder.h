@@ -27,10 +27,9 @@
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/BvhNode.h>
 #include <hiprt/impl/Context.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/Kernel.h>
 #include <hiprt/impl/MemoryArena.h>
-#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/Timer.h>
 #include <hiprt/impl/Utility.h>
 #include <hiprt/impl/BvhConfig.h>
@@ -56,15 +55,18 @@ class BatchBuilder
 	BatchBuilder& operator=( const BatchBuilder& ) = delete;
 
 	template <typename BuildInput>
-	static size_t getTemporaryBufferSize( const std::vector<BuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
+	static size_t getTemporaryBufferSize(
+		[[maybe_unused]] Context& context, const std::vector<BuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 	{
 		return RoundUp( sizeof( BuildInput ) * buildInputs.size(), DefaultAlignment ) +
 			   RoundUp( sizeof( hiprtDevicePtr ) * buildInputs.size(), DefaultAlignment );
 	}
 
-	static size_t getStorageBufferSize( const hiprtGeometryBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
+	static size_t
+	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
 
-	static size_t getStorageBufferSize( const hiprtSceneBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
+	static size_t
+	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
 
 	template <typename BuildInput>
 	static void build(
@@ -85,7 +87,7 @@ void BatchBuilder::build(
 	oroStream					   stream,
 	std::vector<hiprtDevicePtr>&   buffers )
 {
-	const auto	tempSize = getTemporaryBufferSize( buildInputs, buildOptions );
+	const auto	tempSize = getTemporaryBufferSize( context, buildInputs, buildOptions );
 	MemoryArena temporaryMemoryArena( temporaryBuffer, tempSize, DefaultAlignment );
 
 	BuildInput*		buildInputsDev = temporaryMemoryArena.allocate<BuildInput>( buildInputs.size() );

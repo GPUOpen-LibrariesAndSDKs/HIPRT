@@ -30,7 +30,7 @@
 #include <hiprt/impl/AabbList.h>
 #include <hiprt/impl/Triangle.h>
 #include <hiprt/impl/BvhNode.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/QrDecomposition.h>
 #include <hiprt/impl/Quaternion.h>
 #include <hiprt/impl/Transform.h>
@@ -54,12 +54,12 @@ HIPRT_DEVICE uint32_t findParent(
 	if ( i == 0 || ( j != n && findHighestDifferentBit( j - 1, j, n, sortedMortonCodeKeys ) <
 								   findHighestDifferentBit( i - 1, i, n, sortedMortonCodeKeys ) ) )
 	{
-		scratchNodes[j - 1].encodeChildIndex( 0, nodeAddr, nodeType );
+		scratchNodes[j - 1].m_childIndex0 = encodeNodeIndex( nodeAddr, nodeType );
 		return j - 1;
 	}
 	else
 	{
-		scratchNodes[i - 1].encodeChildIndex( 1, nodeAddr, nodeType );
+		scratchNodes[i - 1].m_childIndex1 = encodeNodeIndex( nodeAddr, nodeType );
 		return i - 1;
 	}
 }

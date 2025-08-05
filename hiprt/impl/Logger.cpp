@@ -28,13 +28,7 @@
 
 namespace hiprt
 {
-Logger& Logger::getInstance()
-{
-	static Logger s_writer;
-	return s_writer;
-}
-
-void Logger::print( uint32_t filter, const char* fmt, ... )
+void Logger::print( uint32_t filter, const char* fmt, ... ) const
 {
 	if ( ( filter & m_level ) == 0 ) return;
 	va_list c;

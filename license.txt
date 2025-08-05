@@ -33,6 +33,7 @@ embree - Apache License 2.0 - https://github.com/embree/embree
 gtest - BSD 3-Clause "New" or "Revised" License -https://github.com/google/googletest
 argparse - License: Apache 2.0 with LLVM Exception or GPL v3 - https://github.com/jamolnng/argparse
 tiny_obj_loader - MIT License - https://github.com/tinyobjloader/tinyobjloader/blob/release/tiny_obj_loader.h
+Zstandard - BSD License - https://github.com/facebook/zstd
 
 
 PNPOLY - Point Inclusion in Polygon Test

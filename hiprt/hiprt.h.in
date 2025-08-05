@@ -40,6 +40,9 @@
 extern "C" {
 #endif
 
+#if defined( HIPRT_STATIC_LIBRARY )
+#define HIPRT_API
+#else
 #if defined( _MSC_VER )
 #ifdef HIPRT_EXPORTS
 #define HIPRT_API __declspec( dllexport )
@@ -55,6 +58,7 @@ extern "C" {
 #else
 #define HIPRT_API
 #pragma warning Unknown dynamic link import / export semantics.
+#endif
 #endif
 
 /** \brief Creates HIPRT API context.
@@ -587,13 +591,13 @@ HIPRT_API hiprtError hiprtBuildTraceKernelsFromBitcode(
  * \param context The HIPRT API context.
  * \param path A user defined path to cache kernels.
  */
-HIPRT_API void hiprtSetCacheDirPath( hiprtContext context, const char* path );
+HIPRT_API hiprtError hiprtSetCacheDirPath( hiprtContext context, const char* path );
 
 /** \brief Sets the log level.
- *
+ * \param context The HIPRT API context.
  * \param level The desired log level.
  */
-HIPRT_API void hiprtSetLogLevel( hiprtLogLevel level );
+HIPRT_API hiprtError hiprtSetLogLevel( hiprtContext context, hiprtLogLevel level );
 
 #ifdef __cplusplus
 }

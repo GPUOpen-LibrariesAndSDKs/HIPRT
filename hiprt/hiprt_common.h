@@ -87,8 +87,10 @@
 
 #ifdef __KERNELCC__
 #define HIPRT_INLINE __forceinline__
+#define HIPRT_CONST __constant__
 #else
 #define HIPRT_INLINE inline
+#define HIPRT_CONST const
 #endif
 
 #define HIPRT_HOST __host__
@@ -110,15 +112,24 @@
 #endif
 
 #if defined( __KERNELCC_RTC__ )
+#if defined( __CUDACC_RTC__ ) || HIP_VERSION_MAJOR < 7
 using int8_t   = char;
 using uint8_t  = unsigned char;
 using int16_t  = short;
 using uint16_t = unsigned short;
-#if defined( __CUDACC_RTC__ )
 using int32_t  = int;
 using uint32_t = unsigned int;
 using int64_t  = long long;
 using uint64_t = unsigned long long;
+#else
+using int8_t					   = __hip_internal::int8_t;
+using uint8_t					   = __hip_internal::uint8_t;
+using int16_t					   = __hip_internal::int16_t;
+using uint16_t					   = __hip_internal::uint16_t;
+using int32_t					   = __hip_internal::int32_t;
+using uint32_t					   = __hip_internal::uint32_t;
+using int64_t					   = __hip_internal::int64_t;
+using uint64_t					   = __hip_internal::uint64_t;
 #endif
 #endif
 
@@ -174,17 +185,85 @@ constexpr uint32_t InvalidValue				 = ~0u;
 constexpr uint32_t FullRayMask				 = ~0u;
 constexpr uint32_t MaxBatchBuildMaxPrimCount = 512u;
 constexpr uint32_t MaxInstanceLevels		 = 4u;
-constexpr uint32_t BranchingFactor			 = 4u;
 constexpr uint32_t DefaultAlignment			 = 64u;
+constexpr uint32_t NoRotationIndex			 = 127u;
+constexpr uint32_t InstanceIDBits			 = 24u;
 
 #ifdef __KERNELCC__
+#ifndef HIPRT_RTIP
+#if __gfx1200__ || __gfx1201__
+// to enable full hardware support, we need either the Rocm 6.4+ on Windows, or the Rocm 7+ on Linux
+#if ( HIP_VERSION_MAJOR >= 7 ) || \
+	( defined( HIPCC_OS_WINDOWS ) && ( ( HIP_VERSION_MAJOR > 6 ) || ( HIP_VERSION_MAJOR == 6 && HIP_VERSION_MINOR >= 4 ) ) )
+#define HIPRT_RTIP 31
+#else
+#define HIPRT_RTIP 20
+#warning \
+	"HW supports RTIP 3.1 but the compiler is of an older version; build with ROCm 6.4+ (Win) or 7.0+ (Linux) to fully utilize HW ray tracing features"
+#endif
+#elif __gfx1100__ || __gfx1101__ || __gfx1102__ || __gfx1103__ || __gfx1150__ || __gfx1151__ || __gfx1152__ || __gfx1153__
+#define HIPRT_RTIP 20
+#elif __gfx1030__ || __gfx1031__ || __gfx1032__ || __gfx1033__ || __gfx1034__ || __gfx1035__ || __gfx1036__
+#define HIPRT_RTIP 11
+#else
+#define HIPRT_RTIP 0
+#endif
+#endif
+
 #if __gfx900__ || __gfx902__ || __gfx904__ || __gfx906__ || __gfx908__ || __gfx909__ || __gfx90a__ || __gfx90c__ || \
 	__gfx940__ || __gfx941__ || __gfx942__
 constexpr uint32_t WarpSize = 64;
 #else
-constexpr uint32_t WarpSize = 32;
+constexpr uint32_t WarpSize		   = 32;
+#endif
+
+constexpr uint32_t Rtip = HIPRT_RTIP;
+
+#if HIPRT_RTIP >= 31
+constexpr uint32_t BranchingFactor = 8;
+#else
+constexpr uint32_t BranchingFactor = 4;
 #endif
 #endif
+
+HIPRT_HOST_DEVICE HIPRT_INLINE float as_float( uint32_t value )
+{
+#if defined( __KERNELCC__ )
+	return __uint_as_float( value );
+#else
+	return *reinterpret_cast<float*>( &value );
+#endif
+}
+
+HIPRT_HOST_DEVICE HIPRT_INLINE int as_int( float value )
+{
+#if defined( __KERNELCC__ )
+	return __float_as_int( value );
+#else
+	return *reinterpret_cast<int*>( &value );
+#endif
+}
+
+HIPRT_HOST_DEVICE HIPRT_INLINE uint32_t as_uint( float value )
+{
+#if defined( __KERNELCC__ )
+	return __float_as_uint( value );
+#else
+	return *reinterpret_cast<uint32_t*>( &value );
+#endif
+}
+
+HIPRT_HOST_DEVICE HIPRT_INLINE uint32_t clz( uint32_t value )
+{
+#if defined( __KERNELCC__ )
+	return __clz( value );
+#else
+	uint32_t count = 0;
+	for ( uint32_t mask = 1u << 31; mask && !( value & mask ); mask >>= 1 )
+		++count;
+	return value == 0 ? 32 : count;
+#endif
+}
 
 template <typename T, typename U>
 constexpr HIPRT_HOST_DEVICE T RoundUp( T value, U factor )
@@ -204,6 +283,7 @@ constexpr HIPRT_HOST_DEVICE T Log2( T n )
 	return n <= 1 ? 0 : 1 + Log2( ( n + 1 ) / 2 );
 }
 
+#if !defined( __KERNELCC_RTC__ ) || defined( __CUDACC_RTC__ ) || HIP_VERSION_MAJOR < 7
 template <class T, class U>
 struct is_same
 {
@@ -221,6 +301,24 @@ struct is_same<T, T>
 		value = 1
 	};
 };
+
+template <bool B, class T, class F>
+struct conditional
+{
+	using type = T;
+};
+
+template <class T, class F>
+struct conditional<false, T, F>
+{
+	using type = F;
+};
+#else
+template <class T, class U>
+using is_same = __hip_internal::is_same<T, U>;
+template <bool B, class T, class F>
+using conditional = __hip_internal::conditional<B, T, F>;
+#endif
 
 template <class T>
 struct remove_reference
@@ -291,24 +389,12 @@ struct alignment_of : integral_constant<size_t, alignof( T )>
 {
 };
 
-template <bool B, class T, class F>
-struct conditional
-{
-	using type = T;
-};
-
-template <class T, class F>
-struct conditional<false, T, F>
-{
-	using type = F;
-};
-
 template <size_t Size, uint32_t Align>
 struct aligned_storage
 {
 	struct type
 	{
-		alignas( Align ) unsigned char data[Size];
+		alignas( Align ) uint8_t data[Size];
 	};
 };
 

@@ -30,38 +30,12 @@ namespace hiprt
 class Logger
 {
   public:
-	static Logger& getInstance();
-
 	void setLevel( uint32_t level ) { m_level = level; }
 	int	 getLevel() const { return m_level; }
 
-	void print( uint32_t filter, const char* fmt, ... );
+	void print( uint32_t filter, const char* fmt, ... ) const;
 
   protected:
 	uint32_t m_level = 0;
 };
-
-template <typename... Args>
-void log( uint32_t filter, Args... args )
-{
-	Logger::getInstance().print( filter, args... );
-}
-
-template <typename... Args>
-void logInfo( Args... args )
-{
-	Logger::getInstance().print( hiprtLogLevelInfo, args... );
-}
-
-template <typename... Args>
-void logWarn( Args... args )
-{
-	Logger::getInstance().print( hiprtLogLevelWarn, args... );
-}
-
-template <typename... Args>
-void logError( Args... args )
-{
-	Logger::getInstance().print( hiprtLogLevelError, args... );
-}
 }; // namespace hiprt

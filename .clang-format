@@ -2,7 +2,6 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Always
-BreakBeforeBraces: Custom
 ColumnLimit: 128
 AllowShortBlocksOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: true

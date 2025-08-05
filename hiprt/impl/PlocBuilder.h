@@ -27,10 +27,9 @@
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/BvhNode.h>
 #include <hiprt/impl/Context.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/Kernel.h>
 #include <hiprt/impl/MemoryArena.h>
-#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/Timer.h>
 #include <hiprt/impl/RadixSort.h>
 #include <hiprt/impl/Utility.h>
@@ -58,7 +57,11 @@ class PlocBuilder
 		SortTime,
 		SetupClustersTime,
 		PlocTime,
-		CollapseTime
+		ComputeParentAddrsTime,
+		ComputeFatLeavesTime,
+		CollapseTime,
+		CompactTasksTime,
+		PackLeavesTime
 	};
 
 	PlocBuilder()								 = delete;
@@ -66,13 +69,17 @@ class PlocBuilder
 
 	static size_t getTemporaryBufferSize( const size_t count );
 
-	static size_t getTemporaryBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	static size_t
+	getTemporaryBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
-	static size_t getTemporaryBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	static size_t
+	getTemporaryBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
-	static size_t getStorageBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	static size_t
+	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
-	static size_t getStorageBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	static size_t
+	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static void build(
 		Context&					   context,
@@ -90,7 +97,7 @@ class PlocBuilder
 		oroStream					stream,
 		hiprtDevicePtr				buffer );
 
-	template <typename PrimitiveNode, typename PrimitiveContainer>
+	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void build(
 		Context&				context,
 		PrimitiveContainer&		primitives,
@@ -116,7 +123,7 @@ class PlocBuilder
 		oroStream					stream,
 		hiprtDevicePtr				buffer );
 
-	template <typename PrimitiveNode, typename PrimitiveContainer>
+	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void update(
 		Context&				context,
 		PrimitiveContainer&		primitives,
@@ -125,7 +132,7 @@ class PlocBuilder
 		MemoryArena&			storageMemoryArena );
 };
 
-template <typename PrimitiveNode, typename PrimitiveContainer>
+template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void PlocBuilder::build(
 	Context&				context,
 	PrimitiveContainer&		primitives,
@@ -135,18 +142,25 @@ void PlocBuilder::build(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<std::is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
+	typedef typename std::conditional<
+		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
+		SceneHeader,
+		GeomHeader>::type Header;
+
+	const uint32_t maxBoxNodeCount =
+		static_cast<uint32_t>( getMaxBoxNodeCount<BoxNode, PrimitiveNode>( primitives.getCount() ) );
+	const uint32_t maxPrimNodeCount = static_cast<uint32_t>( getMaxPrimNodeCount<PrimitiveNode>( primitives.getCount() ) );
 
 	Header*		   header	 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( DivideRoundUp( 2 * primitives.getCount(), 3 ) );
-	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( primitives.getCount() );
+	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( maxBoxNodeCount );
+	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( maxPrimNodeCount );
 
-	Aabb* centroidBox = temporaryMemoryArena.allocate<Aabb>();
-
-	ScratchNode*   scratchNodes = temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
-	ReferenceNode* references	= temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
-	uint32_t*	   taskCounter	= temporaryMemoryArena.allocate<uint32_t>();
-	uint3*		   taskQueue	= temporaryMemoryArena.allocate<uint3>( primitives.getCount() );
+	Aabb*		   centroidBox		= temporaryMemoryArena.allocate<Aabb>();
+	ScratchNode*   scratchNodes		= temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
+	ReferenceNode* references		= temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
+	uint32_t*	   referenceIndices = temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
+	uint32_t*	   taskCounter		= temporaryMemoryArena.allocate<uint32_t>();
+	uint3*		   taskQueue		= temporaryMemoryArena.allocate<uint3>( primitives.getCount() );
 
 	uint32_t* nodeIndices	 = reinterpret_cast<uint32_t*>( taskQueue ) + 0 * primitives.getCount();
 	uint32_t* updateCounters = reinterpret_cast<uint32_t*>( taskQueue ) + 1 * primitives.getCount();
@@ -166,12 +180,16 @@ void PlocBuilder::build(
 	std::vector<const char*> opts;
 	// opts.push_back( "-G" );
 
-	std::string containerParam	   = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
-	std::string nodeParam		   = Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
-	std::string containerNodeParam = containerParam + "_" + nodeParam;
+	const std::string headerParam			 = Compiler::kernelNameSufix( Traits<Header>::TYPE_NAME );
+	const std::string containerParam		 = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
+	const std::string primNodeParam			 = Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
+	const std::string binNodeParam			 = Compiler::kernelNameSufix( Traits<ScratchNode>::TYPE_NAME );
+	const std::string containerPrimNodeParam = containerParam + "_" + primNodeParam;
+	const std::string primNodeBinNodeParam	 = primNodeParam + "_" + binNodeParam;
 
 	bool pairTriangles = false;
-	if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value )
+	if constexpr (
+		std::is_same<PrimitiveNode, TrianglePairNode>::value || std::is_same<PrimitiveNode, TrianglePacketNode>::value )
 		pairTriangles = primitives.pairable() && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableTrianglePairing );
 
 	// STEP 0: Init data
@@ -194,7 +212,9 @@ void PlocBuilder::build(
 	else
 	{
 		geomType <<= 1;
-		if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value ) geomType |= 1;
+		if constexpr (
+			std::is_same<PrimitiveNode, TrianglePairNode>::value || std::is_same<PrimitiveNode, TrianglePacketNode>::value )
+			geomType |= 1;
 		const uint32_t primCount	  = pairTriangles ? 0u : primitives.getCount();
 		Kernel		   initDataKernel = compiler.getKernel(
 			context,
@@ -212,7 +232,7 @@ void PlocBuilder::build(
 		Kernel singletonConstructionKernel = compiler.getKernel(
 			context,
 			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-			"SingletonConstruction_" + containerNodeParam,
+			"SingletonConstruction_" + containerPrimNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
 		singletonConstructionKernel.setArgs( { primitives, boxNodes, primNodes } );
@@ -221,7 +241,8 @@ void PlocBuilder::build(
 	}
 
 	// STEP 1: Pair triangles
-	if constexpr ( std::is_same<PrimitiveNode, TriangleNode>::value )
+	if constexpr (
+		std::is_same<PrimitiveNode, TrianglePairNode>::value || std::is_same<PrimitiveNode, TrianglePacketNode>::value )
 	{
 		if ( pairTriangles )
 		{
@@ -296,31 +317,89 @@ void PlocBuilder::build(
 		{ primitives.getCount(), mortonCodeKeys[1], updateCounters, nodeIndices, scratchNodes, references, taskCounter } );
 	timer.measure( PlocTime, [&]() { hplocKernel.launch( primitives.getCount(), MainBlockSize, stream ); } );
 
-	// STEP 7: Collapse
-	uint32_t one			  = 1;
-	uint3	 rootCollapseTask = { encodeNodeIndex( 0, BoxType ), 0, 0 };
+	// STEP 7: Compute fat leaves
+	if constexpr ( std::is_same<PrimitiveNode, TrianglePacketNode>::value )
+	{
+		uint32_t rootAddr = 0;
+
+		uint32_t* updateCounters = reinterpret_cast<uint32_t*>( taskQueue );
+		uint32_t* parentAddrs	 = updateCounters + primitives.getCount();
+		uint32_t* triangleCounts = parentAddrs + primitives.getCount();
+		checkOro( oroMemsetD8Async(
+			reinterpret_cast<oroDeviceptr>( updateCounters ), 0, sizeof( uint32_t ) * primitives.getCount(), stream ) );
+
+		Kernel computeParentAddrsKernel = compiler.getKernel(
+			context,
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+			"ComputeParentAddrs_" + binNodeParam,
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
+		computeParentAddrsKernel.setArgs( { primitives.getCount(), rootAddr, scratchNodes, parentAddrs } );
+		timer.measure( ComputeParentAddrsTime, [&]() { computeParentAddrsKernel.launch( primitives.getCount(), stream ); } );
+
+		Kernel computeFatLeaves = compiler.getKernel(
+			context,
+			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+			"ComputeFatLeaves_" + binNodeParam,
+			opts,
+			GET_ARG_LIST( BvhBuilderKernels ) );
+		computeFatLeaves.setArgs( { primitives.getCount(), scratchNodes, parentAddrs, triangleCounts, updateCounters } );
+		timer.measure( ComputeFatLeavesTime, [&]() { computeFatLeaves.launch( primitives.getCount(), stream ); } );
+	}
+
+	// STEP 8: Collapse
+	uint3 rootCollapseTask = { RootIndex, 0, 0 };
 	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( uint3 ), stream ) );
 	checkOro( oroMemsetD8Async(
 		reinterpret_cast<oroDeviceptr>( taskQueue + 1 ), 0xFF, sizeof( uint3 ) * ( primitives.getCount() - 1 ), stream ) );
-	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskCounter ), &one, sizeof( uint32_t ), stream ) );
 
 	Kernel collapseKernel = compiler.getKernel(
 		context,
-		"../hiprt/impl/BvhBuilderKernels.h",
-		"Collapse_" + containerNodeParam,
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+		"Collapse_" + primNodeBinNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
 	collapseKernel.setArgs(
-		{ primitives.getCount(), header, scratchNodes, references, boxNodes, primNodes, primitives, taskCounter, taskQueue } );
-	timer.measure( CollapseTime, [&]() { collapseKernel.launch( primitives.getCount(), stream ); } );
+		{ maxBoxNodeCount, primitives.getCount(), header, scratchNodes, references, boxNodes, taskQueue, referenceIndices } );
+	timer.measure( CollapseTime, [&]() { collapseKernel.launch( context.getBranchingFactor() * maxBoxNodeCount, stream ); } );
 
-	// STEP 8: BVH cost
+	uint32_t boxNodeCount{};
+	checkOro( oroMemcpyDtoHAsync(
+		&boxNodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
+	checkOro( oroStreamSynchronize( stream ) );
+
+	Kernel compactTasksKernel = compiler.getKernel(
+		context,
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+		"CompactTasks",
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
+	compactTasksKernel.setArgs( { boxNodeCount, taskQueue, taskCounter } );
+	timer.measure( CompactTasksTime, [&]() {
+		compactTasksKernel.launch( BvhBuilderCompactionBlockSize, BvhBuilderCompactionBlockSize, stream );
+	} );
+
+	uint32_t taskCount{};
+	checkOro( oroMemcpyDtoHAsync( &taskCount, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( uint32_t ), stream ) );
+	checkOro( oroStreamSynchronize( stream ) );
+
+	Kernel packLeavesKernel = compiler.getKernel(
+		context,
+		Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+		"PackLeaves_" + containerPrimNodeParam,
+		opts,
+		GET_ARG_LIST( BvhBuilderKernels ) );
+	packLeavesKernel.setArgs( { taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices } );
+	timer.measure( PackLeavesTime, [&]() {
+		if constexpr ( std::is_same<PrimitiveNode, TrianglePacketNode>::value )
+			packLeavesKernel.launch( taskCount * LanesPerLeafPacketTask, context.getWarpSize(), stream );
+		else
+			packLeavesKernel.launch( taskCount, stream );
+	} );
+
+	// STEP 9: BVH cost
 	if constexpr ( LogBvhCost )
 	{
-		uint32_t nodeCount;
-		checkOro( oroMemcpyDtoHAsync(
-			&nodeCount, reinterpret_cast<oroDeviceptr>( &header->m_boxNodeCount ), sizeof( uint32_t ), stream ) );
-		checkOro( oroStreamSynchronize( stream ) );
 		checkOro( oroMemsetD8Async( reinterpret_cast<oroDeviceptr>( taskCounter ), 0, sizeof( float ), stream ) );
 		Kernel computeCostKernel = compiler.getKernel(
 			context,
@@ -328,8 +407,8 @@ void PlocBuilder::build(
 			"ComputeCost",
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
-		computeCostKernel.setArgs( { nodeCount, boxNodes, taskCounter } );
-		computeCostKernel.launch( nodeCount, ReductionBlockSize, stream );
+		computeCostKernel.setArgs( { boxNodeCount, boxNodes, taskCounter } );
+		computeCostKernel.launch( boxNodeCount, ReductionBlockSize, stream );
 
 		float cost;
 		checkOro( oroMemcpyDtoHAsync( &cost, reinterpret_cast<oroDeviceptr>( taskCounter ), sizeof( float ), stream ) );
@@ -342,7 +421,9 @@ void PlocBuilder::build(
 		float time = timer.getTimeRecord( PairTrianglesTime ) + timer.getTimeRecord( ComputeCentroidBoxTime ) +
 					 timer.getTimeRecord( ComputeMortonCodesTime ) + timer.getTimeRecord( SortTime ) +
 					 timer.getTimeRecord( SetupClustersTime ) + timer.getTimeRecord( PlocTime ) +
-					 timer.getTimeRecord( CollapseTime );
+					 timer.getTimeRecord( ComputeParentAddrsTime ) + timer.getTimeRecord( ComputeFatLeavesTime ) +
+					 timer.getTimeRecord( CollapseTime ) + timer.getTimeRecord( CompactTasksTime ) +
+					 timer.getTimeRecord( PackLeavesTime );
 		std::cout << "Ploc total construction time: " << time << " ms" << std::endl;
 		std::cout << "\tpair triangles time: " << timer.getTimeRecord( PairTrianglesTime ) << " ms" << std::endl;
 		std::cout << "\tcompute centroid box time: " << timer.getTimeRecord( ComputeCentroidBoxTime ) << " ms" << std::endl;
@@ -350,11 +431,15 @@ void PlocBuilder::build(
 		std::cout << "\tsort time: " << timer.getTimeRecord( SortTime ) << " ms" << std::endl;
 		std::cout << "\tsetup clusters time: " << timer.getTimeRecord( SetupClustersTime ) << " ms" << std::endl;
 		std::cout << "\tploc time time: " << timer.getTimeRecord( PlocTime ) << " ms" << std::endl;
+		std::cout << "\tcompute parent addrs time: " << timer.getTimeRecord( ComputeParentAddrsTime ) << " ms" << std::endl;
+		std::cout << "\tcompute fat leaves time: " << timer.getTimeRecord( ComputeFatLeavesTime ) << " ms" << std::endl;
 		std::cout << "\tcollapse time: " << timer.getTimeRecord( CollapseTime ) << " ms" << std::endl;
+		std::cout << "\tcompact tasks time: " << timer.getTimeRecord( CompactTasksTime ) << " ms" << std::endl;
+		std::cout << "\tpack leaves time: " << timer.getTimeRecord( PackLeavesTime ) << " ms" << std::endl;
 	}
 }
 
-template <typename PrimitiveNode, typename PrimitiveContainer>
+template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void PlocBuilder::update(
 	Context&				context,
 	PrimitiveContainer&		primitives,
@@ -362,7 +447,10 @@ void PlocBuilder::update(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<std::is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
+	typedef typename std::conditional<
+		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
+		SceneHeader,
+		GeomHeader>::type Header;
 
 	Header* header = storageMemoryArena.allocate<Header>();
 
@@ -402,6 +490,6 @@ void PlocBuilder::update(
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
 	fitBoundsKernel.setArgs( { header, primitives, boxNodes, primNodes } );
-	fitBoundsKernel.launch( h.m_boxNodeCount, stream );
+	fitBoundsKernel.launch( context.getBranchingFactor() * h.m_boxNodeCount, stream );
 }
 } // namespace hiprt

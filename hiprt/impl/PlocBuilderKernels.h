@@ -31,13 +31,12 @@
 #include <hiprt/impl/Triangle.h>
 #include <hiprt/impl/BvhNode.h>
 #include <hiprt/impl/BvhBuilderUtil.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/QrDecomposition.h>
 #include <hiprt/impl/Quaternion.h>
 #include <hiprt/impl/Transform.h>
 #include <hiprt/impl/InstanceList.h>
 #include <hiprt/impl/MortonCode.h>
-#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/TriangleMesh.h>
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
@@ -120,7 +119,7 @@ extern "C" __global__ void SetupClusters_InstanceList_MatrixFrame(
 // H-PLOC: Hierarchical Parallel Locally-Ordered Clustering for Bounding Volume Hierarchy Construction
 // https://gpuopen.com/download/publications/HPLOC.pdf
 // Disclaimer: This implementation is different than the one used in the paper.
-extern "C" __global__ void HPloc(
+extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 	uint32_t		primCount,
 	const uint32_t* sortedMortonCodeKeys,
 	uint32_t*		updateCounters,
@@ -204,7 +203,7 @@ extern "C" __global__ void HPloc(
 			if ( laneIndex < numRight ) nodeIndicesWarp[laneIndex + numLeft] = rightIndex;
 
 			__threadfence_block();
-			SyncWarp();
+			sync_warp();
 
 			uint32_t	   numberOfClusters = numLeft + numRight;
 			const uint32_t threshold		= currentLast ? 1 : WarpSize / 2;
@@ -221,7 +220,7 @@ extern "C" __global__ void HPloc(
 			while ( numberOfClusters > threshold )
 			{
 				distanceOffsetsWarp[laneIndex] = InvalidValue;
-				SyncWarp();
+				sync_warp();
 
 				uint32_t minDistanceOffset = InvalidValue;
 				Aabb	 box			   = boxesWarp[laneIndex];
@@ -244,7 +243,7 @@ extern "C" __global__ void HPloc(
 				}
 				atomicMin( &distanceOffsetsWarp[laneIndex], minDistanceOffset );
 
-				SyncWarp();
+				sync_warp();
 
 				uint32_t nodeIndex = InvalidValue;
 				if ( laneIndex < numberOfClusters )
@@ -290,7 +289,7 @@ extern "C" __global__ void HPloc(
 				}
 
 				__threadfence_block();
-				SyncWarp();
+				sync_warp();
 			}
 
 			if ( laneIndex < WarpSize / 2 )

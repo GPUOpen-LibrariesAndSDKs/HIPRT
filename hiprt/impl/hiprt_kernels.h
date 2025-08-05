@@ -30,7 +30,6 @@
 #endif
 #include <hiprt/impl/BvhBuilderKernels.h>
 #include <hiprt/impl/BatchBuilderKernels.h>
-#include <hiprt/impl/BvhImporterKernels.h>
 #include <hiprt/impl/LbvhBuilderKernels.h>
 #include <hiprt/impl/PlocBuilderKernels.h>
 #include <hiprt/impl/SbvhBuilderKernels.h>

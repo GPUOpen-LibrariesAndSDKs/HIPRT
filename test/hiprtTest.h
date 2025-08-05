@@ -96,7 +96,7 @@ class hiprtTest : public ::testing::Test
 	void buildBvh( hiprtGeometryBuildInput& buildInput );
 
 	void buildEmbreeBvh(
-		RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, std::vector<hiprtBvhNode>& nodes, void* geomData );
+		RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, void* geomData, hiprtBvhNodeList& nodeList );
 
 	void buildEmbreeGeometryBvh(
 		RTCDevice embreeDevice, const float3* vertices, const uint32_t* indices, hiprtGeometryBuildInput& buildInput );
