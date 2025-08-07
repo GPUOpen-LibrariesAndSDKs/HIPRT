@@ -411,19 +411,16 @@ if(PRECOMPILE)
 	${CMAKE_SOURCE_DIR}/hiprt/impl/AabbList.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhCommon.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhNode.h
-	${CMAKE_SOURCE_DIR}/hiprt/impl/Geometry.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/QrDecomposition.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Quaternion.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Transform.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Instance.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/InstanceList.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/MortonCode.h
-	${CMAKE_SOURCE_DIR}/hiprt/impl/Scene.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/TriangleMesh.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Triangle.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhBuilderUtil.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/SbvhCommon.h
-	${CMAKE_SOURCE_DIR}/hiprt/impl/ApiNodeList.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhConfig.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/MemoryArena.h
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_types.h
