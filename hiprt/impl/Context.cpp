@@ -1031,7 +1031,7 @@ uint32_t Context::getRtip() const
 						 "utilize HW ray tracing features\n" );
 #endif
 
-			if ( rtcRtip31 )
+			if ( driverRtip31 && rtcRtip31 )
 				rtip = 31;
 			else
 				rtip = 20;

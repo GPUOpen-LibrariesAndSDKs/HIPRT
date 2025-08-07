@@ -74,19 +74,32 @@ namespace hiprt
 {
 Compiler::Compiler()
 {
-	const std::string src =
-		"__global__ void rtcTest() { __builtin_amdgcn_image_bvh8_intersect_ray(0, 0.0f, 0xff, { 0.0f, 0.0f, 0.0f "
-		"}, { 1.0f, 0.0f, 0.0f }, 0, { 0, 0, 0, 0 }, nullptr, nullptr ); }";
-
-	orortcProgram prog;
-	checkOrortc( orortcCreateProgram( &prog, src.c_str(), "", 0, nullptr, nullptr ) );
-
-	m_rtip31Support = false;
-
-	if ( orortcCompileProgram( prog, 0, nullptr ) == ORORTC_SUCCESS )
+	if ( UseBitcode || UseBakedCompiledKernel || hiprtcCreateProgram == nullptr || hiprtcCompileProgram == nullptr || hiprtcDestroyProgram == nullptr )
 	{
+		// If we use the precompiled bitcode, we won't check RTIP 3.1 support through HIPRTC.
+		// Or, if the HIP Run Time Compiler is not loaded (e.g. hiprtc0604.dll) , we can't check RTIP 3.1 support.
+		
+		// We'll assume it's supported, and Context::getRtip is supposed to make extra checks to be sure it's actually supported.
 		m_rtip31Support = true;
-		checkOrortc( orortcDestroyProgram( &prog ) );
+	}
+	else
+	{
+		// check the RTIP 3.1 support of the RTC
+
+		const std::string src =
+			"__global__ void rtcTest() { __builtin_amdgcn_image_bvh8_intersect_ray(0, 0.0f, 0xff, { 0.0f, 0.0f, 0.0f "
+			"}, { 1.0f, 0.0f, 0.0f }, 0, { 0, 0, 0, 0 }, nullptr, nullptr ); }";
+
+		orortcProgram prog;
+		checkOrortc( orortcCreateProgram( &prog, src.c_str(), "", 0, nullptr, nullptr ) );
+
+		m_rtip31Support = false;
+
+		if ( orortcCompileProgram( prog, 0, nullptr ) == ORORTC_SUCCESS )
+		{
+			m_rtip31Support = true;
+			checkOrortc( orortcDestroyProgram( &prog ) );
+		}
 	}
 }
 
