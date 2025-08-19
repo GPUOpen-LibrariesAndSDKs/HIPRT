@@ -124,12 +124,12 @@ class Aabb
 	HIPRT_DEVICE Aabb shuffle( uint32_t index )
 	{
 		Aabb aabb;
-		aabb.m_min.x = __shfl( m_min.x, index );
-		aabb.m_min.y = __shfl( m_min.x, index );
-		aabb.m_min.z = __shfl( m_min.x, index );
-		aabb.m_max.x = __shfl( m_max.x, index );
-		aabb.m_max.y = __shfl( m_max.y, index );
-		aabb.m_max.z = __shfl( m_max.z, index );
+		aabb.m_min.x = shfl( m_min.x, index );
+		aabb.m_min.y = shfl( m_min.x, index );
+		aabb.m_min.z = shfl( m_min.x, index );
+		aabb.m_max.x = shfl( m_max.x, index );
+		aabb.m_max.y = shfl( m_max.y, index );
+		aabb.m_max.z = shfl( m_max.z, index );
 		return aabb;
 	}
 #endif

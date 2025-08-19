@@ -672,10 +672,10 @@ struct TrianglePacketData
 	HIPRT_DEVICE TrianglePacketData shuffle( uint32_t index )
 	{
 		TrianglePacketData data{};
-		data.m_primIndexAnchor = __shfl( m_primIndexAnchor, index );
-		data.m_primIndexDiff   = __shfl( m_primIndexDiff, index );
-		data.m_triPairCount	   = __shfl( m_triPairCount, index );
-		data.m_vertCount	   = __shfl( m_vertCount, index );
+		data.m_primIndexAnchor = shfl( m_primIndexAnchor, index );
+		data.m_primIndexDiff   = shfl( m_primIndexDiff, index );
+		data.m_triPairCount	   = shfl( m_triPairCount, index );
+		data.m_vertCount	   = shfl( m_vertCount, index );
 		return data;
 	}
 #endif

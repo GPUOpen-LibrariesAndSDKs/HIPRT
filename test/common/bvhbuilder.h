@@ -32,25 +32,6 @@
 #include <queue>
 #include <cfloat>
 
-#ifndef ASSERT
-#if defined( _MSC_VER )
-#define ASSERT( cond )  \
-	if ( !( cond ) )    \
-	{                   \
-		__debugbreak(); \
-	}
-#elif defined( __GNUC__ )
-#include <signal.h>
-#define ASSERT( cond )    \
-	if ( !( cond ) )      \
-	{                     \
-		raise( SIGTRAP ); \
-	}
-#else
-#define ASSERT( cond )
-#endif
-#endif
-
 struct Aabb
 {
 	Aabb() { reset(); }
@@ -219,13 +200,13 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 					minLeftBox	= leftBox;
 					minRightBox = rightBox;
 				}
-				ASSERT( leftBox.area() <= box.area() );
-				ASSERT( rightBox.area() <= box.area() );
+				assert( leftBox.area() <= box.area() );
+				assert( rightBox.area() <= box.area() );
 			}
 		}
 
-		ASSERT( minIndex > begin );
-		ASSERT( end > minIndex );
+		assert( minIndex > begin );
+		assert( end > minIndex );
 
 		std::memset( leftIndices.data(), 0, nPrims * sizeof( uint32_t ) );
 		for ( uint32_t i = begin; i < minIndex; ++i )
@@ -248,17 +229,14 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 					else
 						tmpIndices[l++] = index;
 				}
-				ASSERT( k == minIndex );
-				ASSERT( l == end );
+				assert( k == minIndex );
+				assert( l == end );
 				std::memcpy( &indices[j][begin], &tmpIndices[begin], ( end - begin ) * sizeof( uint32_t ) );
 			}
 		}
 
 		nodes[nodeIndex].aabbMin = min( minLeftBox.m_min, minRightBox.m_min );
 		nodes[nodeIndex].aabbMax = max( minLeftBox.m_max, minRightBox.m_max );
-		for ( uint32_t k = 2; k < 2; ++k )
-			nodes[nodeIndex].childIndices[k] = hiprtInvalidValue;
-
 		if ( minIndex - begin == 1 )
 		{
 			nodes[nodeIndex].childIndices[0]   = indices[minAxis][begin];

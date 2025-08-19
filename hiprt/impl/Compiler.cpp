@@ -74,12 +74,14 @@ namespace hiprt
 {
 Compiler::Compiler()
 {
-	if ( UseBitcode || UseBakedCompiledKernel || hiprtcCreateProgram == nullptr || hiprtcCompileProgram == nullptr || hiprtcDestroyProgram == nullptr )
+	if ( UseBitcode || UseBakedCompiledKernel || hiprtcCreateProgram == nullptr || hiprtcCompileProgram == nullptr ||
+		 hiprtcDestroyProgram == nullptr )
 	{
 		// If we use the precompiled bitcode, we won't check RTIP 3.1 support through HIPRTC.
 		// Or, if the HIP Run Time Compiler is not loaded (e.g. hiprtc0604.dll) , we can't check RTIP 3.1 support.
-		
-		// We'll assume it's supported, and Context::getRtip is supposed to make extra checks to be sure it's actually supported.
+
+		// We'll assume it's supported, and Context::getRtip is supposed to make extra checks to be sure it's actually
+		// supported.
 		m_rtip31Support = true;
 	}
 	else
@@ -858,14 +860,13 @@ std::string Compiler::buildFunctionTableBitcode(
 
 		if ( amd )
 		{
-			options.push_back( "-fgpu-rdc" );
+			options.push_back( "-fgpu-rdc" ); // relocatable device code
 			options.push_back( "-Xclang" );
 			options.push_back( "-mno-constructor-aliases" );
 		}
 		else
 		{
-			options.push_back( "--device-c" );
-			options.push_back( "-arch=compute_60" );
+			options.push_back( "--device-c" ); // relocatable device code
 		}
 
 		const uint32_t			 numHeaders = sizeof( GET_ARGS( hiprt_device ) ) / sizeof( void* );

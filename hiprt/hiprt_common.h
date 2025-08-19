@@ -51,17 +51,6 @@
 #include <cstdint>
 #endif
 
-#ifdef __CUDACC__
-// Switch to sync counterparts as CUDA recently deprecated the non-sync ones
-#define __shfl( x, y ) __shfl_sync( __activemask(), ( x ), ( y ) )
-#define __shfl_up( x, y ) __shfl_up_sync( __activemask(), ( x ), ( y ) )
-#define __shfl_down( x, y ) __shfl_down_sync( __activemask(), ( x ), ( y ) )
-#define __shfl_xor( x, y ) __shfl_xor_sync( __activemask(), ( x ), ( y ) )
-#define __ballot( x ) __ballot_sync( __activemask(), ( x ) )
-#define __any( x ) __any_sync( __activemask(), ( x ) )
-#define __all( x ) __all_sync( __activemask(), ( x ) )
-#endif
-
 #if !defined( __KERNELCC__ )
 #if defined( _MSC_VER )
 #define HIPRT_ASSERT( cond ) \
@@ -264,6 +253,74 @@ HIPRT_HOST_DEVICE HIPRT_INLINE uint32_t clz( uint32_t value )
 	return value == 0 ? 32 : count;
 #endif
 }
+
+#ifdef __KERNELCC__
+template <typename T>
+HIPRT_INLINE HIPRT_DEVICE T shfl( T var, int srcLane )
+{
+#ifdef __CUDACC__
+	return __shfl_sync( __activemask(), var, srcLane );
+#else
+	return __shfl( var, srcLane );
+#endif
+}
+
+template <typename T>
+HIPRT_INLINE HIPRT_DEVICE T shfl_up( T var, int srcLane )
+{
+#ifdef __CUDACC__
+	return __shfl_up_sync( __activemask(), var, srcLane );
+#else
+	return __shfl_up( var, srcLane );
+#endif
+}
+
+template <typename T>
+HIPRT_INLINE HIPRT_DEVICE T shfl_down( T var, int srcLane )
+{
+#ifdef __CUDACC__
+	return __shfl_down_sync( __activemask(), var, srcLane );
+#else
+	return __shfl_down( var, srcLane );
+#endif
+}
+
+template <typename T>
+HIPRT_INLINE HIPRT_DEVICE T shfl_xor( T var, int srcLane )
+{
+#ifdef __CUDACC__
+	return __shfl_xor_sync( __activemask(), var, srcLane );
+#else
+	return __shfl_xor( var, srcLane );
+#endif
+}
+
+HIPRT_INLINE HIPRT_DEVICE uint64_t ballot( int predicate )
+{
+#ifdef __CUDACC__
+	return static_cast<uint64_t>( __ballot_sync( __activemask(), predicate ) );
+#else
+	return __ballot( predicate );
+#endif
+}
+
+HIPRT_INLINE HIPRT_DEVICE uint32_t any( int predicate )
+{
+#ifdef __CUDACC__
+	return __any_sync( __activemask(), predicate );
+#else
+	return __any( predicate );
+#endif
+}
+HIPRT_INLINE HIPRT_DEVICE uint32_t all( int predicate )
+{
+#ifdef __CUDACC__
+	return __all_sync( __activemask(), predicate );
+#else
+	return __all( predicate );
+#endif
+}
+#endif
 
 template <typename T, typename U>
 constexpr HIPRT_HOST_DEVICE T RoundUp( T value, U factor )

@@ -721,7 +721,6 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	else
 	{
 		options.push_back( "--device-c" );
-		options.push_back( "-arch=compute_60" );
 		options.push_back( "--use_fast_math" );
 	}
 	options.push_back( "-std=c++17" );

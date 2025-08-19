@@ -110,11 +110,11 @@ def compileAmd():
 
     # compile hiprt traversal code
     hiprt_lib = hiprtlibpath + 'hiprt' + hiprt_ver + '_' + hip_version + '_amd_lib' + postfix
- 
+
     if isLinux():
         osDef = "-DHIPCC_OS_LINUX"
     else:
-        osDef = "-DHIPCC_OS_WINDOWS" 
+        osDef = "-DHIPCC_OS_WINDOWS"
 
     # compile custom function table
     hiprt_custom_func = 'hiprt' + hiprt_ver + '_' + hip_version + '_custom_func_table.bc'

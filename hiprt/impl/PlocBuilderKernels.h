@@ -147,7 +147,7 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 
 	bool active = index < primCount;
 
-	while ( __ballot( active ) != 0 )
+	while ( hiprt::ballot( active ) != 0 )
 	{
 		__threadfence();
 
@@ -174,29 +174,29 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 
 		const uint32_t size	 = j - i;
 		const bool	   last	 = active && size == primCount;
-		uint64_t	   merge = __ballot( ( active && size > WarpSize / 2 ) || last );
+		uint64_t	   merge = hiprt::ballot( ( active && size > WarpSize / 2 ) || last );
 
 		while ( merge )
 		{
 			const uint32_t currentLane = __ffsll( static_cast<unsigned long long>( merge ) ) - 1;
 			merge &= merge - 1;
 
-			const uint32_t current_i   = __shfl( i, currentLane );
-			const uint32_t current_j   = __shfl( j, currentLane );
-			const uint32_t current_s   = __shfl( s, currentLane );
-			const bool	   currentLast = __shfl( last, currentLane );
+			const uint32_t current_i   = shfl( i, currentLane );
+			const uint32_t current_j   = shfl( j, currentLane );
+			const uint32_t current_s   = shfl( s, currentLane );
+			const bool	   currentLast = shfl( last, currentLane );
 
 			uint32_t numLeft  = min( current_s - current_i, WarpSize / 2 );
 			uint32_t numRight = min( current_j - current_s, WarpSize / 2 );
 
 			uint32_t leftIndex = InvalidValue;
 			if ( laneIndex < numLeft ) leftIndex = nodeIndices[current_i + laneIndex];
-			uint32_t numValidLeft = __popcll( __ballot( leftIndex != InvalidValue ) );
+			uint32_t numValidLeft = __popcll( hiprt::ballot( leftIndex != InvalidValue ) );
 			numLeft				  = min( numLeft, numValidLeft );
 
 			uint32_t rightIndex = InvalidValue;
 			if ( laneIndex < numRight ) rightIndex = nodeIndices[current_s + laneIndex];
-			uint32_t numValidRight = __popcll( __ballot( rightIndex != InvalidValue ) );
+			uint32_t numValidRight = __popcll( hiprt::ballot( rightIndex != InvalidValue ) );
 			numRight			   = min( numRight, numValidRight );
 
 			if ( laneIndex < numLeft ) nodeIndicesWarp[laneIndex] = leftIndex;
@@ -278,7 +278,7 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 					}
 				}
 
-				const uint64_t warpBallot = __ballot( nodeIndex != InvalidValue ); // warp sync'd here
+				const uint64_t warpBallot = hiprt::ballot( nodeIndex != InvalidValue ); // warp sync'd here
 				const uint32_t newIndex	  = __popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
 				numberOfClusters		  = __popcll( warpBallot );
 

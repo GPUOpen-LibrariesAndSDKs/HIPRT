@@ -144,7 +144,7 @@ HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::GlobalStack(
 	{
 		const uint32_t warpsPerBlock	= hiprt::DivideRoundUp( blockDim.x * blockDim.y, Stride );
 		const uint32_t activeWarps		= globalStackBuffer.stackCount >> LogStride;
-		const uint32_t firstThreadIndex = __ffsll( static_cast<unsigned long long>( __ballot( true ) ) ) - 1;
+		const uint32_t firstThreadIndex = __ffsll( static_cast<unsigned long long>( hiprt::ballot( true ) ) ) - 1;
 
 		uint32_t  warpHash			= InvalidValue;
 		uint32_t  warpHashCandidate = ( warpIndex + ( blockIdx.x + blockIdx.y * gridDim.x ) * warpsPerBlock ) % activeWarps;
@@ -156,7 +156,7 @@ HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::GlobalStack(
 				if ( atomicCAS( &globalStackLocks[warpHashCandidate], 0, 1 ) == 0 ) warpHash = warpHashCandidate;
 			}
 			warpHashCandidate = ( warpHashCandidate + 1 ) % activeWarps;
-			warpHash		  = __shfl( warpHash, firstThreadIndex );
+			warpHash		  = shfl( warpHash, firstThreadIndex );
 		}
 		__threadfence();
 		m_globalStackLock = &globalStackLocks[warpHash];
@@ -183,7 +183,7 @@ HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::~GlobalStack()
 		__threadfence();
 		const uint32_t threadIndex		= threadIdx.x + threadIdx.y * blockDim.x;
 		const uint32_t laneIndex		= threadIndex & ( Stride - 1 );
-		const uint32_t firstThreadIndex = __ffsll( static_cast<unsigned long long>( __ballot( true ) ) ) - 1;
+		const uint32_t firstThreadIndex = __ffsll( static_cast<unsigned long long>( hiprt::ballot( true ) ) ) - 1;
 		if ( laneIndex == firstThreadIndex ) atomicExch( m_globalStackLock, 0 );
 	}
 }
@@ -773,7 +773,7 @@ HIPRT_DEVICE hiprtHit GeomTraversal<Stack, PrimitiveNode, TraversalType>::getNex
 				m_nodeIndex = m_stack.pop();
 			}
 
-			if ( !__any( m_leafIndex == InvalidValue ) ) break;
+			if ( !hiprt::any( m_leafIndex == InvalidValue ) ) break;
 		}
 
 		while ( m_leafIndex != InvalidValue )

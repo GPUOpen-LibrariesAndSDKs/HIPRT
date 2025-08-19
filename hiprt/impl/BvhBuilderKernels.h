@@ -137,7 +137,7 @@ HIPRT_DEVICE HIPRT_INLINE void openNodes(
 								 << static_cast<uint64_t>( ( BranchingFactor * subwarpIndex ) );
 
 	bool done = childCount == BranchingFactor;
-	while ( __ballot( !done ) )
+	while ( hiprt::ballot( !done ) )
 	{
 		sync_warp();
 
@@ -153,13 +153,13 @@ HIPRT_DEVICE HIPRT_INLINE void openNodes(
 		float maxArea = area;
 #pragma unroll
 		for ( uint32_t i = 1; i < BranchingFactor; i <<= 1 )
-			maxArea = hiprt::max( maxArea, __shfl_xor( maxArea, i ) );
+			maxArea = hiprt::max( maxArea, shfl_xor( maxArea, i ) );
 		if ( maxArea < 0.0f ) done = true;
 
 		const uint32_t maxLaneIndex =
-			__ffsll( static_cast<unsigned long long>( __ballot( maxArea == area ) ) & subwarpMask ) - 1;
+			__ffsll( static_cast<unsigned long long>( hiprt::ballot( maxArea == area ) ) & subwarpMask ) - 1;
 		const uint32_t maxIndex		 = maxLaneIndex % BranchingFactor;
-		const uint32_t maxChildIndex = __shfl( childIndex, maxLaneIndex );
+		const uint32_t maxChildIndex = shfl( childIndex, maxLaneIndex );
 
 		if ( !done )
 		{
@@ -366,37 +366,35 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, uint2* pairIndices,
 
 	bool	 valid		 = index < mesh.getCount();
 	uint32_t pairedIndex = InvalidValue;
-	uint64_t activeMask	 = __ballot( valid );
+	uint64_t activeMask	 = hiprt::ballot( valid );
 
 	uint3 triIndices;
 	if ( valid ) triIndices = mesh.fetchTriangleIndices( index );
 
 	while ( activeMask )
 	{
-		activeMask = __shfl( activeMask, 0 );
+		activeMask = shfl( activeMask, 0 );
 
 		const uint64_t broadcastLane = __ffsll( static_cast<unsigned long long>( activeMask ) ) - 1;
 		if ( laneIndex == broadcastLane ) valid = false;
 
 		activeMask &= activeMask - 1;
 
-		const uint32_t broadcastIndex	   = __shfl( index, broadcastLane );
+		const uint32_t broadcastIndex	   = shfl( index, broadcastLane );
 		const uint3	   triIndicesBroadcast = {
-			   __shfl( triIndices.x, broadcastLane ),
-			   __shfl( triIndices.y, broadcastLane ),
-			   __shfl( triIndices.z, broadcastLane ) };
+			   shfl( triIndices.x, broadcastLane ), shfl( triIndices.y, broadcastLane ), shfl( triIndices.z, broadcastLane ) };
 
 		bool pairable = false;
 		if ( index != broadcastIndex && valid )
 			pairable = tryPairTriangles( triIndicesBroadcast, triIndices ).x != InvalidValue;
 
-		const uint32_t firstPairedLane = __ffsll( static_cast<unsigned long long>( __ballot( pairable ) ) ) - 1;
+		const uint32_t firstPairedLane = __ffsll( static_cast<unsigned long long>( hiprt::ballot( pairable ) ) ) - 1;
 		if ( firstPairedLane < WarpSize )
 		{
 			activeMask &= ~( 1u << firstPairedLane );
 			if ( laneIndex == firstPairedLane ) valid = false;
 
-			const uint32_t secondIndex = __shfl( index, firstPairedLane );
+			const uint32_t secondIndex = shfl( index, firstPairedLane );
 			if ( laneIndex == broadcastLane ) pairedIndex = secondIndex;
 		}
 		else if ( laneIndex == broadcastLane )
@@ -714,10 +712,10 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 		internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
 	}
 
-	uint32_t internalCount = __popcll( __ballot( internal ) & subwarpMask );
+	uint32_t internalCount = __popcll( hiprt::ballot( internal ) & subwarpMask );
 	if ( internalCount > 0 ) done = true;
 
-	while ( __any( !done ) )
+	while ( hiprt::any( !done ) )
 	{
 		__threadfence();
 
@@ -755,13 +753,13 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 			internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
 		}
 
-		internalCount = __popcll( __ballot( internal ) & subwarpMask );
+		internalCount = __popcll( hiprt::ballot( internal ) & subwarpMask );
 
 		__threadfence();
 
 		if ( !done && sublaneIndex == 0 && atomicAdd( &boxNodes[index].m_updateCounter, 1 ) < internalCount - 1 ) done = true;
 
-		done = __shfl( done, subwarpIndex * BranchingFactor );
+		done = shfl( done, subwarpIndex * BranchingFactor );
 	}
 }
 
@@ -827,11 +825,11 @@ __device__ void FitOrientedBounds(
 	uint32_t childCount = node.getChildCount();
 	bool	 internal	= laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
 
-	uint32_t internalCount = __popcll( __ballot( internal ) );
+	uint32_t internalCount = __popcll( hiprt::ballot( internal ) );
 
 	bool done = internalCount > 0;
 
-	while ( __any( !done ) )
+	while ( hiprt::any( !done ) )
 	{
 		__threadfence();
 
@@ -858,9 +856,9 @@ __device__ void FitOrientedBounds(
 				}
 			}
 
-			const float	   minArea	   = warpMin( minAreaLane );
-			const uint32_t minIndex	   = __ffsll( static_cast<unsigned long long>( __ballot( minAreaLane == minArea ) ) ) - 1;
-			const uint32_t matrixIndex = __shfl( minIndexLane, minIndex );
+			const float	   minArea	= warpMin( minAreaLane );
+			const uint32_t minIndex = __ffsll( static_cast<unsigned long long>( hiprt::ballot( minAreaLane == minArea ) ) ) - 1;
+			const uint32_t matrixIndex = shfl( minIndexLane, minIndex );
 
 			Aabb	 childBox;
 			uint32_t childIndex;
@@ -889,13 +887,13 @@ __device__ void FitOrientedBounds(
 		childCount = node.getChildCount();
 		internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
 
-		internalCount = __popcll( __ballot( internal ) );
+		internalCount = __popcll( hiprt::ballot( internal ) );
 
 		__threadfence();
 
 		if ( laneIndex == 0 && atomicAdd( &updateCounters[index], 1 ) < internalCount - 1 ) done = true;
 
-		done = __shfl( done, 0 );
+		done = shfl( done, 0 );
 	}
 }
 
@@ -1083,7 +1081,7 @@ __device__ void Collapse(
 
 	bool done = taskIndex >= maxBoxNodeCount || taskIndex >= referenceCount;
 
-	while ( __any( !done ) )
+	while ( hiprt::any( !done ) )
 	{
 		sync_warp();
 		__threadfence();
@@ -1106,7 +1104,7 @@ __device__ void Collapse(
 		const bool valid = nodeIndex != InvalidValue && nodeAddr != InvalidValue && parentAddr != InvalidValue;
 
 		// skip inactive warps
-		if ( __all( !valid ) ) continue;
+		if ( hiprt::all( !valid ) ) continue;
 
 		Aabb	 childBox;
 		uint32_t childIndex = InvalidValue;
@@ -1115,8 +1113,8 @@ __device__ void Collapse(
 		if ( nodeAddr == 0 ) parentAddr = InvalidValue;
 
 		// fill inactive lanes with first valid node index
-		const uint32_t firstValidLane = __ffsll( __ballot( valid ) ) - 1;
-		nodeIndex					  = __shfl( nodeIndex, valid ? laneIndex : firstValidLane );
+		const uint32_t firstValidLane = __ffsll( static_cast<unsigned long long>( hiprt::ballot( valid ) ) ) - 1;
+		nodeIndex					  = shfl( nodeIndex, valid ? laneIndex : firstValidLane );
 
 		BinaryNode binaryNode = binaryNodes[getNodeAddr( nodeIndex )];
 		if ( sublaneIndex < 2 )
@@ -1136,7 +1134,7 @@ __device__ void Collapse(
 
 		const bool	   internal		= isInternalNode( childIndex ) && !isFatLeafNode( childIndex );
 		const uint32_t childAddr	= warpOffset( active && internal, &header->m_boxNodeCount );
-		const uint32_t internalBase = __shfl( childAddr, subwarpIndex * BranchingFactor );
+		const uint32_t internalBase = shfl( childAddr, subwarpIndex * BranchingFactor );
 		if ( active && internal )
 		{
 			atomic_store( &taskQueue[childAddr], { childIndex, childAddr, nodeAddr } );
@@ -1166,7 +1164,7 @@ __device__ void Collapse(
 		if constexpr ( !is_same<PrimitiveNode, TrianglePacketNode>::value )
 		{
 			const bool	   leaf			 = isLeafNode( childIndex );
-			const uint64_t activeSubmask = __ballot( active && leaf ) & subwarpMask;
+			const uint64_t activeSubmask = hiprt::ballot( active && leaf ) & subwarpMask;
 			const uint32_t rangeSize	 = __popcll( activeSubmask );
 			const uint32_t rangeAddr	 = warpOffset( active && leaf, &header->m_referenceCount );
 			if ( active && leaf ) referenceIndices[rangeAddr] = childIndex;
@@ -1213,9 +1211,9 @@ __device__ void Collapse(
 				}
 			}
 
-			const uint64_t activeSubmask   = __ballot( active && fatLeaf ) & subwarpMask;
+			const uint64_t activeSubmask   = hiprt::ballot( active && fatLeaf ) & subwarpMask;
 			const uint32_t lastActiveLane  = activeSubmask == 0 ? 0 : ( WarpSize - 1 ) - __clzll( activeSubmask );
-			const uint32_t lastRangeOffset = __shfl( rangeOffset, lastActiveLane );
+			const uint32_t lastRangeOffset = shfl( rangeOffset, lastActiveLane );
 			if ( valid && sublaneIndex == 0 && activeSubmask != 0 )
 			{
 				const uint32_t rangeSize = lastRangeOffset - rangeBase;
@@ -1772,7 +1770,7 @@ __device__ void PackLeavesWarp(
 	uint32_t primNodeCount = 0;
 
 	const uint32_t rangeBase = rangeOffset;
-	while ( __ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
+	while ( hiprt::ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
 	{
 		TrianglePacketData packet{};
 
@@ -1818,7 +1816,7 @@ __device__ void PackLeavesWarp(
 			}
 
 			const uint32_t newVertMask =
-				( __ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpVertIndex ) ) & 0xf;
+				( hiprt::ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpVertIndex ) ) & 0xf;
 			const uint32_t oldVertCount = packet.m_vertCount;
 			const uint32_t newVertCount = __popc( newVertMask );
 
@@ -1855,7 +1853,7 @@ __device__ void PackLeavesWarp(
 	rangeOffset = rangeBase;
 	sync_warp();
 
-	while ( __ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
+	while ( hiprt::ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
 	{
 		sync_warp();
 		TrianglePacketData packet{};
@@ -1904,7 +1902,7 @@ __device__ void PackLeavesWarp(
 				}
 			}
 
-			const uint32_t newVertMask	= ( __ballot( !contains && valid ) >> ( 4 * subwarpVertIndex ) ) & 0xf;
+			const uint32_t newVertMask	= ( hiprt::ballot( !contains && valid ) >> ( 4 * subwarpVertIndex ) ) & 0xf;
 			const uint32_t oldVertCount = packet.m_vertCount;
 			const uint32_t newVertCount = __popc( newVertMask );
 
@@ -1932,10 +1930,10 @@ __device__ void PackLeavesWarp(
 
 			// shuffle vertex indices in packet
 			uint4 vertexIndicesInPacket;
-			vertexIndicesInPacket.x = __shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 0 );
-			vertexIndicesInPacket.y = __shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 1 );
-			vertexIndicesInPacket.z = __shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 2 );
-			vertexIndicesInPacket.w = __shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 3 );
+			vertexIndicesInPacket.x = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 0 );
+			vertexIndicesInPacket.y = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 1 );
+			vertexIndicesInPacket.z = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 2 );
+			vertexIndicesInPacket.w = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 3 );
 
 			uint3 triIndices0 = make_uint3( vertexIndicesInPacket );
 			uint3 triIndices1{};
@@ -1957,7 +1955,7 @@ __device__ void PackLeavesWarp(
 		__threadfence_block();
 
 		// build packets
-		uint64_t packetMask = __ballot( taskIndex < taskCount && packet.m_triPairCount > 0 && sublaneIndex == 0 );
+		uint64_t packetMask = hiprt::ballot( taskIndex < taskCount && packet.m_triPairCount > 0 && sublaneIndex == 0 );
 		while ( packetMask )
 		{
 			const uint32_t halfWarpIndex = laneIndex / 16;
@@ -1972,7 +1970,7 @@ __device__ void PackLeavesWarp(
 
 			const uint32_t			 broadcastLane			 = ( halfWarpIndex == 0 ) ? broadcastLane0 : broadcastLane1;
 			const uint32_t			 broadcastSubwarpIndex	 = broadcastLane / LanesPerLeafPacketTask;
-			const uint32_t			 broadcastPrimNodeOffset = __shfl( primNodeOffset, broadcastLane );
+			const uint32_t			 broadcastPrimNodeOffset = shfl( primNodeOffset, broadcastLane );
 			const TrianglePacketData broadcastPacket		 = packet.shuffle( broadcastLane );
 
 			// store current packet data to registers
