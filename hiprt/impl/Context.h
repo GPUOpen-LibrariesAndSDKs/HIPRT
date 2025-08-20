@@ -27,6 +27,7 @@
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Compiler.h>
 #include <hiprt/impl/Error.h>
+#include <hiprt/impl/Logger.h>
 #include <ParallelPrimitives/RadixSort.h>
 
 namespace hiprt
@@ -127,6 +128,26 @@ class Context
 
 	void setCacheDir( const std::filesystem::path& path );
 
+	void setLogLevel( hiprtLogLevel level ) { m_logger.setLevel( level ); }
+
+	template <typename... Args>
+	void logInfo( Args... args ) const
+	{
+		m_logger.print( hiprtLogLevelInfo, args... );
+	}
+
+	template <typename... Args>
+	void logWarn( Args... args ) const
+	{
+		m_logger.print( hiprtLogLevelWarn, args... );
+	}
+
+	template <typename... Args>
+	void logError( Args... args ) const
+	{
+		m_logger.print( hiprtLogLevelError, args... );
+	}
+
 	uint32_t	getSMCount() const;
 	uint32_t	getMaxBlockSize() const;
 	uint32_t	getMaxGridSize() const;
@@ -134,17 +155,23 @@ class Context
 	std::string getGcnArchName() const;
 	std::string getDriverVersion() const;
 
-	oroDevice	 getDevice() const noexcept;
+	oroDevice	 getDevice() const noexcept { return m_device; }
 	OrochiUtils& getOrochiUtils() { return m_oroutils; }
 	Compiler&	 getCompiler() { return m_compiler; }
 
-	bool enableHwi() const;
+	uint32_t getRtip() const;
+	uint32_t getBranchingFactor() const;
+	uint32_t getWarpSize() const;
+	size_t	 getTriangleNodeSize() const;
+	size_t	 getBoxNodeSize() const;
+	size_t	 getInstanceNodeSize() const;
 
   private:
 	oroDevice	m_device;
 	oroCtx		m_ctxt;
 	OrochiUtils m_oroutils;
 	Compiler	m_compiler;
+	Logger		m_logger;
 
 	std::mutex											m_poolMutex;
 	std::map<std::pair<oroDeviceptr, size_t>, uint32_t> m_poolHeads;

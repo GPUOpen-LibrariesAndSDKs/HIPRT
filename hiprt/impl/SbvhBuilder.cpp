@@ -24,65 +24,60 @@
 
 #include <hiprt/impl/AabbList.h>
 #include <hiprt/impl/BvhCommon.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/InstanceList.h>
 #include <hiprt/impl/SbvhBuilder.h>
-#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/TriangleMesh.h>
 
 namespace hiprt
 {
-size_t SbvhBuilder::getTemporaryBufferSize( const size_t count, const hiprtBuildOptions buildOptions )
+size_t SbvhBuilder::getTemporaryBufferSize(
+	Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	const bool	 spatialSplits	   = !( buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits );
-	const float	 alpha			   = !spatialSplits ? 1.0f : Alpha;
-	const size_t maxReferenceCount = alpha * count;
-	return RoundUp( sizeof( Aabb ), DefaultAlignment ) + RoundUp( maxReferenceCount * sizeof( Task ), DefaultAlignment ) +
-		   RoundUp( maxReferenceCount * sizeof( ScratchNode ), DefaultAlignment ) +
-		   RoundUp( maxReferenceCount * sizeof( ReferenceNode ), DefaultAlignment ) +
-		   RoundUp( maxReferenceCount * sizeof( uint32_t ), DefaultAlignment ) +
-		   ( !spatialSplits ? 1 : 2 ) *
-			   RoundUp( ( maxReferenceCount / 2 ) * sizeof( Bin ) * 3 * MinBinCount, DefaultAlignment ) +
-		   3 * RoundUp( sizeof( uint32_t ), DefaultAlignment );
-}
-
-size_t SbvhBuilder::getTemporaryBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
-{
-	const size_t primCount	   = getPrimCount( buildInput );
-	size_t		 size		   = getTemporaryBufferSize( primCount, buildOptions );
-	bool		 pairTriangles = false;
+	size_t size = getTemporaryBufferSize<hiprtGeometryBuildInput>( context, buildInput, buildOptions );
 	if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh )
 	{
-		const hiprtTriangleMeshPrimitive& mesh	   = buildInput.primitive.triangleMesh;
-		const bool						  pairable = mesh.triangleCount > 2 && mesh.trianglePairCount == 0;
-		pairTriangles = pairable && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableTrianglePairing );
+		const size_t					  primCount = getPrimCount( buildInput );
+		const hiprtTriangleMeshPrimitive& mesh		= buildInput.primitive.triangleMesh;
+		const bool						  pairable	= mesh.triangleCount > 2 && mesh.trianglePairCount == 0;
+		const bool pairTriangles = pairable && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableTrianglePairing );
 		if ( pairTriangles ) size += RoundUp( sizeof( uint2 ) * primCount, DefaultAlignment );
 	}
 	return size;
 }
 
-size_t SbvhBuilder::getTemporaryBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+size_t SbvhBuilder::getTemporaryBufferSize(
+	Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
-	return getTemporaryBufferSize( buildInput.instanceCount, buildOptions );
+	return getTemporaryBufferSize<hiprtSceneBuildInput>( context, buildInput, buildOptions );
 }
 
-size_t SbvhBuilder::getStorageBufferSize( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+size_t SbvhBuilder::getStorageBufferSize(
+	Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const float	 alpha			   = buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits ? 1.0f : Alpha;
 	const size_t primCount		   = getPrimCount( buildInput );
-	const size_t primNodeSize	   = getPrimNodeSize( buildInput );
 	const size_t maxReferenceCount = alpha * primCount;
-	const size_t boxNodeCount	   = DivideRoundUp( 2 * maxReferenceCount, 3 );
-	return getGeometryStorageBufferSize( maxReferenceCount, boxNodeCount, primNodeSize );
+	const size_t primNodeCount	   = getMaxPrimNodeCount( buildInput, context.getRtip(), maxReferenceCount );
+	const size_t primNodeSize	   = getPrimNodeSize( buildInput, context.getTriangleNodeSize() );
+	const size_t boxNodeCount	   = getMaxBoxNodeCount( buildInput, context.getRtip(), maxReferenceCount );
+	return getGeometryStorageBufferSize( primNodeCount, boxNodeCount, primNodeSize, context.getBoxNodeSize() );
 }
 
-size_t SbvhBuilder::getStorageBufferSize( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+size_t SbvhBuilder::getStorageBufferSize(
+	Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const float	 alpha			   = buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits ? 1.0f : Alpha;
-	const size_t frameCount		   = buildInput.frameCount;
 	const size_t primCount		   = buildInput.instanceCount;
 	const size_t maxReferenceCount = alpha * primCount;
-	const size_t boxNodeCount	   = DivideRoundUp( 2 * maxReferenceCount, 3 );
-	return getSceneStorageBufferSize( primCount, maxReferenceCount, boxNodeCount, frameCount );
+	const size_t boxNodeCount	   = getMaxBoxNodeCount( buildInput, context.getRtip(), maxReferenceCount );
+	return getSceneStorageBufferSize(
+		primCount,
+		maxReferenceCount,
+		boxNodeCount,
+		context.getInstanceNodeSize(),
+		context.getBoxNodeSize(),
+		buildInput.frameCount );
 }
 
 void SbvhBuilder::build(
@@ -93,8 +88,8 @@ void SbvhBuilder::build(
 	oroStream					   stream,
 	hiprtDevicePtr				   buffer )
 {
-	const size_t storageSize = getStorageBufferSize( buildInput, buildOptions );
-	const size_t tempSize	 = getTemporaryBufferSize( buildInput, buildOptions );
+	const size_t storageSize = getStorageBufferSize( context, buildInput, buildOptions );
+	const size_t tempSize	 = getTemporaryBufferSize( context, buildInput, buildOptions );
 	MemoryArena	 storageMemoryArena( buffer, storageSize, DefaultAlignment );
 	MemoryArena	 temporaryMemoryArena( temporaryBuffer, tempSize, DefaultAlignment );
 
@@ -102,13 +97,22 @@ void SbvhBuilder::build(
 	{
 	case hiprtPrimitiveTypeTriangleMesh: {
 		TriangleMesh mesh( buildInput.primitive.triangleMesh );
-		build<TriangleNode>(
-			context, mesh, buildOptions, buildInput.geomType, temporaryMemoryArena, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			build<Box8Node, TrianglePacketNode>(
+				context, mesh, buildOptions, buildInput.geomType, temporaryMemoryArena, stream, storageMemoryArena );
+		else
+			build<Box4Node, TrianglePairNode>(
+				context, mesh, buildOptions, buildInput.geomType, temporaryMemoryArena, stream, storageMemoryArena );
 		break;
 	}
 	case hiprtPrimitiveTypeAABBList: {
 		AabbList list( buildInput.primitive.aabbList );
-		build<CustomNode>( context, list, buildOptions, buildInput.geomType, temporaryMemoryArena, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			build<Box8Node, CustomNode>(
+				context, list, buildOptions, buildInput.geomType, temporaryMemoryArena, stream, storageMemoryArena );
+		else
+			build<Box4Node, CustomNode>(
+				context, list, buildOptions, buildInput.geomType, temporaryMemoryArena, stream, storageMemoryArena );
 		break;
 	}
 	}
@@ -122,8 +126,8 @@ void SbvhBuilder::build(
 	oroStream					stream,
 	hiprtDevicePtr				buffer )
 {
-	const size_t storageSize = getStorageBufferSize( buildInput, buildOptions );
-	const size_t tempSize	 = getTemporaryBufferSize( buildInput, buildOptions );
+	const size_t storageSize = getStorageBufferSize( context, buildInput, buildOptions );
+	const size_t tempSize	 = getTemporaryBufferSize( context, buildInput, buildOptions );
 	MemoryArena	 storageMemoryArena( buffer, storageSize, DefaultAlignment );
 	MemoryArena	 temporaryMemoryArena( temporaryBuffer, tempSize, DefaultAlignment );
 
@@ -131,12 +135,22 @@ void SbvhBuilder::build(
 	{
 	case hiprtFrameTypeSRT: {
 		InstanceList<SRTFrame> list( buildInput );
-		build<InstanceNode>( context, list, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			build<Box8Node, HwInstanceNode>(
+				context, list, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
+		else
+			build<Box4Node, UserInstanceNode>(
+				context, list, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
 		break;
 	}
 	case hiprtFrameTypeMatrix: {
 		InstanceList<MatrixFrame> list( buildInput );
-		build<InstanceNode>( context, list, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			build<Box8Node, HwInstanceNode>(
+				context, list, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
+		else
+			build<Box4Node, UserInstanceNode>(
+				context, list, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
 		break;
 	}
 	default:
@@ -145,52 +159,64 @@ void SbvhBuilder::build(
 }
 
 void SbvhBuilder::update(
-	Context&					   context,
-	const hiprtGeometryBuildInput& buildInput,
-	const hiprtBuildOptions		   buildOptions,
-	hiprtDevicePtr				   temporaryBuffer,
-	oroStream					   stream,
-	hiprtDevicePtr				   buffer )
+	Context&						context,
+	const hiprtGeometryBuildInput&	buildInput,
+	const hiprtBuildOptions			buildOptions,
+	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,
+	oroStream						stream,
+	hiprtDevicePtr					buffer )
 {
-	const size_t storageSize = getStorageBufferSize( buildInput, buildOptions );
+	const size_t storageSize = getStorageBufferSize( context, buildInput, buildOptions );
 	MemoryArena	 storageMemoryArena( buffer, storageSize, DefaultAlignment );
 
 	switch ( buildInput.type )
 	{
 	case hiprtPrimitiveTypeTriangleMesh: {
 		TriangleMesh mesh( buildInput.primitive.triangleMesh );
-		update<TriangleNode>( context, mesh, buildOptions, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			update<Box8Node, TrianglePacketNode>( context, mesh, buildOptions, stream, storageMemoryArena );
+		else
+			update<Box4Node, TrianglePairNode>( context, mesh, buildOptions, stream, storageMemoryArena );
 		break;
 	}
 	case hiprtPrimitiveTypeAABBList: {
 		AabbList list( buildInput.primitive.aabbList );
-		update<CustomNode>( context, list, buildOptions, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			update<Box8Node, CustomNode>( context, list, buildOptions, stream, storageMemoryArena );
+		else
+			update<Box4Node, CustomNode>( context, list, buildOptions, stream, storageMemoryArena );
 		break;
 	}
 	}
 }
 
 void SbvhBuilder::update(
-	Context&					context,
-	const hiprtSceneBuildInput& buildInput,
-	const hiprtBuildOptions		buildOptions,
-	hiprtDevicePtr				temporaryBuffer,
-	oroStream					stream,
-	hiprtDevicePtr				buffer )
+	Context&						context,
+	const hiprtSceneBuildInput&		buildInput,
+	const hiprtBuildOptions			buildOptions,
+	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,
+	oroStream						stream,
+	hiprtDevicePtr					buffer )
 {
-	const size_t storageSize = getStorageBufferSize( buildInput, buildOptions );
+	const size_t storageSize = getStorageBufferSize( context, buildInput, buildOptions );
 	MemoryArena	 storageMemoryArena( buffer, storageSize, DefaultAlignment );
 
 	switch ( buildInput.frameType )
 	{
 	case hiprtFrameTypeSRT: {
 		InstanceList<SRTFrame> list( buildInput );
-		update<InstanceNode>( context, list, buildOptions, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			update<Box8Node, HwInstanceNode>( context, list, buildOptions, stream, storageMemoryArena );
+		else
+			update<Box4Node, UserInstanceNode>( context, list, buildOptions, stream, storageMemoryArena );
 		break;
 	}
 	case hiprtFrameTypeMatrix: {
 		InstanceList<MatrixFrame> list( buildInput );
-		update<InstanceNode>( context, list, buildOptions, stream, storageMemoryArena );
+		if ( context.getRtip() >= 31 )
+			update<Box8Node, HwInstanceNode>( context, list, buildOptions, stream, storageMemoryArena );
+		else
+			update<Box4Node, UserInstanceNode>( context, list, buildOptions, stream, storageMemoryArena );
 		break;
 	}
 	default:

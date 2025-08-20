@@ -23,7 +23,6 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #include <hiprt/impl/Error.h>
-#include <hiprt/impl/Logger.h>
 #include <hiprt/impl/Utility.h>
 #include <cstdlib>
 

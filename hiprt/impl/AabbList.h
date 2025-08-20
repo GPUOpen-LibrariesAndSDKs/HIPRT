@@ -24,7 +24,7 @@
 
 #pragma once
 #include <hiprt/hiprt_types.h>
-#include <hiprt/impl/Aabb.h>
+#include <hiprt/impl/BvhNode.h>
 
 namespace hiprt
 {
@@ -37,7 +37,9 @@ class AabbList
 		m_aabbs = reinterpret_cast<const uint8_t*>( list.aabbs );
 	}
 
-	HIPRT_HOST_DEVICE Aabb fetchAabb( uint32_t index ) const
+	HIPRT_HOST_DEVICE CustomNode fetchPrimNode( const uint32_t index ) const { return CustomNode{ index }; }
+
+	HIPRT_HOST_DEVICE Aabb fetchAabb( const uint32_t index ) const
 	{
 		const uint32_t halfStride = ( m_aabbStride >> 1 );
 		const float*   boxMinPtr  = reinterpret_cast<const float*>( m_aabbs + index * m_aabbStride + 0 * halfStride );
@@ -48,7 +50,7 @@ class AabbList
 		return box;
 	}
 
-	HIPRT_HOST_DEVICE float3 fetchCenter( uint32_t index ) const { return fetchAabb( index ).center(); }
+	HIPRT_HOST_DEVICE float3 fetchCenter( const uint32_t index ) const { return fetchAabb( index ).center(); }
 
 	HIPRT_HOST_DEVICE uint32_t getCount() const { return m_aabbCount; }
 

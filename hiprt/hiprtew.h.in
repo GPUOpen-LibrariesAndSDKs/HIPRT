@@ -224,8 +224,8 @@ typedef hiprtError HIPRTAPI thiprtBuildTraceKernelsFromBitcode(
 	hiprtFuncNameSet* funcNameSets,
 	hiprtApiFunction* functionsOut,
 	bool			  cache );
-typedef void thiprtSetCacheDirPath( hiprtContext context, const char* path );
-typedef void thiprtSetLogLevel( hiprtLogLevel level );
+typedef hiprtError thiprtSetCacheDirPath( hiprtContext context, const char* path );
+typedef hiprtError thiprtSetLogLevel( hiprtContext context, hiprtLogLevel level );
 
 // function pointers
 extern thiprtCreateContext*							hiprtCreateContext;

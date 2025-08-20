@@ -31,13 +31,12 @@
 #include <hiprt/impl/Triangle.h>
 #include <hiprt/impl/BvhNode.h>
 #include <hiprt/impl/BvhBuilderUtil.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/QrDecomposition.h>
 #include <hiprt/impl/Quaternion.h>
 #include <hiprt/impl/Transform.h>
 #include <hiprt/impl/InstanceList.h>
 #include <hiprt/impl/MortonCode.h>
-#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/TriangleMesh.h>
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
@@ -120,7 +119,7 @@ extern "C" __global__ void SetupClusters_InstanceList_MatrixFrame(
 // H-PLOC: Hierarchical Parallel Locally-Ordered Clustering for Bounding Volume Hierarchy Construction
 // https://gpuopen.com/download/publications/HPLOC.pdf
 // Disclaimer: This implementation is different than the one used in the paper.
-extern "C" __global__ void HPloc(
+extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 	uint32_t		primCount,
 	const uint32_t* sortedMortonCodeKeys,
 	uint32_t*		updateCounters,
@@ -148,7 +147,7 @@ extern "C" __global__ void HPloc(
 
 	bool active = index < primCount;
 
-	while ( __ballot( active ) != 0 )
+	while ( hiprt::ballot( active ) != 0 )
 	{
 		__threadfence();
 
@@ -175,36 +174,36 @@ extern "C" __global__ void HPloc(
 
 		const uint32_t size	 = j - i;
 		const bool	   last	 = active && size == primCount;
-		uint64_t	   merge = __ballot( ( active && size > WarpSize / 2 ) || last );
+		uint64_t	   merge = hiprt::ballot( ( active && size > WarpSize / 2 ) || last );
 
 		while ( merge )
 		{
 			const uint32_t currentLane = __ffsll( static_cast<unsigned long long>( merge ) ) - 1;
 			merge &= merge - 1;
 
-			const uint32_t current_i   = __shfl( i, currentLane );
-			const uint32_t current_j   = __shfl( j, currentLane );
-			const uint32_t current_s   = __shfl( s, currentLane );
-			const bool	   currentLast = __shfl( last, currentLane );
+			const uint32_t current_i   = shfl( i, currentLane );
+			const uint32_t current_j   = shfl( j, currentLane );
+			const uint32_t current_s   = shfl( s, currentLane );
+			const bool	   currentLast = shfl( last, currentLane );
 
 			uint32_t numLeft  = min( current_s - current_i, WarpSize / 2 );
 			uint32_t numRight = min( current_j - current_s, WarpSize / 2 );
 
 			uint32_t leftIndex = InvalidValue;
 			if ( laneIndex < numLeft ) leftIndex = nodeIndices[current_i + laneIndex];
-			uint32_t numValidLeft = __popcll( __ballot( leftIndex != InvalidValue ) );
+			uint32_t numValidLeft = __popcll( hiprt::ballot( leftIndex != InvalidValue ) );
 			numLeft				  = min( numLeft, numValidLeft );
 
 			uint32_t rightIndex = InvalidValue;
 			if ( laneIndex < numRight ) rightIndex = nodeIndices[current_s + laneIndex];
-			uint32_t numValidRight = __popcll( __ballot( rightIndex != InvalidValue ) );
+			uint32_t numValidRight = __popcll( hiprt::ballot( rightIndex != InvalidValue ) );
 			numRight			   = min( numRight, numValidRight );
 
 			if ( laneIndex < numLeft ) nodeIndicesWarp[laneIndex] = leftIndex;
 			if ( laneIndex < numRight ) nodeIndicesWarp[laneIndex + numLeft] = rightIndex;
 
 			__threadfence_block();
-			SyncWarp();
+			sync_warp();
 
 			uint32_t	   numberOfClusters = numLeft + numRight;
 			const uint32_t threshold		= currentLast ? 1 : WarpSize / 2;
@@ -221,7 +220,7 @@ extern "C" __global__ void HPloc(
 			while ( numberOfClusters > threshold )
 			{
 				distanceOffsetsWarp[laneIndex] = InvalidValue;
-				SyncWarp();
+				sync_warp();
 
 				uint32_t minDistanceOffset = InvalidValue;
 				Aabb	 box			   = boxesWarp[laneIndex];
@@ -244,7 +243,7 @@ extern "C" __global__ void HPloc(
 				}
 				atomicMin( &distanceOffsetsWarp[laneIndex], minDistanceOffset );
 
-				SyncWarp();
+				sync_warp();
 
 				uint32_t nodeIndex = InvalidValue;
 				if ( laneIndex < numberOfClusters )
@@ -279,7 +278,7 @@ extern "C" __global__ void HPloc(
 					}
 				}
 
-				const uint64_t warpBallot = __ballot( nodeIndex != InvalidValue ); // warp sync'd here
+				const uint64_t warpBallot = hiprt::ballot( nodeIndex != InvalidValue ); // warp sync'd here
 				const uint32_t newIndex	  = __popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
 				numberOfClusters		  = __popcll( warpBallot );
 
@@ -290,7 +289,7 @@ extern "C" __global__ void HPloc(
 				}
 
 				__threadfence_block();
-				SyncWarp();
+				sync_warp();
 			}
 
 			if ( laneIndex < WarpSize / 2 )

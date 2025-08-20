@@ -31,13 +31,12 @@
 #include <hiprt/impl/BvhBuilderUtil.h>
 #include <hiprt/impl/Triangle.h>
 #include <hiprt/impl/BvhNode.h>
-#include <hiprt/impl/Geometry.h>
+#include <hiprt/impl/Header.h>
 #include <hiprt/impl/QrDecomposition.h>
 #include <hiprt/impl/Quaternion.h>
 #include <hiprt/impl/Transform.h>
 #include <hiprt/impl/InstanceList.h>
 #include <hiprt/impl/SbvhCommon.h>
-#include <hiprt/impl/Scene.h>
 #include <hiprt/impl/TriangleMesh.h>
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
@@ -289,25 +288,38 @@ __device__ void BinReferencesSpatial(
 
 				for ( uint32_t i = firstBin; i < lastBin; i++ )
 				{
-					float position = ptr( task.m_box.m_min )[axisIndex] + binSize * static_cast<float>( i + 1 );
-					if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
-					{
-						TrianglePair triPair = primitives.fetchTriangleNode( ref.m_primIndex ).m_triPair;
-						triPair.split( axisIndex, position, curRef.m_box, leftRef.m_box, rightRef.m_box );
-						if ( !leftRef.m_box.valid() || !rightRef.m_box.valid() )
-						{
-							leftRef.m_box						   = curRef.m_box;
-							rightRef.m_box						   = curRef.m_box;
-							ptr( leftRef.m_box.m_max )[axisIndex]  = position;
-							ptr( rightRef.m_box.m_min )[axisIndex] = position;
-						}
-					}
-					else
+					const float position = ptr( task.m_box.m_min )[axisIndex] + binSize * static_cast<float>( i + 1 );
+					if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
 					{
 						leftRef.m_box						   = curRef.m_box;
 						rightRef.m_box						   = curRef.m_box;
 						ptr( leftRef.m_box.m_max )[axisIndex]  = position;
 						ptr( rightRef.m_box.m_min )[axisIndex] = position;
+					}
+					else
+					{
+						if constexpr (
+							is_same<PrimitiveContainer, TriangleMesh>::value ||
+							is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
+							is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
+						{
+							primitives.split(
+								ref.m_primIndex, axisIndex, position, curRef.m_box, leftRef.m_box, rightRef.m_box );
+						}
+
+						if ( !leftRef.m_box.valid() )
+						{
+							leftRef.m_box						  = curRef.m_box;
+							ptr( leftRef.m_box.m_max )[axisIndex] = position;
+							leftRef.m_box.grow( leftRef.m_box.center() );
+						}
+
+						if ( !rightRef.m_box.valid() )
+						{
+							rightRef.m_box						   = curRef.m_box;
+							ptr( rightRef.m_box.m_min )[axisIndex] = position;
+							rightRef.m_box.grow( rightRef.m_box.center() );
+						}
 					}
 
 					curBinAddr = i + axisIndex * binCount;
@@ -842,24 +854,36 @@ __device__ void DistributeReferences(
 			{
 				ReferenceNode leftRef( ref.m_primIndex );
 				ReferenceNode rightRef( ref.m_primIndex );
-				if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
-				{
-					TrianglePair triPair = primitives.fetchTriangleNode( ref.m_primIndex ).m_triPair;
-					triPair.split( splitAxis, position, ref.m_box, leftRef.m_box, rightRef.m_box );
-					if ( !leftRef.m_box.valid() || !rightRef.m_box.valid() )
-					{
-						leftRef.m_box						   = ref.m_box;
-						rightRef.m_box						   = ref.m_box;
-						ptr( leftRef.m_box.m_max )[splitAxis]  = position;
-						ptr( rightRef.m_box.m_min )[splitAxis] = position;
-					}
-				}
-				else
+				if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
 				{
 					leftRef.m_box						   = ref.m_box;
 					rightRef.m_box						   = ref.m_box;
 					ptr( leftRef.m_box.m_max )[splitAxis]  = position;
 					ptr( rightRef.m_box.m_min )[splitAxis] = position;
+				}
+				else
+				{
+					if constexpr (
+						is_same<PrimitiveContainer, TriangleMesh>::value ||
+						is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
+						is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
+					{
+						primitives.split( ref.m_primIndex, splitAxis, position, ref.m_box, leftRef.m_box, rightRef.m_box );
+					}
+
+					if ( !leftRef.m_box.valid() )
+					{
+						leftRef.m_box						  = ref.m_box;
+						ptr( leftRef.m_box.m_max )[splitAxis] = position;
+						leftRef.m_box.grow( leftRef.m_box.center() );
+					}
+
+					if ( !rightRef.m_box.valid() )
+					{
+						rightRef.m_box						   = ref.m_box;
+						ptr( rightRef.m_box.m_min )[splitAxis] = position;
+						rightRef.m_box.grow( rightRef.m_box.center() );
+					}
 				}
 
 				uint32_t referenceOffset	  = atomicAdd( referenceCounter, 1 );

@@ -26,6 +26,7 @@
 #include <Orochi/Orochi.h>
 #include <vector>
 #include <fstream>
+#include <contrib/cpp20/source_location.h>
 #include <gtest/gtest.h>
 #define _ENABLE_HIPRTEW
 #include <hiprt/hiprtew.h>
@@ -46,6 +47,10 @@
 #else
 #define ASSERT( cond )
 #endif
+
+void checkOro( oroError res, const source_location& location = source_location::current() );
+void checkOrortc( orortcResult res, const source_location& location = source_location::current() );
+void checkHiprt( hiprtError res, const source_location& location = source_location::current() );
 
 class hiprtewTest : public ::testing::Test
 {

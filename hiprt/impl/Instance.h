@@ -24,8 +24,7 @@
 
 #pragma once
 #include <hiprt/hiprt_types.h>
-#include <hiprt/impl/Geometry.h>
-#include <hiprt/impl/Scene.h>
+#include <hiprt/impl/Header.h>
 
 namespace hiprt
 {
@@ -39,14 +38,6 @@ struct alignas( 16 ) Instance
 		GeomHeader*	 m_geometry;
 		SceneHeader* m_scene;
 	};
-
-	HIPRT_HOST_DEVICE const BoxNode* getBoxNodes() const
-	{
-		if ( m_type == hiprtInstanceTypeGeometry )
-			return m_geometry->m_boxNodes;
-		else
-			return m_scene->m_boxNodes;
-	}
 };
 HIPRT_STATIC_ASSERT( sizeof( Instance ) == 16 );
 } // namespace hiprt

@@ -32,25 +32,6 @@
 #include <queue>
 #include <cfloat>
 
-#ifndef ASSERT
-#if defined( _MSC_VER )
-#define ASSERT( cond )  \
-	if ( !( cond ) )    \
-	{                   \
-		__debugbreak(); \
-	}
-#elif defined( __GNUC__ )
-#include <signal.h>
-#define ASSERT( cond )    \
-	if ( !( cond ) )      \
-	{                     \
-		raise( SIGTRAP ); \
-	}
-#else
-#define ASSERT( cond )
-#endif
-#endif
-
 struct Aabb
 {
 	Aabb() { reset(); }
@@ -155,10 +136,10 @@ class BvhBuilder
 	BvhBuilder( void )						   = delete;
 	BvhBuilder& operator=( const BvhBuilder& ) = delete;
 
-	static void build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtBvhNode>& nodes );
+	static void build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes );
 };
 
-void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtBvhNode>& nodes )
+void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes )
 {
 	ASSERT( nPrims >= 2 );
 	std::vector<Aabb>	  rightBoxes( nPrims );
@@ -184,7 +165,7 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 
 	std::queue<QueueEntry> queue;
 	queue.push( QueueEntry( 0u, 0u, nPrims, box ) );
-	nodes.push_back( hiprtBvhNode() );
+	nodes.push_back( hiprtInternalNode() );
 	while ( !queue.empty() )
 	{
 		uint32_t nodeIndex = queue.front().m_nodeIndex;
@@ -219,13 +200,13 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 					minLeftBox	= leftBox;
 					minRightBox = rightBox;
 				}
-				ASSERT( leftBox.area() <= box.area() );
-				ASSERT( rightBox.area() <= box.area() );
+				assert( leftBox.area() <= box.area() );
+				assert( rightBox.area() <= box.area() );
 			}
 		}
 
-		ASSERT( minIndex > begin );
-		ASSERT( end > minIndex );
+		assert( minIndex > begin );
+		assert( end > minIndex );
 
 		std::memset( leftIndices.data(), 0, nPrims * sizeof( uint32_t ) );
 		for ( uint32_t i = begin; i < minIndex; ++i )
@@ -248,19 +229,14 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 					else
 						tmpIndices[l++] = index;
 				}
-				ASSERT( k == minIndex );
-				ASSERT( l == end );
+				assert( k == minIndex );
+				assert( l == end );
 				std::memcpy( &indices[j][begin], &tmpIndices[begin], ( end - begin ) * sizeof( uint32_t ) );
 			}
 		}
 
-		nodes[nodeIndex].childAabbsMin[0] = minLeftBox.m_min;
-		nodes[nodeIndex].childAabbsMax[0] = minLeftBox.m_max;
-		nodes[nodeIndex].childAabbsMin[1] = minRightBox.m_min;
-		nodes[nodeIndex].childAabbsMax[1] = minRightBox.m_max;
-		nodes[nodeIndex].childIndices[2]  = hiprtInvalidValue;
-		nodes[nodeIndex].childIndices[3]  = hiprtInvalidValue;
-
+		nodes[nodeIndex].aabbMin = min( minLeftBox.m_min, minRightBox.m_min );
+		nodes[nodeIndex].aabbMax = max( minLeftBox.m_max, minRightBox.m_max );
 		if ( minIndex - begin == 1 )
 		{
 			nodes[nodeIndex].childIndices[0]   = indices[minAxis][begin];
@@ -271,7 +247,7 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 			nodes[nodeIndex].childIndices[0]   = static_cast<uint32_t>( nodes.size() );
 			nodes[nodeIndex].childNodeTypes[0] = hiprtBvhNodeTypeInternal;
 			queue.push( QueueEntry( nodes[nodeIndex].childIndices[0], begin, minIndex, minLeftBox ) );
-			nodes.push_back( hiprtBvhNode() );
+			nodes.push_back( hiprtInternalNode() );
 		}
 
 		if ( end - minIndex == 1 )
@@ -284,7 +260,7 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 			nodes[nodeIndex].childIndices[1]   = static_cast<uint32_t>( nodes.size() );
 			nodes[nodeIndex].childNodeTypes[1] = hiprtBvhNodeTypeInternal;
 			queue.push( QueueEntry( nodes[nodeIndex].childIndices[1], minIndex, end, minRightBox ) );
-			nodes.push_back( hiprtBvhNode() );
+			nodes.push_back( hiprtInternalNode() );
 		}
 	}
 }

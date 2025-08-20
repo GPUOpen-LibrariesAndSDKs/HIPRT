@@ -403,14 +403,14 @@ class Transform
 
 	HIPRT_HOST_DEVICE Aabb motionBounds( const Aabb& aabb ) const
 	{
-		float3 p0 = aabb.m_min;
-		float3 p1 = { aabb.m_min.x, aabb.m_min.y, aabb.m_max.z };
-		float3 p2 = { aabb.m_min.x, aabb.m_max.y, aabb.m_min.z };
-		float3 p3 = { aabb.m_min.x, aabb.m_max.y, aabb.m_max.z };
-		float3 p4 = { aabb.m_max.x, aabb.m_min.y, aabb.m_max.z };
-		float3 p5 = { aabb.m_max.x, aabb.m_max.y, aabb.m_min.z };
-		float3 p6 = { aabb.m_max.x, aabb.m_max.y, aabb.m_max.z };
-		float3 p7 = aabb.m_max;
+		const float3 p0 = aabb.m_min;
+		const float3 p1 = { aabb.m_min.x, aabb.m_min.y, aabb.m_max.z };
+		const float3 p2 = { aabb.m_min.x, aabb.m_max.y, aabb.m_min.z };
+		const float3 p3 = { aabb.m_min.x, aabb.m_max.y, aabb.m_max.z };
+		const float3 p4 = { aabb.m_max.x, aabb.m_min.y, aabb.m_min.z };
+		const float3 p5 = { aabb.m_max.x, aabb.m_min.y, aabb.m_max.z };
+		const float3 p6 = { aabb.m_max.x, aabb.m_max.y, aabb.m_min.z };
+		const float3 p7 = aabb.m_max;
 
 		Aabb outAabb;
 		outAabb.grow( boundPointMotion( p0 ) );
