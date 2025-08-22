@@ -31,11 +31,11 @@
 
 #ifdef _WIN32
 
-#ifdef HIPRT_PREFER_HIP_5
-const char* g_hip_paths[] = { "amdhip64.dll", "amdhip64_6.dll", "amdhip64_7.dll", NULL };
-#else
-const char* g_hip_paths[] = { "amdhip64_7.dll", "amdhip64_6.dll", "amdhip64.dll", NULL };
-#endif
+const char* g_hip_paths[] = {
+	"amdhip64_7.dll",
+	"amdhip64_6.dll",
+	"amdhip64.dll", // <- hip '5.x' DLL.
+	NULL };
 
 const char* g_hiprtc_paths[] = {
 	"hiprtc0700.dll",
@@ -57,8 +57,14 @@ const char** g_hip_paths	= nullptr;
 const char** g_hiprtc_paths = nullptr;
 #else
 
-#ifdef HIPRT_PREFER_HIP_5
 const char* g_hip_paths[] = {
+
+	// first, we try with the generic symbolic link.
+	"libamdhip64.so",
+	"/opt/rocm/lib/libamdhip64.so",
+	"/opt/rocm/hip/lib/libamdhip64.so",
+
+	// .. if it doesn't exist, we try the specific versions
 	"libamdhip64.so.7",
 	"/opt/rocm/lib/libamdhip64.so.7",
 	"/opt/rocm/hip/lib/libamdhip64.so.7",
@@ -71,31 +77,16 @@ const char* g_hip_paths[] = {
 	"/opt/rocm/lib/libamdhip64.so.5",
 	"/opt/rocm/hip/lib/libamdhip64.so.5",
 
-	"libamdhip64.so",
-	"/opt/rocm/lib/libamdhip64.so",
-	"/opt/rocm/hip/lib/libamdhip64.so",
 	NULL };
-#else
-const char* g_hip_paths[] = {
-	"libamdhip64.so",
-	"/opt/rocm/lib/libamdhip64.so",
-	"/opt/rocm/hip/lib/libamdhip64.so",
-
-	"libamdhip64.so.5",
-	"/opt/rocm/lib/libamdhip64.so.5",
-	"/opt/rocm/hip/lib/libamdhip64.so.5",
-
-	"libamdhip64.so.6",
-	"/opt/rocm/lib/libamdhip64.so.6",
-	"/opt/rocm/hip/lib/libamdhip64.so.6",
-
-	"libamdhip64.so.7",
-	"/opt/rocm/lib/libamdhip64.so.7",
-	"/opt/rocm/hip/lib/libamdhip64.so.7",
-	NULL };
-#endif
 
 const char* g_hiprtc_paths[] = {
+
+	// first, we try with the generic symbolic link.
+	"/opt/rocm/hip/lib/libhiprtc.so",
+	"/opt/rocm/lib/libhiprtc.so",
+	"libhiprtc.so",
+
+	// .. if it doesn't exist, we try the specific versions
 	"/opt/rocm/hip/lib/libhiprtc.so.7",
 	"/opt/rocm/lib/libhiprtc.so.7",
 	"libhiprtc.so.7",
@@ -107,10 +98,6 @@ const char* g_hiprtc_paths[] = {
 	"/opt/rocm/hip/lib/libhiprtc.so.5",
 	"/opt/rocm/lib/libhiprtc.so.5",
 	"libhiprtc.so.5",
-
-	"/opt/rocm/hip/lib/libhiprtc.so",
-	"/opt/rocm/lib/libhiprtc.so",
-	"libhiprtc.so",
 
 	NULL };
 #endif

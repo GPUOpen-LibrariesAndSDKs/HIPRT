@@ -14,7 +14,6 @@ option(PRECOMPILE "Precompile kernels" OFF)
 option(HIPRTEW "Use hiprtew" OFF)
 option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
 option(NO_UNITTEST "Don't build unit tests" OFF)
-option(HIPRT_PREFER_HIP_5 "Prefer HIP 5" OFF)
 option(COMPILED_COMPRESSION "enable compression of compiled kernels" ON) # this argument is only used if BAKE_COMPILED_KERNEL is enabled -- advised to let it 'ON' as it's the path tested by the HIPRT team.
 
 option(FORCE_DISABLE_CUDA "By default Cuda support is automatically added if a Cuda install is detected. Turn this flag to ON to force Cuda to be disabled." OFF)
@@ -371,10 +370,6 @@ if(NOT NO_ENCRYPT)
 	set(ENV{HIPRT_NO_ENCRYPT} "OFF")
 else()
 	set(ENV{HIPRT_NO_ENCRYPT} "ON")
-endif()
-
-if(HIPRT_PREFER_HIP_5)
-	add_definitions(-DHIPRT_PREFER_HIP_5)
 endif()
 
 
