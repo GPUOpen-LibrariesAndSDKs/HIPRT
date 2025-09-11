@@ -24,7 +24,7 @@
 
 #pragma once
 #include <hiprt/hiprt_types.h>
-#include <hiprt/impl/Aabb.h>
+#include <hiprt/impl/BvhConfig.h>
 #include <hiprt/impl/Obb.h>
 
 namespace hiprt
@@ -113,17 +113,12 @@ class alignas( alignof( float3 ) ) Triangle
 	HIPRT_HOST_DEVICE void
 	crop( const uint32_t axis, const float position, const Aabb& box, BoundingVolume& boundingVolume ) const
 	{
-		constexpr float EnlargeEpsilon	 = 0.05f;
-		constexpr float EdgeEnlargeRatio = 1.0f + 2.0f * EnlargeEpsilon;
-		constexpr float AreaEnlargeDelta = EdgeEnlargeRatio * EdgeEnlargeRatio - 1.0f;
-
-		Aabb croppedBox;
-
 		// use enlarged box to make sure that the split points are inside
 		Aabb enlargedBox = box;
-		enlargedBox.m_min -= EnlargeEpsilon * box.extent();
-		enlargedBox.m_max += EnlargeEpsilon * box.extent();
+		enlargedBox.m_min -= ObbEnlargeEpsilon * box.extent();
+		enlargedBox.m_max += ObbEnlargeEpsilon * box.extent();
 
+		Aabb		  croppedBox;
 		const float3* vertices = &m_v0;
 		const float3* v1	   = &vertices[2];
 		for ( uint32_t i = 0; i < 3; i++ )
@@ -151,7 +146,7 @@ class alignas( alignof( float3 ) ) Triangle
 		}
 
 		// fallback when the cropped box is invalid
-		if ( !croppedBox.valid() || box.area() - croppedBox.area() > AreaEnlargeDelta ) boundingVolume.grow( box );
+		if ( !croppedBox.valid() ) boundingVolume.grow( box );
 	}
 
 	HIPRT_HOST_DEVICE Aabb aabb() const

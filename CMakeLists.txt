@@ -412,12 +412,15 @@ if(PRECOMPILE)
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Instance.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/InstanceList.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/MortonCode.h
+	${CMAKE_SOURCE_DIR}/hiprt/impl/Header.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/TriangleMesh.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Triangle.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhBuilderUtil.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/SbvhCommon.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhConfig.h
+	${CMAKE_SOURCE_DIR}/hiprt/impl/NodeList.h
 	${CMAKE_SOURCE_DIR}/hiprt/impl/MemoryArena.h
+	${CMAKE_SOURCE_DIR}/hiprt/impl/Obb.h
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_types.h
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_common.h
 	)
