@@ -277,17 +277,17 @@ class TraversalBase
 		hiprtHit&		hit );
 
 	HIPRT_DEVICE bool testTriangle(
-		const hiprtRay& ray, const float3& invD, TriangleNode* nodes, uint32_t leafAddr, uint32_t leafType, hiprtHit& hit );
+		const hiprtRay& ray, const float3& invD, TrianglePairNode* nodes, uint32_t leafAddr, uint32_t leafType, hiprtHit& hit );
 
 	HIPRT_DEVICE uint32_t testTrianglePair(
-		const hiprtRay& ray,
-		TriangleNode*	nodes,
-		uint32_t		leafAddr,
-		uint32_t		triPairIndex,
-		hiprtHit&		hit0,
-		hiprtHit&		hit1,
-		bool&			nodeEnd,
-		bool&			rangeEnd );
+		const hiprtRay&		ray,
+		TrianglePacketNode* nodes,
+		uint32_t			leafAddr,
+		uint32_t			triPairIndex,
+		hiprtHit&			hit0,
+		hiprtHit&			hit1,
+		bool&				nodeEnd,
+		bool&				rangeEnd );
 
   protected:
 	hiprtRay			 m_ray;
@@ -421,11 +421,12 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 	bool	 hasHit	  = false;
 	uint32_t leafAddr = getNodeAddr( leafIndex );
 
-	if constexpr ( Rtip >= 31 )
+	if constexpr ( is_same<TriangleNode, TrianglePacketNode>::value ) // RTIP 3.1
 	{
+		TrianglePacketNode* packetNodes = reinterpret_cast<TrianglePacketNode*>( nodes );
+
 		hiprtHit secondHit;
 		uint32_t triPairIndex = typeToTriPairIndex( getNodeType( leafIndex ) );
-
 		if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 		{
 			while ( true )
@@ -433,7 +434,7 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				bool	 nodeEnd  = false;
 				bool	 rangeEnd = false;
 				uint32_t hitMask =
-					this->testTrianglePair( ray, nodes, leafAddr, triPairIndex, hit, secondHit, nodeEnd, rangeEnd );
+					this->testTrianglePair( ray, packetNodes, leafAddr, triPairIndex, hit, secondHit, nodeEnd, rangeEnd );
 
 				bool firstHasHit  = hitMask & 1;
 				bool secondHasHit = hitMask & 2;
@@ -456,12 +457,6 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 					triangleMask |= Triangle1Processed;
 				}
 
-				if ( rangeEnd )
-				{
-					triangleMask = InvalidValue; // indicate range end by 'invalid value'
-					break;
-				}
-
 				triPairIndex++;
 				triangleMask = 0;
 				if ( nodeEnd )
@@ -470,9 +465,12 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 					leafAddr++;
 				}
 
-				if ( hasHit )
+				if ( hasHit || rangeEnd )
 				{
-					leafIndex = encodeNodeIndex( leafAddr, triPairIndexToType( triPairIndex ) );
+					if ( rangeEnd && !( firstHasHit && secondHasHit && ( triangleMask & Triangle1Processed ) == 0 ) )
+						triangleMask = InvalidValue; // indicate range end by 'invalid value'
+					else
+						leafIndex = encodeNodeIndex( leafAddr, triPairIndexToType( triPairIndex ) );
 					break;
 				}
 			}
@@ -486,7 +484,7 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				bool	 nodeEnd  = false;
 				bool	 rangeEnd = false;
 				uint32_t hitMask =
-					this->testTrianglePair( ray, nodes, leafAddr, triPairIndex, firstHit, secondHit, nodeEnd, rangeEnd );
+					this->testTrianglePair( ray, packetNodes, leafAddr, triPairIndex, firstHit, secondHit, nodeEnd, rangeEnd );
 
 				bool firstHasHit  = hitMask & 1;
 				bool secondHasHit = hitMask & 2;
@@ -521,17 +519,19 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 	}
 	else
 	{
+		TrianglePairNode* pairNodes = reinterpret_cast<TrianglePairNode*>( nodes );
+
 		if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 		{
 			if ( ( triangleMask & Triangle0Processed ) == 0 )
 			{
-				hasHit = this->testTriangle( ray, invD, nodes, leafAddr, TriangleType, hit );
+				hasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType, hit );
 				triangleMask |= Triangle0Processed;
 			}
 
 			if ( !hasHit )
 			{
-				hasHit = this->testTriangle( ray, invD, nodes, leafAddr, TriangleType + 1, hit );
+				hasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType + 1, hit );
 				triangleMask |= Triangle1Processed;
 			}
 
@@ -539,10 +539,10 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 		}
 		else
 		{
-			hasHit = this->testTriangle( ray, invD, nodes, leafAddr, TriangleType, hit );
+			hasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType, hit );
 
 			hiprtHit secondHit;
-			bool	 secondHasHit = this->testTriangle( ray, invD, nodes, leafAddr, TriangleType + 1, secondHit );
+			bool	 secondHasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType + 1, secondHit );
 
 			if ( secondHasHit && ( !hasHit || hit.t > secondHit.t ) )
 			{
@@ -561,12 +561,12 @@ template <typename Stack, hiprtTraversalType TraversalType>
 HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangle(
 	const hiprtRay&				   ray,
 	[[maybe_unused]] const float3& invD,
-	TriangleNode*				   nodes,
+	TrianglePairNode*			   nodes,
 	uint32_t					   leafAddr,
 	uint32_t					   leafType,
 	hiprtHit&					   hit )
 {
-	const TriangleNode& node = nodes[leafAddr];
+	const TrianglePairNode& node = nodes[leafAddr];
 	if ( node.getPrimIndex( 0 ) == node.getPrimIndex( 1 ) && leafType == TriangleType + 1 ) return false;
 	bool hasHit = false;
 #if HIPRT_RTIP < 20
@@ -602,17 +602,17 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangle(
 
 template <typename Stack, hiprtTraversalType TraversalType>
 HIPRT_DEVICE uint32_t TraversalBase<Stack, TraversalType>::testTrianglePair(
-	const hiprtRay& ray,
-	TriangleNode*	nodes,
-	uint32_t		leafAddr,
-	uint32_t		triPairIndex,
-	hiprtHit&		hit0,
-	hiprtHit&		hit1,
-	bool&			nodeEnd,
-	bool&			rangeEnd )
+	const hiprtRay&		ray,
+	TrianglePacketNode* nodes,
+	uint32_t			leafAddr,
+	uint32_t			triPairIndex,
+	hiprtHit&			hit0,
+	hiprtHit&			hit1,
+	bool&				nodeEnd,
+	bool&				rangeEnd )
 {
 #if HIPRT_RTIP >= 31
-	const TriangleNode& node = nodes[leafAddr];
+	const TrianglePacketNode& node = nodes[leafAddr];
 
 	hip_float3 dummy0, dummy1;
 	auto	   result = __builtin_amdgcn_image_bvh8_intersect_ray(

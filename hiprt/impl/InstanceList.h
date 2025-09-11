@@ -25,7 +25,6 @@
 #pragma once
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Header.h>
-#include <hiprt/impl/Transform.h>
 
 namespace hiprt
 {
@@ -45,9 +44,9 @@ class InstanceList
 #if defined( __KERNELCC__ )
 	HIPRT_DEVICE InstanceNode fetchPrimNode( const uint32_t index ) const
 	{
-		const Frame				   frame	 = fetchFrame( index );
 		const hiprtInstance		   instance	 = fetchInstance( index );
 		const hiprtTransformHeader transform = fetchTransformHeader( index );
+		const Frame				   frame	 = fetchFrame( transform.frameIndex );
 		const uint32_t			   mask		 = fetchMask( index );
 
 		InstanceNode instanceNode{};

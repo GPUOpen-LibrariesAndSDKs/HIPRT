@@ -805,6 +805,7 @@ extern "C" __global__ void FitBounds_InstanceList_MatrixFrame_HwInstanceNode(
 	FitBounds( header, primitives, boxNodes, primNodes );
 }
 
+// assuming that OBBs are AMD specific, there are no warp syncs
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
 __device__ void FitOrientedBounds(
 	Header*				header,
@@ -877,6 +878,22 @@ __device__ void FitOrientedBounds(
 			{
 				boxNodes[index].initBox(
 					laneIndex, childCount, childIndex, childBox, nodeBox, childRange, MatrixIndexToId[matrixIndex] );
+			}
+
+			// revert aabb if obb is not better
+			if ( laneIndex == 0 )
+			{
+				// reconstructed quantized boxes
+				float aabbArea = 0.0f;
+				float obbArea  = 0.0f;
+				for ( uint32_t j = 0; j < node.getChildCount(); ++j )
+				{
+					aabbArea += node.getChildBox( j ).area();
+					obbArea += boxNodes[index].getChildBox( j ).area();
+				}
+
+				// compare to aabb surface area
+				if ( aabbArea < ObbSurfaceAreaAlpha * obbArea ) boxNodes[index] = node;
 			}
 		}
 

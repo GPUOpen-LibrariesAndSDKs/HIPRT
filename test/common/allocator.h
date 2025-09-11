@@ -40,7 +40,6 @@ class PoolAllocator
 	{
 		T					  items[CHUNK_ITEMS];
 		uint32_t			  index = 0;
-		Chunk*				  ptr	= nullptr;
 		std::atomic<uint32_t> head	= 0;
 	};
 
@@ -53,13 +52,8 @@ class PoolAllocator
 
 	~PoolAllocator()
 	{
-		Chunk* chunk = m_ptr;
-		while ( chunk )
-		{
-			Chunk* p = chunk;
-			chunk	 = chunk->ptr;
-			delete p;
-		}
+		for ( auto chunk : m_chunks )
+			delete chunk;
 	}
 
 	PoolAllocator( const PoolAllocator& )  = delete;
@@ -88,7 +82,6 @@ class PoolAllocator
 				{
 					Chunk* newChunk = new Chunk();
 					newChunk->index = chunk->index + 1;
-					newChunk->ptr	= chunk;
 					newChunk->head	= 0;
 					m_chunks.push_back( newChunk );
 					m_ptr = newChunk;

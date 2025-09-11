@@ -26,7 +26,6 @@
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/Triangle.h>
-#include <hiprt/impl/Transform.h>
 
 namespace hiprt
 {

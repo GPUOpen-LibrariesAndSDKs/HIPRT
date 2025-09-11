@@ -533,6 +533,7 @@ TEST_F( hiprtTest, MinimumCornellBox )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -621,6 +622,7 @@ TEST_F( hiprtTest, Compaction )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -710,6 +712,7 @@ TEST_F( hiprtTest, BatchCornellBox )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -795,6 +798,7 @@ TEST_F( hiprtTest, BoundingBox )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -841,6 +845,7 @@ TEST_F( hiprtTest, CustomBvhImport )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -925,6 +930,7 @@ TEST_F( hiprtTest, BvhIoApi )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= CornellBoxTriangleCount;
@@ -1011,6 +1017,7 @@ TEST_F( hiprtTest, MeshIntersection )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 1;
@@ -1066,6 +1073,7 @@ TEST_F( hiprtTest, MeshIntersectionNonIndexed )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh{};
 	mesh.triangleCount = 1;
@@ -1115,6 +1123,7 @@ TEST_F( hiprtTest, PairTriangles )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 3;
@@ -1212,6 +1221,7 @@ TEST_F( hiprtTest, Cutout )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
@@ -1287,6 +1297,7 @@ TEST_F( hiprtTest, CustomIntersection )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtAABBListPrimitive list;
 	list.aabbCount	= 3;
@@ -1377,6 +1388,7 @@ TEST_F( hiprtTest, SceneIntersectionSingleton )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
@@ -1474,6 +1486,7 @@ TEST_F( hiprtTest, SceneIntersection )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtGeometry		   geomCircles;
 	hiprtDevicePtr		   geomTempCircles;
@@ -1660,6 +1673,7 @@ TEST_F( hiprtTest, SceneIntersectionMlas )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtGeometry		   geomCircles;
 	hiprtDevicePtr		   geomTempCircles;
@@ -1889,6 +1903,7 @@ TEST_F( hiprtTest, Shear )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 2;
@@ -1981,6 +1996,7 @@ TEST_F( hiprtTest, MotionBlur )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtGeometry			   geomTris0;
 	hiprtDevicePtr			   geomTempTris0;
@@ -2155,6 +2171,7 @@ TEST_F( hiprtTest, MotionBlurMatrix )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtGeometry			   geomTris0;
 	hiprtDevicePtr			   geomTempTris0;
@@ -2359,6 +2376,7 @@ TEST_F( hiprtTest, MotionBlurSlerp )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtAABBListPrimitive list;
 	list.aabbCount	= 1;
@@ -2498,6 +2516,7 @@ TEST_F( hiprtTest, Rebuild )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 1;
@@ -2567,6 +2586,7 @@ TEST_F( hiprtTest, Update )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
 	mesh.triangleCount	= 1;
@@ -2749,6 +2769,7 @@ TEST_F( hiprtTest, TraceKernel )
 {
 	hiprtContext ctxt;
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	constexpr uint32_t sharedStackSize	  = 16;
 	constexpr uint32_t blockWidth		  = 8;
