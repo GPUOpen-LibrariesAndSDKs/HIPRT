@@ -35,8 +35,6 @@ class Context;
 class Compiler
 {
   public:
-	static constexpr std::string_view DecryptKey = "20220318";
-
 	Compiler();
 	~Compiler();
 
@@ -108,8 +106,6 @@ class Compiler
 
 	void addCommonOpts( Context& context, std::vector<const char*>& opts, bool extended );
 
-	std::string decryptSourceCode( const std::string& src );
-
 	std::string getCacheFilename(
 		Context&									 context,
 		const std::string&							 src,
@@ -139,9 +135,6 @@ class Compiler
 
 	std::mutex						 m_moduleMutex;
 	std::map<std::string, oroModule> m_moduleCache;
-
-	std::mutex						   m_decryptMutex;
-	std::map<std::string, std::string> m_decryptCache;
 
 	std::mutex						   m_binMutex;
 	std::map<std::string, std::string> m_binCache;

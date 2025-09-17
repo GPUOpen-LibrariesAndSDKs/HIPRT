@@ -2,7 +2,7 @@ include "./tools/functions.lua"
 
 newoption {
     trigger = "bakeKernel",
-    description = "Encrypt and bake kernels"
+    description = "Bake kernels"
 }
 
 newoption {
@@ -23,11 +23,6 @@ newoption {
 newoption {
     trigger = "noUnittest",
     description = "Don't build unit tests",
-}
-
-newoption {
-    trigger = "noEncrypt",
-    description = "Don't encrypt kernel source and binaries",
 }
 
 hip_sdk_version, hip_final_path = get_hip_sdk_verion()
@@ -100,10 +95,6 @@ workspace "hiprt"
 		defines {"HIPRT_BITCODE_LINKING"}
         defines {"ORO_PRECOMPILED"}
 	end
-
-    if not _OPTIONS["noEncrypt"] then
-        defines {"HIPRT_ENCRYPT"}
-    end
 
     if _OPTIONS["precompile"] then
 		cmdExec = "cd ./scripts/bitcodes/ && python compile.py"

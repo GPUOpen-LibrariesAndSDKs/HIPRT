@@ -27,9 +27,6 @@
 #include <hiprt/impl/Error.h>
 #include <hiprt/impl/Utility.h>
 #include <hiprt/impl/Context.h>
-#if defined( HIPRT_ENCRYPT )
-#include <contrib/easy-encryption/encrypt.h>
-#endif
 #include <regex>
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
 #include <hiprt/cache/Kernels.h>
@@ -167,11 +164,11 @@ Kernel Compiler::getKernel(
 			for ( uint32_t i = 0; i < numHeaders - 1; ++i )
 			{
 				includeNames.push_back( includeNamesIn[i] );
-				headerData[i] = decryptSourceCode( headersIn[i] );
+				headerData[i] = headersIn[i];
 				headers.push_back( headerData[i].c_str() );
 			}
 
-			std::string src = decryptSourceCode( headersIn[numHeaders - 1] );
+			std::string src = headersIn[numHeaders - 1];
 			buildKernels(
 				context,
 				funcNames,
@@ -293,11 +290,11 @@ void Compiler::buildKernels(
 							} );
 						if ( includeName != includeNames.end() ) continue;
 						includeNames.push_back( GET_INC( hiprt_device_impl )[i] );
-						headerData[i] = decryptSourceCode( GET_ARGS( hiprt_device_impl )[i] );
+						headerData[i] = GET_ARGS( hiprt_device_impl )[i];
 						headers.push_back( headerData[i].c_str() );
 					}
 					includeNames.push_back( "hiprt_device_impl.h" );
-					headerData[numHeaders - 1] = decryptSourceCode( GET_ARGS( hiprt_device_impl )[numHeaders - 1] );
+					headerData[numHeaders - 1] = GET_ARGS( hiprt_device_impl )[numHeaders - 1];
 					headers.push_back( headerData[numHeaders - 1].c_str() );
 				}
 				else
@@ -625,28 +622,6 @@ void Compiler::addCustomFuncsSwitchCase(
 	extSrc += "\n" + funcDecls + "\n" + intersectFuncDef + "\n" + filterFuncDef;
 }
 
-std::string Compiler::decryptSourceCode( const std::string& srcIn )
-{
-#if defined( HIPRT_ENCRYPT )
-	std::lock_guard<std::mutex> lock( m_decryptMutex );
-	std::string					src;
-	if ( m_decryptCache.find( srcIn ) != m_decryptCache.end() )
-	{
-		src = m_decryptCache[srcIn];
-	}
-	else
-	{
-		std::string deryptKeyStr( DecryptKey );
-		src					  = srcIn;
-		src					  = decrypt( src, deryptKeyStr );
-		m_decryptCache[srcIn] = src;
-	}
-	return src;
-#else
-	return srcIn;
-#endif
-}
-
 std::string Compiler::getCacheFilename(
 	Context&									 context,
 	const std::string&							 src,
@@ -739,10 +714,6 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 			}
 			else
 			{
-#if defined( HIPRT_ENCRYPT )
-				std::string deryptKeyStr( DecryptKey );
-				binary = decrypt( binary, deryptKeyStr );
-#endif
 				m_binCache[cacheName] = binary;
 			}
 		}
@@ -754,13 +725,6 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 void Compiler::cacheBinaryToFile( const std::string& binaryIn, const std::string& cacheName, const std::string& deviceName )
 {
 	std::string binary = binaryIn;
-#if defined( HIPRT_ENCRYPT )
-	if constexpr ( !UseBitcode )
-	{
-		std::string deryptKeyStr( DecryptKey );
-		if ( deviceName.find( "NVIDIA" ) != std::string::npos ) binary = encrypt( binary, deryptKeyStr );
-	}
-#endif
 
 	{
 		std::filesystem::path path = m_cacheDirectory / cacheName;
@@ -876,11 +840,11 @@ std::string Compiler::buildFunctionTableBitcode(
 		for ( uint32_t i = 0; i < numHeaders - 1; ++i )
 		{
 			includeNames.push_back( GET_INC( hiprt_device )[i] );
-			headerData[i] = decryptSourceCode( GET_ARGS( hiprt_device )[i] );
+			headerData[i] = GET_ARGS( hiprt_device )[i];
 			headers.push_back( headerData[i].c_str() );
 		}
 		includeNames.push_back( "hiprt_device.h" );
-		headerData[numHeaders - 1] = decryptSourceCode( GET_ARGS( hiprt_device )[numHeaders - 1] );
+		headerData[numHeaders - 1] = GET_ARGS( hiprt_device )[numHeaders - 1];
 		headers.push_back( headerData[numHeaders - 1].c_str() );
 
 		std::string src = "#include <hiprt_device.h>\n";
