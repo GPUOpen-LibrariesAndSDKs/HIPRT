@@ -6,13 +6,12 @@ project(hiprt)
 #
 
 # Only one of those 3 flags should be ON at a time, or none. Multiple flags ON are untested and may cause issues.
-option(BAKE_KERNEL "Enable the use of encrypted and baked kernels source code" OFF)
+option(BAKE_KERNEL "Enable the use of baked kernels source code" OFF)
 option(BAKE_COMPILED_KERNEL "If enabled, the kernels will be compiled and embedded as a buffer inside the binary. if you do that, you should also enable the flag 'PRECOMPILE'" OFF)
 option(BITCODE "Enable bitcode linking: when running the program, it's expected to find precompiled kernels as external files." OFF)
 
 option(PRECOMPILE "Precompile kernels" OFF)
 option(HIPRTEW "Use hiprtew" OFF)
-option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
 option(NO_UNITTEST "Don't build unit tests" OFF)
 option(COMPILED_COMPRESSION "enable compression of compiled kernels" ON) # this argument is only used if BAKE_COMPILED_KERNEL is enabled -- advised to let it 'ON' as it's the path tested by the HIPRT team.
 
@@ -363,13 +362,6 @@ endif()
 
 if(BITCODE)
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BITCODE_LINKING ORO_PRECOMPILED)
-endif()
-
-if(NOT NO_ENCRYPT)
-	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_ENCRYPT )
-	set(ENV{HIPRT_NO_ENCRYPT} "OFF")
-else()
-	set(ENV{HIPRT_NO_ENCRYPT} "ON")
 endif()
 
 
