@@ -84,10 +84,12 @@ function(get_version file)
 	list(GET lines 0 major)
 	list(GET lines 1 minor)
 	list(GET lines 2 patch)
-	set(patch_hex "0x${patch}")
+	list(GET lines 3 hash)
+	set(patch_hex "0x${hash}")
 	set(major ${major} PARENT_SCOPE)
 	set(minor ${minor} PARENT_SCOPE)
-	set(patch ${patch_hex} PARENT_SCOPE)
+	set(patch ${patch} PARENT_SCOPE)
+	set(hash ${patch_hex} PARENT_SCOPE)
 endfunction()
 
 
@@ -166,8 +168,13 @@ function(get_hip_sdk_version result result_path)
 			if(useHipFromPATH)
 				set(hipCommand "hipcc")
 			else()
-				# try classic path used by HIPRT developers
-				set(hipCommand "hipSdk\\bin\\hipcc")
+				# use special path used by HIPRT developers
+				if(EXISTS "hipSdk\\bin\\hipcc.exe")
+					set(exec_perl "")
+					set(hipCommand "hipSdk\\bin\\hipcc.exe")
+				else()
+					set(hipCommand "hipSdk\\bin\\hipcc")
+				endif()
 			endif()
 		else()
 		
@@ -246,7 +253,7 @@ function(write_version_info in_file header_file version_file version_str_out)
 	get_version(${version_file})
 
 	# set(version "${major}${minor}")
-	# set(version_str "${version}_${patch}")
+	# set(version_str "${version}_${hash}")
 
 	# Read the content of the header template file
 	file(READ ${in_file} header_content)
@@ -265,7 +272,7 @@ function(write_version_info in_file header_file version_file version_str_out)
 		set(version_str "${HIPRT_VERSION}" )
 	endif()
 
-	# message(STATUS "HIPRT_API_VERSION: ${version_str}_${patch}")
+	# message(STATUS "HIPRT_API_VERSION: ${version_str}_${hash}")
 
 	set(HIPRT_API_VERSION ${HIPRT_VERSION})
 
@@ -273,6 +280,7 @@ function(write_version_info in_file header_file version_file version_str_out)
 	string(REPLACE "@HIPRT_MAJOR_VERSION@" "${major}" header_content "${header_content}")
 	string(REPLACE "@HIPRT_MINOR_VERSION@" "${minor}" header_content "${header_content}")
 	string(REPLACE "@HIPRT_PATCH_VERSION@" "${patch}" header_content "${header_content}")
+	string(REPLACE "@HIPRT_HASH_VERSION@" "${hash}" header_content "${header_content}")
 	string(REPLACE "@HIPRT_VERSION_STR@" "\"${version_str}\"" header_content "${header_content}")
 	string(REPLACE "@HIPRT_API_VERSION@" "${HIPRT_API_VERSION}" header_content "${header_content}")
 

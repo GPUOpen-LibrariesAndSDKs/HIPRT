@@ -35,7 +35,7 @@
 #include <hiprt/impl/Triangle.h>
 #include <hiprt/hiprt_device.h>
 
-#if HIPRT_RTIP >= 20
+#if HIPRT_RTIP >= 11
 extern "C" __device__ float __ocml_native_recip_f32( float );
 #endif
 
@@ -76,7 +76,7 @@ enum
 
 HIPRT_DEVICE HIPRT_INLINE float3 rcp( const float3 a )
 {
-#if defined( __USE_HWI__ )
+#if HIPRT_RTIP >= 11
 	return float3{ __ocml_native_recip_f32( a.x ), __ocml_native_recip_f32( a.y ), __ocml_native_recip_f32( a.z ) };
 #else
 	return 1.0f / a;
@@ -255,12 +255,12 @@ class TraversalBase
 		: m_ray( ray ), m_stack( stack ), m_payload( payload ), m_rayType( rayType ), m_nodeIndex( RootIndex ), m_hint( hint )
 	{
 		if ( funcTable != nullptr ) m_tableHeader = *reinterpret_cast<hiprtFuncTableHeader*>( funcTable );
-#if HIPRT_RTIP >= 20
+#if HIPRT_RTIP >= 11
 		packDescriptor( static_cast<uint32_t>( hint ), Rtip >= 31 );
 #endif
 	}
 
-#if HIPRT_RTIP >= 20
+#if HIPRT_RTIP >= 11
 	HIPRT_DEVICE void packDescriptor( uint32_t boxSortHeuristic = 0u, bool compressed = false );
 #endif
 
@@ -272,6 +272,7 @@ class TraversalBase
 		const hiprtRay& ray,
 		const float3&	invD,
 		TriangleNode*	nodes,
+		uint32_t		geomType,
 		uint32_t&		leafIndex,
 		uint32_t&		triangleMask,
 		hiprtHit&		hit );
@@ -303,7 +304,7 @@ class TraversalBase
 	hiprtTraversalHint	 m_hint			= hiprtTraversalHintDefault;
 };
 
-#if HIPRT_RTIP >= 20
+#if HIPRT_RTIP >= 11
 template <typename Stack, hiprtTraversalType TraversalType>
 HIPRT_DEVICE void TraversalBase<Stack, TraversalType>::packDescriptor( uint32_t boxSortHeuristic, bool compressed )
 {
@@ -338,7 +339,7 @@ template <typename Stack, hiprtTraversalType TraversalType>
 HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testInternalNode(
 	const hiprtRay& ray, [[maybe_unused]] const float3& invD, BoxNode* nodes, uint32_t& nodeIndex )
 {
-#if HIPRT_RTIP < 20
+#if HIPRT_RTIP < 11
 	BoxNode node = nodes[getNodeAddr( nodeIndex )];
 	float2	s0	 = node.m_box0.intersect( ray.origin, invD, ray.maxT );
 	float2	s1	 = node.m_box1.intersect( ray.origin, invD, ray.maxT );
@@ -414,6 +415,7 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 	const hiprtRay&				   ray,
 	[[maybe_unused]] const float3& invD,
 	TriangleNode*				   nodes,
+	uint32_t					   geomType,
 	uint32_t&					   leafIndex,
 	[[maybe_unused]] uint32_t&	   triangleMask,
 	hiprtHit&					   hit )
@@ -421,12 +423,13 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 	bool	 hasHit	  = false;
 	uint32_t leafAddr = getNodeAddr( leafIndex );
 
+	const bool useFilter = geomType != InvalidValue && m_tableHeader.funcDataSets != nullptr;
+
 	if constexpr ( is_same<TriangleNode, TrianglePacketNode>::value ) // RTIP 3.1
 	{
-		TrianglePacketNode* packetNodes = reinterpret_cast<TrianglePacketNode*>( nodes );
-
-		hiprtHit secondHit;
-		uint32_t triPairIndex = typeToTriPairIndex( getNodeType( leafIndex ) );
+		TrianglePacketNode* packetNodes	 = reinterpret_cast<TrianglePacketNode*>( nodes );
+		hiprtHit			secondHit	 = hit;
+		uint32_t			triPairIndex = typeToTriPairIndex( getNodeType( leafIndex ) );
 		if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 		{
 			while ( true )
@@ -438,6 +441,14 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 
 				bool firstHasHit  = hitMask & 1;
 				bool secondHasHit = hitMask & 2;
+				if ( useFilter )
+				{
+					if ( firstHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+						firstHasHit = false;
+					if ( secondHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, secondHit ) )
+						secondHasHit = false;
+				}
+
 				if ( ( triangleMask & Triangle0Processed ) == 0 )
 				{
 					hasHit = firstHasHit;
@@ -457,28 +468,34 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 					triangleMask |= Triangle1Processed;
 				}
 
-				triPairIndex++;
-				triangleMask = 0;
-				if ( nodeEnd )
+				if ( !secondHasHit || ( triangleMask & Triangle1Processed ) != 0 ) // !( secondHasHit && !secondProcessed )
 				{
-					triPairIndex = 0;
-					leafAddr++;
+					triPairIndex++;
+					triangleMask = 0;
+					if ( nodeEnd )
+					{
+						triPairIndex = 0;
+						leafAddr++;
+					}
+
+					if ( rangeEnd )
+					{
+						triangleMask = InvalidValue; // indicate range end by 'invalid value'
+						break;
+					}
 				}
 
-				if ( hasHit || rangeEnd )
+				if ( hasHit )
 				{
-					if ( rangeEnd && !( firstHasHit && secondHasHit && ( triangleMask & Triangle1Processed ) == 0 ) )
-						triangleMask = InvalidValue; // indicate range end by 'invalid value'
-					else
-						leafIndex = encodeNodeIndex( leafAddr, triPairIndexToType( triPairIndex ) );
+					leafIndex = encodeNodeIndex( leafAddr, triPairIndexToType( triPairIndex ) );
 					break;
 				}
 			}
 		}
 		else
 		{
-			hit.t = ray.maxT;
-			hiprtHit firstHit;
+			hit.t			  = ray.maxT;
+			hiprtHit firstHit = hit;
 			while ( true )
 			{
 				bool	 nodeEnd  = false;
@@ -488,6 +505,14 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 
 				bool firstHasHit  = hitMask & 1;
 				bool secondHasHit = hitMask & 2;
+				if ( useFilter )
+				{
+					if ( firstHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, firstHit ) )
+						firstHasHit = false;
+					if ( secondHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, secondHit ) )
+						secondHasHit = false;
+				}
+
 				if ( firstHasHit && ( !hasHit || hit.t > firstHit.t ) )
 				{
 					hit.t	   = firstHit.t;
@@ -526,12 +551,16 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 			if ( ( triangleMask & Triangle0Processed ) == 0 )
 			{
 				hasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType, hit );
+				if ( useFilter && hasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+					hasHit = false;
 				triangleMask |= Triangle0Processed;
 			}
 
 			if ( !hasHit )
 			{
 				hasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType + 1, hit );
+				if ( useFilter && hasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+					hasHit = false;
 				triangleMask |= Triangle1Processed;
 			}
 
@@ -540,9 +569,13 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 		else
 		{
 			hasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType, hit );
+			if ( useFilter && hasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+				hasHit = false;
 
-			hiprtHit secondHit;
+			hiprtHit secondHit	  = hit;
 			bool	 secondHasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType + 1, secondHit );
+			if ( useFilter && secondHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, secondHit ) )
+				secondHasHit = false;
 
 			if ( secondHasHit && ( !hasHit || hit.t > secondHit.t ) )
 			{
@@ -569,7 +602,7 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangle(
 	const TrianglePairNode& node = nodes[leafAddr];
 	if ( node.getPrimIndex( 0 ) == node.getPrimIndex( 1 ) && leafType == TriangleType + 1 ) return false;
 	bool hasHit = false;
-#if HIPRT_RTIP < 20
+#if HIPRT_RTIP < 11
 	hasHit =
 		node.m_triPair.fetchTriangle( leafType & 1 ).intersect( ray, hit.uv, hit.t, node.m_flags >> ( ( leafType & 1 ) * 8 ) );
 	if ( hasHit )
@@ -691,7 +724,7 @@ class GeomTraversal : public TraversalBase<Stack, TraversalType>
 	using TraversalBase<Stack, TraversalType>::m_nodeIndex;
 	using TraversalBase<Stack, TraversalType>::m_triangleMask;
 	using TraversalBase<Stack, TraversalType>::m_rayType;
-#if HIPRT_RTIP >= 20
+#if HIPRT_RTIP >= 11
 	using TraversalBase<Stack, TraversalType>::m_descriptor;
 #endif
 
@@ -729,12 +762,15 @@ HIPRT_DEVICE bool GeomTraversal<Stack, PrimitiveNode, TraversalType>::testLeafNo
 	bool hasHit = false;
 	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
 	{
-		hasHit = this->testTriangleNode( ray, invD, m_primNodes, leafIndex, triangleMask, hit );
+		hasHit = this->testTriangleNode( ray, invD, m_primNodes, m_geomType, leafIndex, triangleMask, hit );
 	}
 	else
 	{
-		hit.primID = m_primNodes[getNodeAddr( leafIndex )].m_primIndex;
-		hasHit	   = intersectFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
+		const bool useFilter = m_geomType != InvalidValue && m_tableHeader.funcDataSets != nullptr;
+		hit.primID			 = m_primNodes[getNodeAddr( leafIndex )].m_primIndex;
+		hasHit				 = intersectFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
+		if ( useFilter && hasHit && filterFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+			hasHit = false;
 		if ( !hasHit ) hit.primID = InvalidValue;
 	}
 	return hasHit;
@@ -781,24 +817,20 @@ HIPRT_DEVICE hiprtHit GeomTraversal<Stack, PrimitiveNode, TraversalType>::getNex
 			hiprtHit hit;
 			if ( testLeafNode( ray, invD, m_leafIndex, m_triangleMask, hit ) )
 			{
-				if ( m_geomType == InvalidValue || m_tableHeader.funcDataSets == nullptr ||
-					 !filterFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+				if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 				{
-					if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
+					if ( getNodeType( m_leafIndex ) == CustomType || m_triangleMask == InvalidValue )
 					{
-						if ( getNodeType( m_leafIndex ) == CustomType || m_triangleMask == InvalidValue )
-						{
-							m_triangleMask = 0;
-							m_leafIndex	   = InvalidValue;
-						}
-						m_state = hiprtTraversalStateHit;
-						return hit;
+						m_triangleMask = 0;
+						m_leafIndex	   = InvalidValue;
 					}
-					else
-					{
-						result	 = hit;
-						ray.maxT = hit.t;
-					}
+					m_state = hiprtTraversalStateHit;
+					return hit;
+				}
+				else
+				{
+					result	 = hit;
+					ray.maxT = hit.t;
 				}
 			}
 
@@ -875,7 +907,7 @@ class SceneTraversal : public TraversalBase<Stack, TraversalType>
 	using TraversalBase<Stack, TraversalType>::m_triangleMask;
 	using TraversalBase<Stack, TraversalType>::m_rayType;
 	using TraversalBase<Stack, TraversalType>::m_hint;
-#if HIPRT_RTIP >= 20
+#if HIPRT_RTIP >= 11
 	using TraversalBase<Stack, TraversalType>::m_descriptor;
 #endif
 
@@ -1003,13 +1035,15 @@ HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::testLeafN
 	if ( geomType & 1 )
 	{
 		TriangleNode* nodes = reinterpret_cast<TriangleNode*>( primNodes );
-		hasHit				= this->testTriangleNode( ray, invD, nodes, leafIndex, triangleMask, hit );
+		hasHit				= this->testTriangleNode( ray, invD, nodes, geomType, leafIndex, triangleMask, hit );
 	}
 	else
 	{
-		CustomNode* nodes = reinterpret_cast<CustomNode*>( primNodes );
-		hit.primID		  = nodes[getNodeAddr( leafIndex )].m_primIndex;
-		hasHit			  = intersectFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
+		const bool	useFilter = geomType != InvalidValue && m_tableHeader.funcDataSets != nullptr;
+		CustomNode* nodes	  = reinterpret_cast<CustomNode*>( primNodes );
+		hit.primID			  = nodes[getNodeAddr( leafIndex )].m_primIndex;
+		hasHit				  = intersectFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
+		if ( useFilter && hasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) ) hasHit = false;
 		if ( !hasHit ) hit.primID = InvalidValue;
 	}
 
@@ -1058,46 +1092,41 @@ HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNe
 				hiprtHit hit;
 				if ( testLeafNode( primNodes, ray, invD, m_nodeIndex, m_triangleMask, geomType, hit ) )
 				{
-					if ( geomType == InvalidValue || m_tableHeader.funcDataSets == nullptr ||
-						 !filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
+					if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 					{
-						if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
+						m_state = hiprtTraversalStateHit;
+						if ( getNodeType( m_nodeIndex ) == CustomType || m_triangleMask == InvalidValue )
 						{
-							m_state = hiprtTraversalStateHit;
-							if ( getNodeType( m_nodeIndex ) == CustomType || m_triangleMask == InvalidValue )
+							m_triangleMask = 0;
+							m_nodeIndex	   = m_stack.pop();
+
+							while ( m_nodeIndex == InvalidValue && !m_stack.empty() )
 							{
-								m_triangleMask = 0;
-								m_nodeIndex	   = m_stack.pop();
-
-								while ( m_nodeIndex == InvalidValue && !m_stack.empty() )
+								if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
 								{
-									if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
+									if ( instanceId() == InvalidValue )
 									{
-										if ( instanceId() == InvalidValue )
-										{
-											hiprtInstanceStackEntry instanceEntry = m_instanceStack.pop();
-											m_ray								  = instanceEntry.ray;
-											m_scene = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
-											m_level--;
+										hiprtInstanceStackEntry instanceEntry = m_instanceStack.pop();
+										m_ray								  = instanceEntry.ray;
+										m_scene = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
+										m_level--;
 
-											m_boxNodes		= m_scene->m_boxNodes;
-											m_instanceNodes = m_scene->m_primNodes;
-											m_frames		= m_scene->m_frames;
-										}
+										m_boxNodes		= m_scene->m_boxNodes;
+										m_instanceNodes = m_scene->m_primNodes;
+										m_frames		= m_scene->m_frames;
 									}
-
-									instanceId()   = InvalidValue;
-									m_triangleMask = 0;
-									m_nodeIndex	   = m_stack.pop();
 								}
+
+								instanceId() = InvalidValue;
+								m_nodeIndex	 = m_stack.pop();
 							}
-							return hit;
 						}
-						else
-						{
-							ray.maxT = hit.t;
-							result	 = hit;
-						}
+						return hit;
+					}
+					else
+					{
+						ray.maxT = hit.t;
+						result	 = hit;
 					}
 				}
 			}

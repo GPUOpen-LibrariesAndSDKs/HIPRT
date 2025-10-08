@@ -56,8 +56,9 @@ function get_version(file)
     local lines = lines_from(file)
     major = tonumber(lines[1])
     minor = tonumber(lines[2])
-    patch = "0x"..(lines[3])
-    return major, minor, patch
+    patch = tonumber(lines[3])
+    hash = "0x"..(lines[4])
+    return major, minor, patch, hash
 end
 
 -- find the path of 'Hipcc' from PATH
@@ -177,7 +178,7 @@ function write_version_info(in_file, header_file, version_file, hip_sdk_version)
 		return
 	end
 	
-	HIPRT_MAJOR_VERSION, HIPRT_MINOR_VERSION, HIPRT_PATCH_VERSION = get_version(version_file)
+	HIPRT_MAJOR_VERSION, HIPRT_MINOR_VERSION, HIPRT_PATCH_VERSION, HIPRT_HASH_VERSION = get_version(version_file)
 	HIPRT_VERSION = HIPRT_MAJOR_VERSION * 1000 + HIPRT_MINOR_VERSION 
 	HIPRT_API_VERSION = HIPRT_VERSION 
 	HIPRT_VERSION_STR = string.format("%05d", HIPRT_VERSION)
@@ -186,6 +187,7 @@ function write_version_info(in_file, header_file, version_file, hip_sdk_version)
 	header = header:gsub("@HIPRT_MAJOR_VERSION@", HIPRT_MAJOR_VERSION)
 	header = header:gsub("@HIPRT_MINOR_VERSION@", HIPRT_MINOR_VERSION)
 	header = header:gsub("@HIPRT_PATCH_VERSION@", HIPRT_PATCH_VERSION)
+	header = header:gsub("@HIPRT_HASH_VERSION@", HIPRT_HASH_VERSION)
 	header = header:gsub("@HIPRT_API_VERSION@", HIPRT_API_VERSION)
 	header = header:gsub("@HIPRT_VERSION_STR@", "\""..HIPRT_VERSION_STR.."\"")
 	header = header:gsub("@HIP_VERSION_STR@", "\""..hip_sdk_version.."\"")
@@ -195,7 +197,7 @@ function write_version_info(in_file, header_file, version_file, hip_sdk_version)
 end
 
 function get_hiprt_library_name(version_file)
-	HIPRT_MAJOR_VERSION, HIPRT_MINOR_VERSION, HIPRT_PATCH_VERSION = get_version(version_file)
+	HIPRT_MAJOR_VERSION, HIPRT_MINOR_VERSION, HIPRT_REVISION_VERSION, HIPRT_PATCH_VERSION = get_version(version_file)
 	HIPRT_VERSION = HIPRT_MAJOR_VERSION * 1000 + HIPRT_MINOR_VERSION 
 	HIPRT_VERSION_STR = string.format("%05d", HIPRT_VERSION)
 	return  "hiprt" .. HIPRT_VERSION_STR
