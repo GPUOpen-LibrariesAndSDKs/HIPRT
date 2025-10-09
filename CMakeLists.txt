@@ -6,13 +6,12 @@ project(hiprt)
 #
 
 # Only one of those 3 flags should be ON at a time, or none. Multiple flags ON are untested and may cause issues.
-option(BAKE_KERNEL "Enable the use of encrypted and baked kernels source code" OFF)
+option(BAKE_KERNEL "Enable the use of baked kernels source code" OFF)
 option(BAKE_COMPILED_KERNEL "If enabled, the kernels will be compiled and embedded as a buffer inside the binary. if you do that, you should also enable the flag 'PRECOMPILE'" OFF)
 option(BITCODE "Enable bitcode linking: when running the program, it's expected to find precompiled kernels as external files." OFF)
 
 option(PRECOMPILE "Precompile kernels" OFF)
 option(HIPRTEW "Use hiprtew" OFF)
-option(NO_ENCRYPT "Don't encrypt kernel source and binaries" OFF)
 option(NO_UNITTEST "Don't build unit tests" OFF)
 option(COMPILED_COMPRESSION "enable compression of compiled kernels" ON) # this argument is only used if BAKE_COMPILED_KERNEL is enabled -- advised to let it 'ON' as it's the path tested by the HIPRT team.
 
@@ -85,10 +84,12 @@ function(get_version file)
 	list(GET lines 0 major)
 	list(GET lines 1 minor)
 	list(GET lines 2 patch)
-	set(patch_hex "0x${patch}")
+	list(GET lines 3 hash)
+	set(patch_hex "0x${hash}")
 	set(major ${major} PARENT_SCOPE)
 	set(minor ${minor} PARENT_SCOPE)
-	set(patch ${patch_hex} PARENT_SCOPE)
+	set(patch ${patch} PARENT_SCOPE)
+	set(hash ${patch_hex} PARENT_SCOPE)
 endfunction()
 
 
@@ -167,8 +168,13 @@ function(get_hip_sdk_version result result_path)
 			if(useHipFromPATH)
 				set(hipCommand "hipcc")
 			else()
-				# try classic path used by HIPRT developers
-				set(hipCommand "hipSdk\\bin\\hipcc")
+				# use special path used by HIPRT developers
+				if(EXISTS "hipSdk\\bin\\hipcc.exe")
+					set(exec_perl "")
+					set(hipCommand "hipSdk\\bin\\hipcc.exe")
+				else()
+					set(hipCommand "hipSdk\\bin\\hipcc")
+				endif()
 			endif()
 		else()
 		
@@ -247,7 +253,7 @@ function(write_version_info in_file header_file version_file version_str_out)
 	get_version(${version_file})
 
 	# set(version "${major}${minor}")
-	# set(version_str "${version}_${patch}")
+	# set(version_str "${version}_${hash}")
 
 	# Read the content of the header template file
 	file(READ ${in_file} header_content)
@@ -266,7 +272,7 @@ function(write_version_info in_file header_file version_file version_str_out)
 		set(version_str "${HIPRT_VERSION}" )
 	endif()
 
-	# message(STATUS "HIPRT_API_VERSION: ${version_str}_${patch}")
+	# message(STATUS "HIPRT_API_VERSION: ${version_str}_${hash}")
 
 	set(HIPRT_API_VERSION ${HIPRT_VERSION})
 
@@ -274,6 +280,7 @@ function(write_version_info in_file header_file version_file version_str_out)
 	string(REPLACE "@HIPRT_MAJOR_VERSION@" "${major}" header_content "${header_content}")
 	string(REPLACE "@HIPRT_MINOR_VERSION@" "${minor}" header_content "${header_content}")
 	string(REPLACE "@HIPRT_PATCH_VERSION@" "${patch}" header_content "${header_content}")
+	string(REPLACE "@HIPRT_HASH_VERSION@" "${hash}" header_content "${header_content}")
 	string(REPLACE "@HIPRT_VERSION_STR@" "\"${version_str}\"" header_content "${header_content}")
 	string(REPLACE "@HIPRT_API_VERSION@" "${HIPRT_API_VERSION}" header_content "${header_content}")
 
@@ -363,13 +370,6 @@ endif()
 
 if(BITCODE)
 	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_BITCODE_LINKING ORO_PRECOMPILED)
-endif()
-
-if(NOT NO_ENCRYPT)
-	target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_ENCRYPT )
-	set(ENV{HIPRT_NO_ENCRYPT} "OFF")
-else()
-	set(ENV{HIPRT_NO_ENCRYPT} "ON")
 endif()
 
 

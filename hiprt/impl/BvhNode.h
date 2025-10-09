@@ -998,22 +998,12 @@ struct alignas( DefaultAlignment ) TrianglePacketNode
 		while ( true )
 		{
 			const Triangle& tri0 = triPacketNode->fetchTriangle( triPairIndex, 0 );
-			tri0.crop( 0, box.m_min.x, box, obb );
-			tri0.crop( 0, box.m_max.x, box, obb );
-			tri0.crop( 1, box.m_min.y, box, obb );
-			tri0.crop( 1, box.m_max.y, box, obb );
-			tri0.crop( 2, box.m_min.z, box, obb );
-			tri0.crop( 2, box.m_max.z, box, obb );
+			obb.m_box.grow( tri0.obb( box, matrixIndex ).m_box );
 
 			if ( triPacketNode->getPrimIndex( triPairIndex, 0 ) != triPacketNode->getPrimIndex( triPairIndex, 1 ) )
 			{
 				const Triangle& tri1 = triPacketNode->fetchTriangle( triPairIndex, 1 );
-				tri1.crop( 0, box.m_min.x, box, obb );
-				tri1.crop( 0, box.m_max.x, box, obb );
-				tri1.crop( 1, box.m_min.y, box, obb );
-				tri1.crop( 1, box.m_max.y, box, obb );
-				tri1.crop( 2, box.m_min.z, box, obb );
-				tri1.crop( 2, box.m_max.z, box, obb );
+				obb.m_box.grow( tri1.obb( box, matrixIndex ).m_box );
 			}
 
 			bool nodeEnd  = triPairIndex + 1 == triPacketNode->getTrianglePairCount();

@@ -35,7 +35,7 @@ static constexpr uint32_t BvhBuilderCompactionBlockSize = 1024;
 static constexpr uint32_t BatchBuilderMaxBlockSize		= MaxBatchBuildMaxPrimCount;
 static constexpr uint32_t MaxFatLeafSize				= 4u;
 static constexpr uint32_t LanesPerLeafPacketTask		= 4u;
-static constexpr float	  ObbEnlargeEpsilon				= 0.05f;
+static constexpr float	  ObbEpsilon					= 1.0e-4f;
 static constexpr float	  ObbSurfaceAreaAlpha			= 1.1f;
 // LBVH
 static constexpr uint32_t LbvhEmitBlockSize = 512u;

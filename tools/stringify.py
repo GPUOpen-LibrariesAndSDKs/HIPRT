@@ -2,37 +2,10 @@
 from __future__ import print_function
 import sys
 import os
-import subprocess
-import platform
 
 dir = './'
-ekey = ''
 defines = {}
 replaced = []
-
-# A classic usage is to have this optional temporary env var created during the cmake process (through the 'NO_ENCRYPT' cmake option) before calling this python script.
-# If this env var is ON, it overides the encyption and disable it.
-no_encrypt = os.getenv('HIPRT_NO_ENCRYPT') == 'ON'
-
-def encrypt(message, key):
-    file = open('./tmp.txt',mode='w')
-    file.write(message)
-    file.close()
-    binary = ''
-    if platform.system() == 'Windows':
-        binary = './contrib/easy-encryption/bin/win/ee64'
-    elif platform.system() == 'Darwin':
-        binary = './contrib/easy-encryption/bin/macos/ee64'
-    else:
-        binary = './contrib/easy-encryption/bin/linux/ee64'
-
-    subprocess.check_output([binary, './tmp.txt', './tmp.bin', key, "0"])
-
-    file1 = open('./tmp.bin',mode='r')
-    msg = file1.read()
-    file1.close()
-    return msg
-#    return subprocess.check_output(['./adl/contrib/lib/ee/win/ee64', message, key, "0"]).decode('utf8').strip()
 
 def registerDefs(line):
     global defines
@@ -82,10 +55,7 @@ def printfile(filename, ans, enablePrint, api):
                 continue
         if a.find('#undef') == -1:
             a = replaceDefines( a )
-        if( ekey != '' ):
-          b = a
-        else:
-          b = ('"'+a.replace("\\", "\\\\").replace("\"", "\\\"").replace("'", "\\'") + '\\n"')
+        b = ('"'+a.replace("\\", "\\\\").replace("\"", "\\\"").replace("'", "\\'") + '\\n"')
         ans += ''+b+'\n'
     return ans
 
@@ -95,26 +65,13 @@ def stringify(filename, stringname, api):
     ans = printfile( filename, ans, 1, api )
 #    print(len(ans))
 #    print( ans )
-    if( ekey != '' ):
-        ans = encrypt( ans, ekey )
-#    print( '"'+ans+'";' )
-        chars_per_line = 255
-        for i in range(0, len(ans), chars_per_line):
-            print( '"'+ans[i:i+chars_per_line]+'"\\')
-        print(';')
-    else:
-        print( ans + ';' )
+    print( ans + ';' )
 
 argvs = sys.argv
 
 files = []
 if len(argvs) >= 2:
     files.append( argvs[1] )
-
-if len(argvs) >= 3:
-    ekey = argvs[2]
-    if no_encrypt:
-        ekey = ''
 
 
 #files = ['IntegratorGpuLightSamplerTestKernel.cl','Math.cl']

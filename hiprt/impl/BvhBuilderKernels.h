@@ -709,7 +709,7 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 	{
 		node	   = boxNodes[index];
 		childCount = node.getChildCount();
-		internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
+		internal   = sublaneIndex < childCount && node.getChildType( sublaneIndex ) == BoxType;
 	}
 
 	uint32_t internalCount = __popcll( hiprt::ballot( internal ) & subwarpMask );
@@ -725,7 +725,7 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 		if ( !done && sublaneIndex < childCount )
 		{
 			childIndex = node.getChildIndex( sublaneIndex );
-			childRange = node.getChildRange( laneIndex );
+			childRange = node.getChildRange( sublaneIndex );
 			childBox   = getNodeBox( childIndex, primitives, boxNodes, primNodes );
 		}
 
@@ -736,13 +736,10 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 
 		if ( !done )
 		{
-			boxNodes[index].initBox( sublaneIndex, childCount, childIndex, childBox, nodeBox, childRange );
-
 			if ( sublaneIndex < childCount )
-			{
-				index = node.getParentAddr();
-				if ( index == InvalidValue ) done = true;
-			}
+				boxNodes[index].initBox( sublaneIndex, childCount, childIndex, childBox, nodeBox, childRange );
+			index = node.getParentAddr();
+			if ( index == InvalidValue ) done = true;
 		}
 
 		internal = false;
@@ -750,7 +747,7 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 		{
 			node	   = boxNodes[index];
 			childCount = node.getChildCount();
-			internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
+			internal   = sublaneIndex < childCount && node.getChildType( sublaneIndex ) == BoxType;
 		}
 
 		internalCount = __popcll( hiprt::ballot( internal ) & subwarpMask );
@@ -1967,6 +1964,9 @@ __device__ void PackLeavesWarp(
 					TrianglePairData( pairIndices, triIndices0, triIndices1, rangeEnd );
 
 			rangeOffset++;
+			// not sure why but this fixes the issue on linux
+			// otherwise triIndices1 are not correcly written to the final packet
+			__threadfence_block();
 		}
 		sync_warp();
 		__threadfence_block();

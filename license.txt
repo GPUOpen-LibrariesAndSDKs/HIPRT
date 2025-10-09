@@ -28,7 +28,6 @@ stb_image - public domain - https://github.com/nothings/stb/blob/master/stb_imag
 stb_image_write - public domain - https://github.com/nothings/stb/blob/master/stb_image_write.h
 Premake - BSD 3-Clause "New" or "Revised" License - https://github.com/premake/premake-core
 Orochi - MIT License - https://github.com/amdadvtech/Orochi
-easy-encryption - MIT License - https://github.com/philipperemy/easy-encryption
 embree - Apache License 2.0 - https://github.com/embree/embree
 gtest - BSD 3-Clause "New" or "Revised" License -https://github.com/google/googletest
 argparse - License: Apache 2.0 with LLVM Exception or GPL v3 - https://github.com/jamolnng/argparse
