@@ -70,8 +70,14 @@ def getAMDGPUArchs(hip_sdk_version_num):
     return gpus_archs
 
 
-# encapsulate the full path in quotes if it contains spaces and is not already quoted
+# encapsulate the full path in quotes if it's not already quoted
 def quoteFilepathIfNeeded(path: str) -> str:
-    if " " in path and not (path.startswith('"') and path.endswith('"')):
+    if not (path.startswith('"') and path.endswith('"')):
         path = '"' + path + '"'
+    return path
+
+
+def remove_trailing_slash(path):
+    if path.endswith('/') or path.endswith('\\'):
+        return path[:-1]
     return path

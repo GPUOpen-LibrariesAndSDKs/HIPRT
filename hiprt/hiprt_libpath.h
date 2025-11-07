@@ -37,20 +37,10 @@ const char* g_hip_paths[] = {
 	"amdhip64.dll", // <- hip '5.x' DLL.
 	NULL };
 
-const char* g_hiprtc_paths[] = {
-	"hiprtc0700.dll",
-	"hiprtc0605.dll",
-	"hiprtc0604.dll",
-	"hiprtc0603.dll",
-	"hiprtc0602.dll",
-	"hiprtc0601.dll",
-	"hiprtc0600.dll",
-	"hiprtc0507.dll",
-	"hiprtc0506.dll",
-	"hiprtc0505.dll",
-	"hiprtc0504.dll",
-	"hiprtc0503.dll",
-	NULL };
+const char* g_hiprtc_paths[] = { "hiprtc0707.dll", "hiprtc0706.dll", "hiprtc0705.dll", "hiprtc0704.dll", "hiprtc0703.dll",
+								 "hiprtc0702.dll", "hiprtc0701.dll", "hiprtc0700.dll", "hiprtc0605.dll", "hiprtc0604.dll",
+								 "hiprtc0603.dll", "hiprtc0602.dll", "hiprtc0601.dll", "hiprtc0600.dll", "hiprtc0507.dll",
+								 "hiprtc0506.dll", "hiprtc0505.dll", "hiprtc0504.dll", "hiprtc0503.dll", NULL };
 #elif defined( __APPLE__ )
 
 const char** g_hip_paths	= nullptr;

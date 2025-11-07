@@ -168,7 +168,11 @@ workspace "hiprt"
 				copydir( "./contrib/Orochi/contrib/bin/win64", "./dist/bin/Debug/", "*.dll" )
 			end
 			if os.istarget("linux") then
-				libdirs{"contrib/embree/linux/"}
+				local embree_rel_path = "contrib/embree/linux"
+				local project_root = path.getabsolute(".")
+				local embree_abs_path = path.join(project_root, embree_rel_path)
+				libdirs{ embree_rel_path }
+				linkoptions { "-Wl,-rpath," .. embree_abs_path }
 			end
 			links{ "embree4", "tbb" }
 
