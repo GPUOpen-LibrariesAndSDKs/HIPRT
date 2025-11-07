@@ -114,11 +114,19 @@ HIPRT_DEVICE HIPRT_INLINE Obb getNodeObb(
 	if ( nodeType != BoxType )
 	{
 		if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value )
-			return primNodes[nodeAddr].obb( typeToTriPairIndex( nodeType ), matrixIndex, nodeBox );
+		{
+			Obb obb = primNodes[nodeAddr].obb( typeToTriPairIndex( nodeType ), matrixIndex, nodeBox );
+			if ( !obb.aabb().valid() ) obb = Obb( matrixIndex ).grow( nodeBox );
+			return obb;
+		}
 		else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+		{
 			return primitives.fetchObb( primNodes[nodeAddr].m_primIndex, matrixIndex, nodeBox );
+		}
 		else
+		{
 			return Obb( matrixIndex ).grow( nodeBox );
+		}
 	}
 	else
 	{
@@ -1467,6 +1475,7 @@ __device__ void PackLeaves(
 	}
 }
 
+// assuming that triangle packets are AMD specific, there are no warp syncs
 template <>
 __device__ void PackLeaves<TriangleMesh, TrianglePacketNode, GeomHeader>(
 	uint32_t			index,
@@ -1754,6 +1763,7 @@ __device__ void PackLeaves<TriangleMesh, TrianglePacketNode, GeomHeader>(
 	}
 }
 
+// assuming that triangle packets are AMD specific, there are no warp syncs
 __device__ void PackLeavesWarp(
 	uint32_t			index,
 	uint32_t			taskCount,
@@ -1813,15 +1823,13 @@ __device__ void PackLeavesWarp(
 			}
 
 			// find new vertices
-			const uint32_t sublaneVertIndex = laneIndex % LanesPerLeafPacketTask;
-			const uint32_t subwarpVertIndex = laneIndex / LanesPerLeafPacketTask;
-			const bool	   valid			= sublaneVertIndex < 3 || pairIndices.x != pairIndices.y;
+			const bool valid = sublaneIndex < 3 || pairIndices.x != pairIndices.y;
 
 			bool	 contains = false;
 			uint32_t vertexIndexInPacket{};
 			for ( uint32_t k = 0; k < packet.m_vertCount; ++k )
 			{
-				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == ( &indices.x )[sublaneVertIndex] )
+				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == ( &indices.x )[sublaneIndex] )
 				{
 					vertexIndexInPacket = k;
 					contains			= true;
@@ -1830,7 +1838,7 @@ __device__ void PackLeavesWarp(
 			}
 
 			const uint32_t newVertMask =
-				( hiprt::ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpVertIndex ) ) & 0xf;
+				( hiprt::ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpIndex ) ) & 0xf;
 			const uint32_t oldVertCount = packet.m_vertCount;
 			const uint32_t newVertCount = __popc( newVertMask );
 
@@ -1840,21 +1848,21 @@ __device__ void PackLeavesWarp(
 			// store new vertices
 			if ( !contains )
 			{
-				const uint32_t vertexMask = ( 1 << sublaneVertIndex ) - 1;
+				const uint32_t vertexMask = ( 1 << sublaneIndex ) - 1;
 				vertexIndexInPacket		  = oldVertCount + __popc( newVertMask & vertexMask );
-				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[sublaneVertIndex];
+				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[sublaneIndex];
 			}
 
 			rangeOffset++;
+
+			// not sure why but this fence is needed on linux
+			__threadfence_block();
 		}
-		sync_warp();
 		__threadfence_block();
 
 		// count packets
 		if ( taskIndex < taskCount && packet.m_triPairCount > 0 ) primNodeCount++;
-		sync_warp();
 	}
-	sync_warp();
 
 	const uint32_t primNodeBase =
 		warpOffset( sublaneIndex == LanesPerLeafPacketTask - 1 ? primNodeCount : 0u, &header->m_primNodeCount );
@@ -1865,11 +1873,9 @@ __device__ void PackLeavesWarp(
 	uint32_t leafIndex		 = 0;
 
 	rangeOffset = rangeBase;
-	sync_warp();
 
 	while ( hiprt::ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
 	{
-		sync_warp();
 		TrianglePacketData packet{};
 
 		while ( rangeOffset < rangeBase + rangeSize && packet.m_triPairCount < MaxTrianglePairsPerTrianglePacket )
@@ -1900,15 +1906,13 @@ __device__ void PackLeavesWarp(
 			}
 
 			// find new vertices
-			const uint32_t sublaneVertIndex = laneIndex % LanesPerLeafPacketTask;
-			const uint32_t subwarpVertIndex = laneIndex / LanesPerLeafPacketTask;
-			const bool	   valid			= sublaneVertIndex < 3 || pairIndices.x != pairIndices.y;
+			const bool valid = sublaneIndex < 3 || pairIndices.x != pairIndices.y;
 
 			bool	 contains = false;
 			uint32_t vertexIndexInPacket{};
 			for ( uint32_t k = 0; k < packet.m_vertCount; ++k )
 			{
-				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == ( &indices.x )[sublaneVertIndex] )
+				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == ( &indices.x )[sublaneIndex] )
 				{
 					vertexIndexInPacket = k;
 					contains			= true;
@@ -1916,7 +1920,8 @@ __device__ void PackLeavesWarp(
 				}
 			}
 
-			const uint32_t newVertMask	= ( hiprt::ballot( !contains && valid ) >> ( 4 * subwarpVertIndex ) ) & 0xf;
+			const uint32_t newVertMask =
+				( hiprt::ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpIndex ) ) & 0xf;
 			const uint32_t oldVertCount = packet.m_vertCount;
 			const uint32_t newVertCount = __popc( newVertMask );
 
@@ -1937,17 +1942,17 @@ __device__ void PackLeavesWarp(
 			// store new vertices
 			if ( !contains )
 			{
-				const uint32_t vertexMask = ( 1 << sublaneVertIndex ) - 1;
+				const uint32_t vertexMask = ( 1 << sublaneIndex ) - 1;
 				vertexIndexInPacket		  = oldVertCount + __popc( newVertMask & vertexMask );
-				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[sublaneVertIndex];
+				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[sublaneIndex];
 			}
 
 			// shuffle vertex indices in packet
 			uint4 vertexIndicesInPacket;
-			vertexIndicesInPacket.x = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 0 );
-			vertexIndicesInPacket.y = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 1 );
-			vertexIndicesInPacket.z = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 2 );
-			vertexIndicesInPacket.w = shfl( vertexIndexInPacket, subwarpVertIndex * LanesPerLeafPacketTask + 3 );
+			vertexIndicesInPacket.x = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 0 );
+			vertexIndicesInPacket.y = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 1 );
+			vertexIndicesInPacket.z = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 2 );
+			vertexIndicesInPacket.w = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 3 );
 
 			uint3 triIndices0 = make_uint3( vertexIndicesInPacket );
 			uint3 triIndices1{};
@@ -1968,7 +1973,6 @@ __device__ void PackLeavesWarp(
 			// otherwise triIndices1 are not correcly written to the final packet
 			__threadfence_block();
 		}
-		sync_warp();
 		__threadfence_block();
 
 		// build packets
@@ -2000,7 +2004,6 @@ __device__ void PackLeavesWarp(
 				if ( halfLaneIndex < broadcastPacket.m_vertCount )
 					halfLaneVertexIndex = triPacketCache[broadcastSubwarpIndex].m_vertexIndices[halfLaneIndex];
 			}
-			sync_warp();
 
 			// reuse shared memory
 			TrianglePacketNode& triPacketNode =
@@ -2010,7 +2013,6 @@ __device__ void PackLeavesWarp(
 				triPacketNode.m_data[halfLaneIndex + 0 * 16] = 0;
 				triPacketNode.m_data[halfLaneIndex + 1 * 16] = 0;
 			}
-			sync_warp();
 
 			// build two packets at once
 			if ( halfWarpIndex == 0 || secondValid )
@@ -2041,7 +2043,6 @@ __device__ void PackLeavesWarp(
 					triPacketNode.writeVertex<true>( halfLaneIndex, vertex );
 				}
 			}
-			sync_warp();
 
 			// write packet
 			if ( ( halfWarpIndex == 0 || secondValid ) )
@@ -2051,13 +2052,10 @@ __device__ void PackLeavesWarp(
 				primNodes[broadcastPrimNodeOffset].m_data[halfLaneIndex + 1 * 16] =
 					triPacketNode.m_data[halfLaneIndex + 1 * 16];
 			}
-			sync_warp();
 		}
-		sync_warp();
 
 		if ( taskIndex < taskCount && packet.m_triPairCount > 0 ) primNodeOffset++;
 	}
-	sync_warp();
 
 	// patch children
 	if ( taskIndex < taskCount )

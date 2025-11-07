@@ -182,7 +182,7 @@ function write_version_info(in_file, header_file, version_file, hip_sdk_version)
 	HIPRT_VERSION = HIPRT_MAJOR_VERSION * 1000 + HIPRT_MINOR_VERSION 
 	HIPRT_API_VERSION = HIPRT_VERSION 
 	HIPRT_VERSION_STR = string.format("%05d", HIPRT_VERSION)
-	print( "HIPRT_API_VERSION: "..HIPRT_VERSION_STR .."_".. HIPRT_PATCH_VERSION )
+	print( "HIPRT_API_VERSION: "..HIPRT_VERSION_STR .."_".. HIPRT_HASH_VERSION )
 	header = read_file(in_file)
 	header = header:gsub("@HIPRT_MAJOR_VERSION@", HIPRT_MAJOR_VERSION)
 	header = header:gsub("@HIPRT_MINOR_VERSION@", HIPRT_MINOR_VERSION)

@@ -29,10 +29,6 @@ def getVersion():
 
 hiprt_ver = getVersion()
 
-def remove_trailing_slash(path):
-    if path.endswith('/') or path.endswith('\\'):
-        return path[:-1]
-    return path
 
 def which(program, sufix=''):
     sufix = '.' + sufix
@@ -79,12 +75,11 @@ def compileAmd():
         postfix = '_win.bc'
         postfixLink = '_win.hipfb'
         hiprtlibpath = root + 'dist\\bin\\Release\\'
-        if which('hipcc', 'bat') == None:
+        if hipSdkPathFromArgument != '': # if the hip path is given as an argument, use it for the binary paths
             hipccpath = hipSdkPathFromArgument + '\\bin\\hipcc'
-        if which('clang++', 'exe') == None:
             clangpath = hipSdkPathFromArgument + '\\bin\\clang++'
     else: # if OS is Linux
-        if hipSdkPathFromArgument != '': # if the hip path it given as an argument
+        if hipSdkPathFromArgument != '': # if the hip path is given as an argument, use it for the binary paths
             hipccpath = hipSdkPathFromArgument + '/bin/hipcc'
             clangpath = hipSdkPathFromArgument + '/bin/clang++'
             if not os.path.exists(clangpath):
@@ -200,11 +195,14 @@ parser.add_option(
 
 
 if options.hipSdkPath:
-    hipSdkPathFromArgument = remove_trailing_slash(options.hipSdkPath)
+    hipSdkPathFromArgument = common_tools.remove_trailing_slash(options.hipSdkPath)
     print('Compile kernel using hip sdk: ' + hipSdkPathFromArgument)
 else:
-    if not isLinux():
-        hipSdkPathFromArgument = root + 'hipSdk\\'
+    # if no hipSdkPath argument, try to use the HIP_PATH environment variable.
+    val_hip_path = os.environ.get("HIP_PATH")
+    if val_hip_path:
+        hipSdkPathFromArgument = common_tools.remove_trailing_slash(val_hip_path)
+        print('Compile kernel using hip sdk (using HIP_PATH): ' + hipSdkPathFromArgument)
 
 
 if (options.amd_platform):
