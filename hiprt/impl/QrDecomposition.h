@@ -23,19 +23,10 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#include <hiprt/impl/Quaternion.h>
+#include <hiprt/hiprt_math.h>
 
 namespace hiprt
 {
-HIPRT_HOST_DEVICE static float hypot3f( const float x, const float y, const float z )
-{
-	float a = fabsf( x );
-	float b = fabsf( y );
-	float c = fabsf( z );
-	float d = a < b ? b < c ? c : b : a < c ? c : a;
-	return ( d != 0.0f ? ( d * sqrtf( ( a / d ) * ( a / d ) + ( b / d ) * ( b / d ) + ( c / d ) * ( c / d ) ) ) : 0.0f );
-}
-
 HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 {
 	// A and Q may be the same. QR using Modified Gram-Schmidt
@@ -65,7 +56,7 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 	r[7] = 0.0f;
 	r[8] = 0.0f;
 
-	w	 = hypot3f( q[0], q[3], q[6] );
+	w	 = hypot( { q[0], q[3], q[6] } );
 	r[0] = w;
 	if ( w != 0.0f )
 	{
@@ -86,7 +77,7 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 	q[4] = q[4] - w * q[3];
 	q[7] = q[7] - w * q[6];
 
-	w	 = hypot3f( q[1], q[4], q[7] );
+	w	 = hypot( { q[1], q[4], q[7] } );
 	r[4] = w;
 	if ( w != 0.0f )
 	{
@@ -114,7 +105,7 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 	q[5] = q[5] - w * q[4];
 	q[8] = q[8] - w * q[7];
 
-	w	 = hypot3f( q[2], q[5], q[8] );
+	w	 = hypot( { q[2], q[5], q[8] } );
 	r[8] = w;
 	if ( w != 0.0f )
 	{

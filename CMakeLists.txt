@@ -361,7 +361,7 @@ add_library(${HIPRT_NAME} SHARED)
 target_compile_definitions(${HIPRT_NAME} PRIVATE HIPRT_EXPORTS)
 
 
-if( ${CMAKE_BUILD_TYPE} STREQUAL "Debug" )
+if( CMAKE_BUILD_TYPE STREQUAL "Debug" )
 	set_target_properties(${HIPRT_NAME} PROPERTIES OUTPUT_NAME "${HIPRT_NAME}64D")
 else()
 	set_target_properties(${HIPRT_NAME} PROPERTIES OUTPUT_NAME "${HIPRT_NAME}64")
@@ -650,7 +650,7 @@ if(NOT NO_UNITTEST)
 		target_link_libraries(unittest PRIVATE version)
 	endif()
 
-	if( ${CMAKE_BUILD_TYPE} STREQUAL "Debug" )
+	if( CMAKE_BUILD_TYPE STREQUAL "Debug" )
 		set_target_properties(unittest PROPERTIES OUTPUT_NAME "unittest64D")
 	else()
 		set_target_properties(unittest PROPERTIES OUTPUT_NAME "unittest64")

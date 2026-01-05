@@ -29,8 +29,10 @@ namespace hiprt
 {
 HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromAxisAngle( const float4& axisAngle )
 {
-	float3 axis	 = normalize( make_float3( axisAngle ) );
-	float  angle = axisAngle.w;
+	if ( axisAngle.w == 0.0f ) return { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	const float3 axis  = normalize( make_float3( axisAngle ) );
+	const float	 angle = axisAngle.w;
 
 	float4 q;
 	q.x = axis.x * sinf( angle / 2.0f );
@@ -42,14 +44,14 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromAxisAngle( const float4& axisAngle )
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtToAxisAngle( const float4& q )
 {
-	float3 axis = make_float3( q );
-	float  norm = sqrtf( dot( axis, axis ) );
+	const float3 axis = make_float3( q );
+	const float	 norm = hypot( axis );
 	if ( norm == 0.0f ) return float4{ 0.0f, 0.0f, 1.0f, 0.0f };
-	float angle = 2.0f * atan2f( norm, q.w );
+	const float angle = 2.0f * atan2f( norm, q.w );
 	return make_float4( axis / norm, angle );
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromRotationMatrix( const float R[3][3] )
+HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromRotationMatrix( const float ( &R )[3][3] )
 {
 	const float tr = R[0][0] + R[1][1] + R[2][2];
 	float4		q;
@@ -89,28 +91,26 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtFromRotationMatrix( const float R[3][3] 
 	return q;
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE void qtToRotationMatrix( const float4& q, float R[3][3] )
+HIPRT_HOST_DEVICE HIPRT_INLINE void qtToRotationMatrix( const float4& q, float ( &R )[3][3] )
 {
 	const float4 q2{ q.x * q.x, q.y * q.y, q.z * q.z, 0.0f };
 
-	R[0][0] = 1 - 2 * q2.y - 2 * q2.z;
-	R[0][1] = 2 * q.x * q.y - 2 * q.w * q.z;
-	R[0][2] = 2 * q.x * q.z + 2 * q.w * q.y;
+	R[0][0] = 1.0f - 2.0f * q2.y - 2.0f * q2.z;
+	R[0][1] = 2.0f * q.x * q.y - 2.0f * q.w * q.z;
+	R[0][2] = 2.0f * q.x * q.z + 2.0f * q.w * q.y;
 
-	R[1][0] = 2 * q.x * q.y + 2 * q.w * q.z;
-	R[1][1] = 1 - 2 * q2.x - 2 * q2.z;
-	R[1][2] = 2 * q.y * q.z - 2 * q.w * q.x;
+	R[1][0] = 2.0f * q.x * q.y + 2.0f * q.w * q.z;
+	R[1][1] = 1.0f - 2.0f * q2.x - 2.0f * q2.z;
+	R[1][2] = 2.0f * q.y * q.z - 2.0f * q.w * q.x;
 
-	R[2][0] = 2 * q.x * q.z - 2 * q.w * q.y;
-	R[2][1] = 2 * q.y * q.z + 2 * q.w * q.x;
-	R[2][2] = 1 - 2 * q2.x - 2 * q2.y;
+	R[2][0] = 2.0f * q.x * q.z - 2.0f * q.w * q.y;
+	R[2][1] = 2.0f * q.y * q.z + 2.0f * q.w * q.x;
+	R[2][2] = 1.0f - 2.0f * q2.x - 2.0f * q2.y;
 }
-
-HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtGetIdentity() { return float4{ 0.0f, 0.0f, 0.0f, 1.0f }; }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float qtDot( const float4& q0, const float4& q1 )
 {
-	return q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w;
+	return fmaf( q0.x, q1.x, fmaf( q0.y, q1.y, sumOfProducts( q0.z, q1.z, q0.w, q1.w ) ) );
 }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtNormalize( const float4& q ) { return q / sqrtf( qtDot( q, q ) ); }
@@ -133,7 +133,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float3 qtRotate( const float4& q, const float3& p
 
 HIPRT_HOST_DEVICE HIPRT_INLINE float3 qtInvRotate( const float4& q, const float3& p ) { return qtRotate( qtInvert( q ), p ); }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMix( float4 v0, float4 v1, float t )
+HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMix( float4 v0, float4 v1, const float t )
 {
 	// Only unit quaternions are valid rotations.
 	// Normalize to avoid undefined behavior.
@@ -153,8 +153,8 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMix( float4 v0, float4 v1, float t )
 		dot = -dot;
 	}
 
-	const float DOT_THRESHOLD = 0.9995;
-	if ( dot > DOT_THRESHOLD )
+	static constexpr float DotThreshold = 0.9995;
+	if ( dot > DotThreshold )
 	{
 		// If the inputs are too close for comfort, linearly interpolate
 		// and normalize the result.
@@ -164,7 +164,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float4 qtMix( float4 v0, float4 v1, float t )
 		return result;
 	}
 
-	// Since dot is in range [0, DOT_THRESHOLD], acos is safe
+	// Since dot is in range [0, DotThreshold], acos is safe
 	const float theta_0		= acosf( dot );	   // theta_0 = angle between input vectors
 	const float theta		= theta_0 * t;	   // theta = angle between v0 and result
 	const float sin_theta	= sinf( theta );   // compute this value only once

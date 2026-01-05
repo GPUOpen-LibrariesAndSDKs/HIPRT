@@ -129,7 +129,7 @@ void BvhImporter::build(
 	switch ( buildInput.frameType )
 	{
 	case hiprtFrameTypeSRT: {
-		InstanceList<SRTFrame> list( buildInput );
+		InstanceList<hiprtFrameSRT> list( buildInput );
 		if ( context.getRtip() >= 31 )
 			build<Box8Node, HwInstanceNode>(
 				context, list, nodes, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
@@ -139,7 +139,7 @@ void BvhImporter::build(
 		break;
 	}
 	case hiprtFrameTypeMatrix: {
-		InstanceList<MatrixFrame> list( buildInput );
+		InstanceList<hiprtFrameMatrix> list( buildInput );
 		if ( context.getRtip() >= 31 )
 			build<Box8Node, HwInstanceNode>(
 				context, list, nodes, buildOptions, hiprtInvalidValue, temporaryMemoryArena, stream, storageMemoryArena );
@@ -204,7 +204,7 @@ void BvhImporter::update(
 	switch ( buildInput.frameType )
 	{
 	case hiprtFrameTypeSRT: {
-		InstanceList<SRTFrame> list( buildInput );
+		InstanceList<hiprtFrameSRT> list( buildInput );
 		if ( context.getRtip() >= 31 )
 			update<Box8Node, HwInstanceNode>( context, list, nodes, buildOptions, stream, storageMemoryArena );
 		else
@@ -212,7 +212,7 @@ void BvhImporter::update(
 		break;
 	}
 	case hiprtFrameTypeMatrix: {
-		InstanceList<MatrixFrame> list( buildInput );
+		InstanceList<hiprtFrameMatrix> list( buildInput );
 		if ( context.getRtip() >= 31 )
 			update<Box8Node, HwInstanceNode>( context, list, nodes, buildOptions, stream, storageMemoryArena );
 		else

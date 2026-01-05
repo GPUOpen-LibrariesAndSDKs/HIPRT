@@ -180,10 +180,10 @@ void SbvhBuilder::build(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<
+	using Header = typename std::conditional<
 		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
 		SceneHeader,
-		GeomHeader>::type Header;
+		GeomHeader>::type;
 
 	bool		   spatialSplits	 = !( buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits );
 	const float	   alpha			 = spatialSplits ? Alpha : 1.0f;
@@ -612,14 +612,14 @@ void SbvhBuilder::build(
 
 	if constexpr ( Timer::EnableTimer )
 	{
-		float time = timer.getTimeRecord( PairTrianglesTime ) + timer.getTimeRecord( ComputeBoxTime ) +
-					 timer.getTimeRecord( SetupReferencesTime ) + timer.getTimeRecord( ResetBinsTime ) +
-					 timer.getTimeRecord( BinReferencesObjectTime ) + timer.getTimeRecord( BinReferencesSpatialTime ) +
-					 timer.getTimeRecord( FindObjectSplitTime ) + timer.getTimeRecord( SplitTime ) +
-					 timer.getTimeRecord( DistributeReferencesTime ) + timer.getTimeRecord( ComputeParentAddrsTime ) +
-					 timer.getTimeRecord( ComputeFatLeavesTime ) + timer.getTimeRecord( CollapseTime ) +
-					 timer.getTimeRecord( CompactTasksTime ) + timer.getTimeRecord( PackLeavesTime ) +
-					 timer.getTimeRecord( FitOrientedBoundsTime );
+		const float time = timer.getTimeRecord( PairTrianglesTime ) + timer.getTimeRecord( ComputeBoxTime ) +
+						   timer.getTimeRecord( SetupReferencesTime ) + timer.getTimeRecord( ResetBinsTime ) +
+						   timer.getTimeRecord( BinReferencesObjectTime ) + timer.getTimeRecord( BinReferencesSpatialTime ) +
+						   timer.getTimeRecord( FindObjectSplitTime ) + timer.getTimeRecord( SplitTime ) +
+						   timer.getTimeRecord( DistributeReferencesTime ) + timer.getTimeRecord( ComputeParentAddrsTime ) +
+						   timer.getTimeRecord( ComputeFatLeavesTime ) + timer.getTimeRecord( CollapseTime ) +
+						   timer.getTimeRecord( CompactTasksTime ) + timer.getTimeRecord( PackLeavesTime ) +
+						   timer.getTimeRecord( FitOrientedBoundsTime );
 		std::cout << "Sbvh total construction time: " << time << " ms" << std::endl;
 		std::cout << "\tpair triangles time: " << timer.getTimeRecord( PairTrianglesTime ) << " ms" << std::endl;
 		std::cout << "\tcompute box time: " << timer.getTimeRecord( ComputeBoxTime ) << " ms" << std::endl;
@@ -648,10 +648,10 @@ void SbvhBuilder::update(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<
+	using Header = typename std::conditional<
 		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
 		SceneHeader,
-		GeomHeader>::type Header;
+		GeomHeader>::type;
 
 	Header* header = storageMemoryArena.allocate<Header>();
 

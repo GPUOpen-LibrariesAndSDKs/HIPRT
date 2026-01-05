@@ -30,7 +30,7 @@ namespace hiprt
 class Logger
 {
   public:
-	void setLevel( uint32_t level ) { m_level = level; }
+	void setLevel( const uint32_t level ) { m_level = level; }
 	int	 getLevel() const { return m_level; }
 
 	void print( uint32_t filter, const char* fmt, ... ) const;

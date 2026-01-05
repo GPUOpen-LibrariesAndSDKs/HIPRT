@@ -30,15 +30,22 @@
 namespace hiprt
 {
 void Kernel::launch(
-	uint32_t gx, uint32_t gy, uint32_t gz, uint32_t bx, uint32_t by, uint32_t bz, uint32_t sharedMemBytes, oroStream stream )
+	const uint32_t gx,
+	const uint32_t gy,
+	const uint32_t gz,
+	const uint32_t bx,
+	const uint32_t by,
+	const uint32_t bz,
+	const uint32_t sharedMemBytes,
+	oroStream	   stream )
 {
 	checkOro( oroModuleLaunchKernel( m_function, gx, gy, gz, bx, by, bz, sharedMemBytes, stream, m_argPtrs.data(), 0 ) );
 }
 
-void Kernel::setArgs( std::vector<Argument> args )
+void Kernel::setArgs( const std::vector<Argument> args )
 {
 	size_t size = 0;
-	for ( uint32_t i = 0; i < args.size(); i++ )
+	for ( size_t i = 0; i < args.size(); i++ )
 	{
 		size = ( size + args[i].m_align - 1 ) & ~( args[i].m_align - 1 );
 		size += args[i].m_size;
@@ -50,7 +57,7 @@ void Kernel::setArgs( std::vector<Argument> args )
 	m_argPtrs.resize( size );
 
 	size_t ofs = 0;
-	for ( uint32_t i = 0; i < args.size(); i++ )
+	for ( size_t i = 0; i < args.size(); i++ )
 	{
 		ofs = ( ofs + args[i].m_align - 1 ) & ~( args[i].m_align - 1 );
 		std::memcpy( m_args.data() + ofs, args[i].m_value, args[i].m_size );
@@ -59,29 +66,29 @@ void Kernel::setArgs( std::vector<Argument> args )
 	}
 }
 
-void Kernel::launch( uint32_t nx, oroStream stream, uint32_t sharedMemBytes )
+void Kernel::launch( const uint32_t nx, oroStream stream, const uint32_t sharedMemBytes )
 {
 	int tb, minNb;
 	checkOro( oroModuleOccupancyMaxPotentialBlockSize( &minNb, &tb, m_function, 0, 0 ) );
-	uint32_t nb = DivideRoundUp( nx, static_cast<uint32_t>( tb ) );
+	const uint32_t nb = DivideRoundUp( nx, static_cast<uint32_t>( tb ) );
 	launch( nb, 1, 1, tb, 1, 1, sharedMemBytes, stream );
 }
 
-void Kernel::launch( uint32_t nx, uint32_t tx, oroStream stream, uint32_t sharedMemBytes )
+void Kernel::launch( const uint32_t nx, const uint32_t tx, oroStream stream, const uint32_t sharedMemBytes )
 {
-	uint32_t tb = tx;
-	uint32_t nb = DivideRoundUp( nx, tb );
+	const uint32_t tb = tx;
+	const uint32_t nb = DivideRoundUp( nx, tb );
 	launch( nb, 1, 1, tb, 1, 1, sharedMemBytes, stream );
 }
 
-uint32_t Kernel::getNumSmem()
+uint32_t Kernel::getNumSmem() const
 {
 	int numSmem;
 	checkOro( oroFuncGetAttribute( &numSmem, ORO_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, m_function ) );
 	return numSmem;
 }
 
-uint32_t Kernel::getNumRegs()
+uint32_t Kernel::getNumRegs() const
 {
 	int numRegs;
 	checkOro( oroFuncGetAttribute( &numRegs, ORO_FUNC_ATTRIBUTE_NUM_REGS, m_function ) );

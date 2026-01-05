@@ -26,20 +26,163 @@
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/QrDecomposition.h>
+#include <hiprt/impl/Quaternion.h>
 
 namespace hiprt
 {
 struct SRTFrame;
 struct MatrixFrame;
 
-struct alignas( 64 ) Frame
+#if defined( HIPRT_MATRIX_FRAME )
+using Frame = MatrixFrame;
+#else
+using Frame = SRTFrame;
+#endif
+
+HIPRT_HOST_DEVICE HIPRT_INLINE static bool
+identitySRT( const float3& scale, const float3& shear, const float4& rotation, const float3& translation )
 {
-	HIPRT_HOST_DEVICE Frame() : m_time( 0.0f )
+	if ( scale.x != 1.0f || scale.y != 1.0f || scale.z != 1.0f ) return false;
+	if ( shear.x != 0.0f || shear.y != 0.0f || shear.z != 0.0f ) return false;
+	if ( translation.x != 0.0f || translation.y != 0.0f || translation.z != 0.0f ) return false;
+	if ( rotation.w != 1.0f ) return false;
+	return true;
+}
+
+HIPRT_HOST_DEVICE HIPRT_INLINE static bool identityMatrix( const float ( &matrix )[3][4] )
+{
+	if ( matrix[0][0] != 1.0f || matrix[1][1] != 1.0f || matrix[2][2] != 1.0f ) return false;
+	if ( matrix[0][1] != 0.0f || matrix[0][2] != 0.0f || matrix[0][3] != 0.0f ) return false;
+	if ( matrix[1][0] != 0.0f || matrix[1][2] != 0.0f || matrix[1][3] != 0.0f ) return false;
+	if ( matrix[2][0] != 0.0f || matrix[2][1] != 0.0f || matrix[2][3] != 0.0f ) return false;
+	return true;
+}
+
+HIPRT_HOST_DEVICE static void SRTToInvMatrix(
+	const float3& scale, const float3& shear, const float4& rotation, const float3& translation, float ( &matrixInv )[3][4] )
+{
+	float Q[3][3];
+	qtToRotationMatrix( rotation, Q );
+
+	float Ri[3][3];
+	Ri[0][0] = 1.0f / scale.x;
+	Ri[1][1] = 1.0f / scale.y;
+	Ri[2][2] = 1.0f / scale.z;
+	Ri[0][1] = -shear.x / ( scale.x * scale.y );
+	Ri[0][2] = ( shear.x * shear.z - shear.y * scale.y ) / ( scale.x * scale.y * scale.z );
+	Ri[1][2] = -shear.z / ( scale.y * scale.z );
+	Ri[1][0] = 0.0f;
+	Ri[2][0] = 0.0f;
+	Ri[2][1] = 0.0f;
+
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+	for ( uint32_t i = 0; i < 3; ++i )
 	{
-		m_scale		  = make_float3( 1.0f );
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+		for ( uint32_t j = 0; j < 3; ++j )
+		{
+			matrixInv[i][j] = dot( { Ri[i][0], Ri[i][1], Ri[i][2] }, { Q[j][0], Q[j][1], Q[j][2] } );
+		}
+	}
+
+	matrixInv[0][3] = -dot( { matrixInv[0][0], matrixInv[0][1], matrixInv[0][2] }, translation );
+	matrixInv[1][3] = -dot( { matrixInv[1][0], matrixInv[1][1], matrixInv[1][2] }, translation );
+	matrixInv[2][3] = -dot( { matrixInv[2][0], matrixInv[2][1], matrixInv[2][2] }, translation );
+}
+
+HIPRT_HOST_DEVICE static void matrixToInvMatrix( const float ( &matrix )[3][4], float ( &matrixInv )[3][4] )
+{
+	const auto& m = matrix;
+
+	const float det = m[0][0] * ( m[1][1] * m[2][2] - m[1][2] * m[2][1] ) -
+					  m[0][1] * ( m[1][0] * m[2][2] - m[1][2] * m[2][0] ) + m[0][2] * ( m[1][0] * m[2][1] - m[1][1] * m[2][0] );
+
+	constexpr float Epsilon = 1e-10f;
+	if ( fabs( det ) < Epsilon )
+	{
+		memset( &matrixInv[0][0], 0, 12 * sizeof( float ) );
+		return;
+	}
+
+	const float invDet = 1.0f / det;
+
+	matrixInv[0][0] = ( m[1][1] * m[2][2] - m[1][2] * m[2][1] ) * invDet;
+	matrixInv[0][1] = ( m[0][2] * m[2][1] - m[0][1] * m[2][2] ) * invDet;
+	matrixInv[0][2] = ( m[0][1] * m[1][2] - m[0][2] * m[1][1] ) * invDet;
+	matrixInv[1][0] = ( m[1][2] * m[2][0] - m[1][0] * m[2][2] ) * invDet;
+	matrixInv[1][1] = ( m[0][0] * m[2][2] - m[0][2] * m[2][0] ) * invDet;
+	matrixInv[1][2] = ( m[0][2] * m[1][0] - m[0][0] * m[1][2] ) * invDet;
+	matrixInv[2][0] = ( m[1][0] * m[2][1] - m[1][1] * m[2][0] ) * invDet;
+	matrixInv[2][1] = ( m[0][1] * m[2][0] - m[0][0] * m[2][1] ) * invDet;
+	matrixInv[2][2] = ( m[0][0] * m[1][1] - m[0][1] * m[1][0] ) * invDet;
+
+	const float3 translation{ matrix[0][3], matrix[1][3], matrix[2][3] };
+	matrixInv[0][3] = -dot( { matrixInv[0][0], matrixInv[0][1], matrixInv[0][2] }, translation );
+	matrixInv[1][3] = -dot( { matrixInv[1][0], matrixInv[1][1], matrixInv[1][2] }, translation );
+	matrixInv[2][3] = -dot( { matrixInv[2][0], matrixInv[2][1], matrixInv[2][2] }, translation );
+}
+
+struct alignas( 64 ) SRTFrame
+{
+	SRTFrame() = default;
+
+	HIPRT_HOST_DEVICE SRTFrame( const hiprtFrameSRT& frame )
+	{
+		m_rotation	  = qtFromAxisAngle( frame.rotation );
+		m_scale		  = frame.scale;
 		m_shear		  = make_float3( 0.0f );
-		m_translation = make_float3( 0.0f );
-		m_rotation	  = { 0.0f, 0.0f, 0.0f, 1.0f };
+		m_translation = frame.translation;
+		m_time		  = frame.time;
+	}
+
+	HIPRT_HOST_DEVICE SRTFrame( const hiprtFrameMatrix& frame )
+	{
+		const bool identity = identityMatrix( frame.matrix );
+		if ( identity )
+		{
+			m_scale		  = make_float3( 1.0f );
+			m_shear		  = make_float3( 0.0f );
+			m_translation = make_float3( 0.0f );
+			m_rotation	  = { 0.0f, 0.0f, 0.0f, 1.0f };
+		}
+		else
+		{
+			float QR[3][3], Q[3][3], R[3][3];
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+			for ( uint32_t i = 0; i < 3; ++i )
+			{
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+				for ( uint32_t j = 0; j < 3; ++j )
+				{
+					QR[i][j] = frame.matrix[i][j];
+				}
+			}
+
+			qr( &QR[0][0], &Q[0][0], &R[0][0] );
+			m_translation = { frame.matrix[0][3], frame.matrix[1][3], frame.matrix[2][3] };
+			m_rotation	  = qtFromRotationMatrix( Q );
+			m_scale		  = { R[0][0], R[1][1], R[2][2] };
+			m_shear		  = { R[0][1], R[0][2], R[1][2] };
+		}
+		m_time = frame.time;
+	}
+
+	static HIPRT_HOST_DEVICE SRTFrame interpolate( const SRTFrame& f0, const SRTFrame& f1, const float t )
+	{
+		SRTFrame f{};
+		f.m_scale		= mix( f0.m_scale, f1.m_scale, t );
+		f.m_shear		= mix( f0.m_shear, f1.m_shear, t );
+		f.m_translation = mix( f0.m_translation, f1.m_translation, t );
+		f.m_rotation	= qtMix( f0.m_rotation, f1.m_rotation, t );
+		return f;
 	}
 
 	HIPRT_HOST_DEVICE float3 transform( const float3& p ) const
@@ -86,198 +229,74 @@ struct alignas( 64 ) Frame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE bool identity() const
-	{
-		if ( m_scale.x != 1.0f || m_scale.y != 1.0f || m_scale.z != 1.0f ) return false;
-		if ( m_shear.x != 0.0f || m_shear.y != 0.0f || m_shear.z != 0.0f ) return false;
-		if ( m_translation.x != 0.0f || m_translation.y != 0.0f || m_translation.z != 0.0f ) return false;
-		if ( m_rotation.w != 1.0f ) return false;
-		return true;
-	}
+	HIPRT_HOST_DEVICE bool identity() const { return identitySRT( m_scale, m_shear, m_rotation, m_translation ); }
 
-	float4 m_rotation;
-	float3 m_scale;
-	float3 m_shear;
-	float3 m_translation;
-	float  m_time;
+	float4 m_rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+	float3 m_scale{ 1.0f, 1.0f, 1.0f };
+	float3 m_shear{};
+	float3 m_translation{};
+	float  m_time{};
 };
-HIPRT_STATIC_ASSERT( sizeof( Frame ) == 64 );
-
-struct alignas( 16 ) SRTFrame
-{
-	float4 m_rotation;
-	float3 m_scale;
-	float3 m_translation;
-	float  m_time;
-
-	HIPRT_HOST_DEVICE Frame convert() const
-	{
-		Frame frame;
-		frame.m_time		= m_time;
-		frame.m_rotation	= qtFromAxisAngle( m_rotation );
-		frame.m_scale		= m_scale;
-		frame.m_shear		= make_float3( 0.0f );
-		frame.m_translation = m_translation;
-		return frame;
-	}
-
-	static HIPRT_HOST_DEVICE SRTFrame getSRTFrame( const Frame& frame )
-	{
-		SRTFrame srtFrame;
-		srtFrame.m_time		   = frame.m_time;
-		srtFrame.m_translation = frame.m_translation;
-		srtFrame.m_scale	   = frame.m_scale;
-		srtFrame.m_rotation	   = qtToAxisAngle( frame.m_rotation );
-		return srtFrame;
-	}
-
-	static HIPRT_HOST_DEVICE SRTFrame getSRTFrameInv( const Frame& frame )
-	{
-		SRTFrame srtFrame;
-		srtFrame.m_time		   = frame.m_time;
-		srtFrame.m_translation = -frame.m_translation;
-		srtFrame.m_scale	   = 1.0f / frame.m_scale;
-		srtFrame.m_rotation	   = qtToAxisAngle( frame.m_rotation );
-		srtFrame.m_rotation.w *= -1.0f;
-		return srtFrame;
-	}
-};
-HIPRT_STATIC_ASSERT( sizeof( SRTFrame ) == 48 );
+HIPRT_STATIC_ASSERT( sizeof( SRTFrame ) == 64 );
 
 struct alignas( 64 ) MatrixFrame
 {
-	float m_matrix[3][4];
-	float m_time;
+	MatrixFrame() = default;
 
-	HIPRT_HOST_DEVICE Frame convert() const
+	HIPRT_HOST_DEVICE MatrixFrame( const hiprtFrameSRT& frame )
 	{
-		float QR[3][3], Q[3][3], R[3][3];
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-		for ( uint32_t i = 0; i < 3; ++i )
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-			for ( uint32_t j = 0; j < 3; ++j )
-				QR[i][j] = m_matrix[i][j];
-		qr( &QR[0][0], &Q[0][0], &R[0][0] );
-
-		Frame frame;
-		frame.m_time		= m_time;
-		frame.m_translation = { m_matrix[0][3], m_matrix[1][3], m_matrix[2][3] };
-		frame.m_rotation	= qtFromRotationMatrix( Q );
-		frame.m_scale		= { R[0][0], R[1][1], R[2][2] };
-		frame.m_shear		= { R[0][1], R[0][2], R[1][2] };
-		return frame;
-	}
-
-	static HIPRT_HOST_DEVICE MatrixFrame getMatrixFrame( const Frame& frame )
-	{
-		MatrixFrame matrixFrame{};
-		matrixFrame.m_time = frame.m_time;
-
-		if ( frame.identity() )
+		const float4 rotation = qtFromAxisAngle( frame.rotation );
+		const bool	 identity = identitySRT( frame.scale, make_float3( 0.0f ), rotation, frame.translation );
+		if ( identity )
 		{
-			matrixFrame.m_matrix[0][0] = 1.0f;
-			matrixFrame.m_matrix[1][1] = 1.0f;
-			matrixFrame.m_matrix[2][2] = 1.0f;
-			return matrixFrame;
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+			for ( uint32_t i = 0; i < 3; ++i )
+			{
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+				for ( uint32_t j = 0; j < 4; ++j )
+				{
+					if ( i == j )
+						m_matrix[i][j] = 1.0f;
+					else
+						m_matrix[i][j] = 0.0f;
+				}
+			}
 		}
-
-		float Q[3][3];
-		qtToRotationMatrix( frame.m_rotation, Q );
-
-		float R[3][3];
-		R[0][0] = frame.m_scale.x;
-		R[1][1] = frame.m_scale.y;
-		R[2][2] = frame.m_scale.z;
-		R[0][1] = frame.m_shear.x;
-		R[0][2] = frame.m_shear.y;
-		R[1][2] = frame.m_shear.z;
-		R[1][0] = 0.0f;
-		R[2][0] = 0.0f;
-		R[2][1] = 0.0f;
-
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-		for ( uint32_t i = 0; i < 3; ++i )
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-			for ( uint32_t j = 0; j < 3; ++j )
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-				for ( uint32_t k = 0; k < 3; ++k )
-					matrixFrame.m_matrix[i][j] += Q[i][k] * R[k][j];
-
-		matrixFrame.m_matrix[0][3] = frame.m_translation.x;
-		matrixFrame.m_matrix[1][3] = frame.m_translation.y;
-		matrixFrame.m_matrix[2][3] = frame.m_translation.z;
-
-		return matrixFrame;
-	}
-
-	static HIPRT_HOST_DEVICE MatrixFrame getMatrixFrameInv( const Frame& frame )
-	{
-		MatrixFrame matrixFrame{};
-		matrixFrame.m_time = frame.m_time;
-
-		if ( frame.identity() )
+		else
 		{
-			matrixFrame.m_matrix[0][0] = 1.0f;
-			matrixFrame.m_matrix[1][1] = 1.0f;
-			matrixFrame.m_matrix[2][2] = 1.0f;
-			return matrixFrame;
+			float Q[3][3];
+			qtToRotationMatrix( rotation, Q );
+
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+			for ( uint32_t i = 0; i < 3; ++i )
+			{
+				m_matrix[i][0] = Q[i][0] * frame.scale.x;
+				m_matrix[i][1] = Q[i][1] * frame.scale.y;
+				m_matrix[i][2] = Q[i][2] * frame.scale.z;
+			}
+
+			m_matrix[0][3] = frame.translation.x;
+			m_matrix[1][3] = frame.translation.y;
+			m_matrix[2][3] = frame.translation.z;
 		}
-
-		float Q[3][3];
-		qtToRotationMatrix( frame.m_rotation, Q );
-
-		float Ri[3][3];
-		Ri[0][0] = 1.0f / frame.m_scale.x;
-		Ri[1][1] = 1.0f / frame.m_scale.y;
-		Ri[2][2] = 1.0f / frame.m_scale.z;
-		Ri[0][1] = -frame.m_shear.x / ( frame.m_scale.x * frame.m_scale.y );
-		Ri[0][2] = ( frame.m_shear.x * frame.m_shear.z - frame.m_shear.y * frame.m_scale.y ) /
-				   ( frame.m_scale.x * frame.m_scale.y * frame.m_scale.z );
-		Ri[1][2] = -frame.m_shear.z / ( frame.m_scale.y * frame.m_scale.z );
-		Ri[1][0] = 0.0f;
-		Ri[2][0] = 0.0f;
-		Ri[2][1] = 0.0f;
-
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-		for ( uint32_t i = 0; i < 3; ++i )
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-			for ( uint32_t j = 0; j < 3; ++j )
-#ifdef __KERNECC__
-#pragma unroll
-#endif
-				for ( uint32_t k = 0; k < 3; ++k )
-					matrixFrame.m_matrix[i][j] += Ri[i][k] * Q[j][k];
-
-		matrixFrame.m_matrix[0][3] =
-			-( matrixFrame.m_matrix[0][0] * frame.m_translation.x + matrixFrame.m_matrix[0][1] * frame.m_translation.y +
-			   matrixFrame.m_matrix[0][2] * frame.m_translation.z );
-		matrixFrame.m_matrix[1][3] =
-			-( matrixFrame.m_matrix[1][0] * frame.m_translation.x + matrixFrame.m_matrix[1][1] * frame.m_translation.y +
-			   matrixFrame.m_matrix[1][2] * frame.m_translation.z );
-		matrixFrame.m_matrix[2][3] =
-			-( matrixFrame.m_matrix[2][0] * frame.m_translation.x + matrixFrame.m_matrix[2][1] * frame.m_translation.y +
-			   matrixFrame.m_matrix[2][2] * frame.m_translation.z );
-
-		return matrixFrame;
+		m_time = frame.time;
 	}
 
-	static HIPRT_HOST_DEVICE MatrixFrame multiply( const MatrixFrame& matrix0, const MatrixFrame& matrix1 )
+	HIPRT_HOST_DEVICE MatrixFrame( const hiprtFrameMatrix& frame )
 	{
-		MatrixFrame matrix{};
+		m_time = frame.time;
+		memcpy( &m_matrix[0][0], &frame.matrix[0][0], 12 * sizeof( float ) );
+	}
+
+	HIPRT_HOST_DEVICE static MatrixFrame interpolate( const MatrixFrame& f0, const MatrixFrame& f1, const float t )
+	{
+		MatrixFrame f{};
 #ifdef __KERNECC__
 #pragma unroll
 #endif
@@ -288,22 +307,105 @@ struct alignas( 64 ) MatrixFrame
 #endif
 			for ( uint32_t j = 0; j < 4; ++j )
 			{
+				f.m_matrix[i][j] = mix( f0.m_matrix[i][j], f1.m_matrix[i][j], t );
+			}
+		}
+		return f;
+	}
+
+	HIPRT_HOST_DEVICE float3 transform( const float3& p ) const
+	{
+		if ( identity() ) return p;
+		float3 result{};
+		result.x = dot( { m_matrix[0][0], m_matrix[0][1], m_matrix[0][2] }, p );
+		result.y = dot( { m_matrix[1][0], m_matrix[1][1], m_matrix[1][2] }, p );
+		result.z = dot( { m_matrix[2][0], m_matrix[2][1], m_matrix[2][2] }, p );
+		result += { m_matrix[0][3], m_matrix[1][3], m_matrix[2][3] };
+		return result;
+	}
+
+	HIPRT_HOST_DEVICE float3 transformVector( const float3& v ) const
+	{
+		if ( identity() ) return v;
+		float matrixInv[3][4];
+		matrixToInvMatrix( m_matrix, matrixInv );
+		float3 result{};
+		result.x = dot( { matrixInv[0][0], matrixInv[1][0], matrixInv[2][0] }, v );
+		result.y = dot( { matrixInv[0][1], matrixInv[1][1], matrixInv[2][1] }, v );
+		result.z = dot( { matrixInv[0][2], matrixInv[1][2], matrixInv[2][2] }, v );
+		return result;
+	}
+
+	HIPRT_HOST_DEVICE float3 invTransform( const float3& p ) const
+	{
+		if ( identity() ) return p;
+		float matrixInv[3][4];
+		matrixToInvMatrix( m_matrix, matrixInv );
+		float3 result{};
+		result.x = dot( { matrixInv[0][0], matrixInv[0][1], matrixInv[0][2] }, p );
+		result.y = dot( { matrixInv[1][0], matrixInv[1][1], matrixInv[1][2] }, p );
+		result.z = dot( { matrixInv[2][0], matrixInv[2][1], matrixInv[2][2] }, p );
+		result += { matrixInv[0][3], matrixInv[1][3], matrixInv[2][3] };
+		return result;
+	}
+
+	HIPRT_HOST_DEVICE float3 invTransformVector( const float3& v ) const
+	{
+		if ( identity() ) return v;
+		float3 result{};
+		result.x = dot( { m_matrix[0][0], m_matrix[1][0], m_matrix[2][0] }, v );
+		result.y = dot( { m_matrix[0][1], m_matrix[1][1], m_matrix[2][1] }, v );
+		result.z = dot( { m_matrix[0][2], m_matrix[1][2], m_matrix[2][2] }, v );
+		return result;
+	}
+
+	HIPRT_HOST_DEVICE bool identity() const { return identityMatrix( m_matrix ); }
+
+	float m_matrix[3][4] = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
+	float m_time{};
+};
+HIPRT_STATIC_ASSERT( sizeof( MatrixFrame ) == 64 );
+
+HIPRT_HOST_DEVICE static bool computeInvTransformMatrix( const SRTFrame& frame, float ( &matrixInv )[3][4] )
+{
+	if ( identitySRT( frame.m_scale, frame.m_shear, frame.m_rotation, frame.m_translation ) )
+	{
 #ifdef __KERNECC__
 #pragma unroll
 #endif
-				for ( uint32_t k = 0; k < 4; ++k )
-				{
-					float m0 = matrix0.m_matrix[i][k];
-					float m1 = j < 3 ? 0.0f : 1.0f;
-					if ( k < 3 ) m1 = matrix1.m_matrix[k][j];
-					matrix.m_matrix[i][j] += m0 * m1;
-				}
+		for ( uint32_t i = 0; i < 3; ++i )
+		{
+#ifdef __KERNECC__
+#pragma unroll
+#endif
+			for ( uint32_t j = 0; j < 4; ++j )
+			{
+				if ( i == j )
+					matrixInv[i][j] = 1.0f;
+				else
+					matrixInv[i][j] = 0.0f;
 			}
 		}
-		return matrix;
+		return true;
 	}
-};
-HIPRT_STATIC_ASSERT( sizeof( MatrixFrame ) == 64 );
+
+	SRTToInvMatrix( frame.m_scale, frame.m_shear, frame.m_rotation, frame.m_translation, matrixInv );
+
+	return false;
+}
+
+HIPRT_HOST_DEVICE static bool computeInvTransformMatrix( const MatrixFrame& frame, float ( &matrixInv )[3][4] )
+{
+	if ( identityMatrix( frame.m_matrix ) )
+	{
+		memcpy( &matrixInv[0][0], &frame.m_matrix[0][0], 12 * sizeof( float ) );
+		return true;
+	}
+
+	matrixToInvMatrix( frame.m_matrix, matrixInv );
+
+	return false;
+}
 
 class Transform
 {
@@ -331,21 +433,15 @@ class Transform
 			f0 = f1;
 		}
 
-		float t = ( time - f0.m_time ) / ( f1.m_time - f0.m_time );
+		const float t = ( time - f0.m_time ) / ( f1.m_time - f0.m_time );
 
-		Frame f;
-		f.m_scale		= mix( f0.m_scale, f1.m_scale, t );
-		f.m_shear		= mix( f0.m_shear, f1.m_shear, t );
-		f.m_translation = mix( f0.m_translation, f1.m_translation, t );
-		f.m_rotation	= qtMix( f0.m_rotation, f1.m_rotation, t );
-
-		return f;
+		return Frame::interpolate( f0, f1, t );
 	}
 
 	HIPRT_HOST_DEVICE hiprtRay transformRay( const hiprtRay& ray, float time ) const
 	{
-		hiprtRay outRay;
-		Frame	 frame = interpolateFrames( time );
+		hiprtRay	outRay;
+		const Frame frame = interpolateFrames( time );
 		if ( frame.identity() ) return ray;
 		outRay.origin	 = frame.invTransform( ray.origin );
 		outRay.direction = frame.invTransform( ray.origin + ray.direction );
@@ -357,7 +453,7 @@ class Transform
 
 	HIPRT_HOST_DEVICE float3 transformNormal( const float3& normal, float time ) const
 	{
-		Frame frame = interpolateFrames( time );
+		const Frame frame = interpolateFrames( time );
 		return frame.transformVector( normal );
 	}
 
@@ -386,11 +482,7 @@ class Transform
 			float t = Delta;
 			for ( uint32_t j = 1; j <= Steps; ++j )
 			{
-				Frame f;
-				f.m_scale		= mix( f0.m_scale, f1.m_scale, t );
-				f.m_shear		= mix( f0.m_shear, f1.m_shear, t );
-				f.m_translation = mix( f0.m_translation, f1.m_translation, t );
-				f.m_rotation	= qtMix( f0.m_rotation, f1.m_rotation, t );
+				Frame f = Frame::interpolate( f0, f1, t );
 				outAabb.grow( f.transform( p ) );
 				t += Delta;
 			}

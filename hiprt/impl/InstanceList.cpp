@@ -27,7 +27,7 @@
 namespace hiprt
 {
 #if !defined( __KERNELCC__ )
-DECLARE_TYPE_TRAITS( hiprt::InstanceList<SRTFrame> );
-DECLARE_TYPE_TRAITS( hiprt::InstanceList<MatrixFrame> );
+DECLARE_TYPE_TRAITS( hiprt::InstanceList<hiprtFrameSRT> );
+DECLARE_TYPE_TRAITS( hiprt::InstanceList<hiprtFrameMatrix> );
 #endif
 } // namespace hiprt

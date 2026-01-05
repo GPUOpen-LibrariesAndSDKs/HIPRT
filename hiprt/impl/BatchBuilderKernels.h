@@ -76,7 +76,7 @@ template <typename PrimitiveNode, typename PrimitiveContainer>
 HIPRT_DEVICE void
 build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMemoryArena, MemoryArena& sharedMemoryArena )
 {
-	typedef typename conditional<is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type Header;
+	using Header = typename conditional<is_same<PrimitiveNode, InstanceNode>::value, SceneHeader, GeomHeader>::type;
 
 	const uint32_t maxBoxNodeCount =
 		static_cast<uint32_t>( getMaxBoxNodeCount<BoxNode, PrimitiveNode>( primitives.getCount() ) );
@@ -86,8 +86,8 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( maxBoxNodeCount );
 	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( maxPrimNodeCount );
 
-	uint32_t index	   = threadIdx.x;
-	uint32_t primCount = primitives.getCount();
+	const uint32_t index	 = threadIdx.x;
+	const uint32_t primCount = primitives.getCount();
 
 	// STEP 0: Init data
 	if constexpr ( is_same<Header, SceneHeader>::value )
@@ -138,11 +138,11 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	// STEP 2: Calculate Morton codes
 	if ( index < primCount )
 	{
-		float3 boxExtent		= centroidBox.extent();
-		float3 center			= primitives.fetchCenter( index );
-		float3 normalizedCenter = ( center - centroidBox.m_min ) / boxExtent;
-		mortonCodeKeys[index]	= computeExtendedMortonCode( normalizedCenter, boxExtent );
-		mortonCodeValues[index] = index;
+		const float3 boxExtent		  = centroidBox.extent();
+		const float3 center			  = primitives.fetchCenter( index );
+		const float3 normalizedCenter = ( center - centroidBox.m_min ) / boxExtent;
+		mortonCodeKeys[index]		  = computeExtendedMortonCode( normalizedCenter, boxExtent );
+		mortonCodeValues[index]		  = index;
 	}
 	else
 	{
@@ -155,11 +155,11 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	uint32_t* blockCache = reinterpret_cast<uint32_t*>( scratchNodes );
 	for ( uint32_t i = 0; i < 32; ++i )
 	{
-		uint32_t mortonCodeKey	 = mortonCodeKeys[index];
-		uint32_t mortonCodeValue = mortonCodeValues[index];
-		uint32_t bit			 = ( mortonCodeKey >> i ) & 1;
-		uint32_t blockSum		 = blockScan( bit == 0, blockCache );
-		uint32_t newIndex		 = bit == 0 ? blockSum - 1 : blockCache[warpsPerBlock - 1] + index - blockSum;
+		const uint32_t mortonCodeKey   = mortonCodeKeys[index];
+		const uint32_t mortonCodeValue = mortonCodeValues[index];
+		const uint32_t bit			   = ( mortonCodeKey >> i ) & 1;
+		const uint32_t blockSum		   = blockScan( bit == 0, blockCache );
+		const uint32_t newIndex		   = bit == 0 ? blockSum - 1 : blockCache[warpsPerBlock - 1] + index - blockSum;
 		__syncthreads();
 		mortonCodeKeys[newIndex]   = mortonCodeKey;
 		mortonCodeValues[newIndex] = mortonCodeValue;
@@ -169,7 +169,7 @@ build( PrimitiveContainer& primitives, uint32_t geomType, MemoryArena& storageMe
 	// STEP 4: Emit topology and refit nodes
 	EmitTopologyAndFitBounds( index, mortonCodeKeys, mortonCodeValues, updateCounters, primitives, scratchNodes, references );
 	__syncthreads();
-	uint32_t rootAddr = updateCounters[primCount - 1];
+	const uint32_t rootAddr = updateCounters[primCount - 1];
 	__syncthreads();
 
 	// STEP 5: Compute fat leaves
@@ -246,12 +246,12 @@ extern "C" __global__ void __launch_bounds__( BatchBuilderMaxBlockSize )
 		switch ( buildInput.frameType )
 		{
 		case hiprtFrameTypeSRT: {
-			InstanceList<SRTFrame> list( buildInput );
+			InstanceList<hiprtFrameSRT> list( buildInput );
 			build<InstanceNode>( list, hiprtInvalidValue, storageMemoryArena, sharedMemoryArena );
 			break;
 		}
 		case hiprtFrameTypeMatrix: {
-			InstanceList<MatrixFrame> list( buildInput );
+			InstanceList<hiprtFrameMatrix> list( buildInput );
 			build<InstanceNode>( list, hiprtInvalidValue, storageMemoryArena, sharedMemoryArena );
 			break;
 		}

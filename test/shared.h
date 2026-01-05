@@ -36,8 +36,9 @@ static constexpr bool UseFilter		  = false;
 static constexpr bool UseDynamicStack = false;
 
 #if defined( __KERNELCC__ )
-typedef typename hiprt::conditional<UseDynamicStack, hiprtDynamicStack, hiprtGlobalStack>::type Stack;
-typedef hiprtEmptyInstanceStack																	InstanceStack;
+using Stack			= typename hiprt::conditional<UseDynamicStack, hiprtDynamicStack, hiprtGlobalStack>::type;
+using InstanceStack = hiprtEmptyInstanceStack;
+;
 #endif
 
 #if !defined( __KERNELCC__ )
@@ -71,7 +72,7 @@ struct Material
 	float3 m_diffuse;
 	float3 m_emission;
 
-	HIPRT_HOST_DEVICE HIPRT_INLINE bool light() { return m_emission.x + m_emission.y + m_emission.z > 0.0f; }
+	HIPRT_HOST_DEVICE HIPRT_INLINE bool light() const { return m_emission.x + m_emission.y + m_emission.z > 0.0f; }
 };
 
 struct Light
@@ -90,9 +91,9 @@ struct Camera
 	float  m_fov;
 };
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float3 gammaCorrect( float3 a )
+HIPRT_HOST_DEVICE HIPRT_INLINE float3 gammaCorrect( const float3 a )
 {
-	float g = 1.0f / 2.2f;
+	const float g = 1.0f / 2.2f;
 	return { pow( a.x, g ), pow( a.y, g ), pow( a.z, g ) };
 }
 
@@ -111,7 +112,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float randf( uint32_t& seed )
 }
 
 template <uint32_t N>
-HIPRT_HOST_DEVICE HIPRT_INLINE uint2 tea( uint32_t val0, uint32_t val1 )
+HIPRT_HOST_DEVICE HIPRT_INLINE uint2 tea( const uint32_t val0, const uint32_t val1 )
 {
 	uint32_t v0 = val0;
 	uint32_t v1 = val1;
@@ -127,16 +128,16 @@ HIPRT_HOST_DEVICE HIPRT_INLINE uint2 tea( uint32_t val0, uint32_t val1 )
 	return uint2{ v0, v1 };
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE float3 sampleHemisphereCosine( float3 n, uint32_t& seed )
+HIPRT_HOST_DEVICE HIPRT_INLINE float3 sampleHemisphereCosine( const float3 n, uint32_t& seed )
 {
-	float phi		  = hiprt::TwoPi * randf( seed );
-	float sinThetaSqr = randf( seed );
-	float sinTheta	  = sqrt( sinThetaSqr );
+	const float phi			= hiprt::TwoPi * randf( seed );
+	const float sinThetaSqr = randf( seed );
+	const float sinTheta	= sqrt( sinThetaSqr );
 
-	float3 axis = fabs( n.x ) > 0.001f ? float3{ 0.0f, 1.0f, 0.0f } : float3{ 1.0f, 0.0f, 0.0f };
-	float3 t	= hiprt::cross( axis, n );
-	t			= hiprt::normalize( t );
-	float3 s	= hiprt::cross( n, t );
+	const float3 axis = fabs( n.x ) > 0.001f ? float3{ 0.0f, 1.0f, 0.0f } : float3{ 1.0f, 0.0f, 0.0f };
+	float3		 t	  = hiprt::cross( axis, n );
+	t				  = hiprt::normalize( t );
+	const float3 s	  = hiprt::cross( n, t );
 
 	return hiprt::normalize( s * cos( phi ) * sinTheta + t * sin( phi ) * sinTheta + n * sqrt( 1.0f - sinThetaSqr ) );
 }
@@ -149,7 +150,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE float3 rotate( const float4& rotation, const floa
 }
 
 HIPRT_HOST_DEVICE HIPRT_INLINE hiprtRay
-generateRay( float x, float y, uint2 res, const Camera& camera, uint32_t& seed, bool isMultiSamples )
+generateRay( const float x, const float y, const uint2 res, const Camera& camera, uint32_t& seed, const bool isMultiSamples )
 {
 	const float	 offset		= ( isMultiSamples ) ? randf( seed ) : 0.5f;
 	const float2 sensorSize = float2{ 0.024f * ( res.x / static_cast<float>( res.y ) ), 0.024f };

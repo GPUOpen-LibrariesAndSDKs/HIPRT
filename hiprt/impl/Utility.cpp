@@ -44,8 +44,8 @@ namespace hiprt
 #if !defined( __GNUC__ )
 const HMODULE getCurrentModule()
 {
-	HMODULE hModule = NULL;
-	// hModule is NULL if GetModuleHandleEx fails.
+	HMODULE hModule = nullptr;
+	// hModule is nullptr if GetModuleHandleEx fails.
 	GetModuleHandleEx(
 		GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		(LPCTSTR)getCurrentModule,
@@ -75,7 +75,7 @@ uint32_t Utility::hashString( const std::string& str )
 	uint32_t hash = 0;
 
 	const char* data = str.data();
-	for ( uint32_t i = 0; i < str.length(); ++i )
+	for ( size_t i = 0; i < str.length(); ++i )
 	{
 		hash += *data++;
 		hash += ( hash << 10 );

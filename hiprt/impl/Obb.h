@@ -24,7 +24,7 @@
 
 #pragma once
 #include <hiprt/hiprt_math.h>
-#include <hiprt/impl/Transform.h>
+#include <hiprt/impl/Aabb.h>
 
 namespace hiprt
 {
@@ -80,17 +80,15 @@ getRotationMatrixEntry( const uint32_t matrixIndex, const uint32_t row, const ui
 	return as_float( out );
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE static MatrixFrame getRotationMatrix( const uint32_t matrixIndex )
+HIPRT_HOST_DEVICE HIPRT_INLINE static void getRotationMatrix( const uint32_t matrixIndex, float ( &R )[3][3] )
 {
-	MatrixFrame m{};
 	for ( uint32_t i = 0; i < 3; ++i )
 	{
 		for ( uint32_t j = 0; j < 3; ++j )
 		{
-			m.m_matrix[i][j] = getRotationMatrixEntry( matrixIndex, i, j );
+			R[i][j] = getRotationMatrixEntry( matrixIndex, i, j );
 		}
 	}
-	return m;
 }
 
 class Obb
@@ -102,11 +100,13 @@ class Obb
 	{
 		if ( m_matrixIndex < RotationCount )
 		{
-			const MatrixFrame m = getRotationMatrix( m_matrixIndex );
-			float3			  p{};
-			p.x = dot( { m.m_matrix[0][0], m.m_matrix[0][1], m.m_matrix[0][2] }, point );
-			p.y = dot( { m.m_matrix[1][0], m.m_matrix[1][1], m.m_matrix[1][2] }, point );
-			p.z = dot( { m.m_matrix[2][0], m.m_matrix[2][1], m.m_matrix[2][2] }, point );
+			float R[3][3];
+			getRotationMatrix( m_matrixIndex, R );
+
+			float3 p{};
+			p.x = dot( { R[0][0], R[0][1], R[0][2] }, point );
+			p.y = dot( { R[1][0], R[1][1], R[1][2] }, point );
+			p.z = dot( { R[2][0], R[2][1], R[2][2] }, point );
 			m_box.grow( p );
 		}
 		else
@@ -186,14 +186,15 @@ class Kdop
 	HIPRT_HOST_DEVICE Kdop& grow( const float3& point )
 	{
 		m_boxes[RotationCount].grow( point );
+		float R[3][3];
 		for ( uint32_t i = 0; i < RotationCount; ++i )
 		{
-			const MatrixFrame m = getRotationMatrix( i );
+			getRotationMatrix( i, R );
 
 			float3 p{};
-			p.x = dot( { m.m_matrix[0][0], m.m_matrix[0][1], m.m_matrix[0][2] }, point );
-			p.y = dot( { m.m_matrix[1][0], m.m_matrix[1][1], m.m_matrix[1][2] }, point );
-			p.z = dot( { m.m_matrix[2][0], m.m_matrix[2][1], m.m_matrix[2][2] }, point );
+			p.x = dot( { R[0][0], R[0][1], R[0][2] }, point );
+			p.y = dot( { R[1][0], R[1][1], R[1][2] }, point );
+			p.z = dot( { R[2][0], R[2][1], R[2][2] }, point );
 
 			m_boxes[i].grow( p );
 		}

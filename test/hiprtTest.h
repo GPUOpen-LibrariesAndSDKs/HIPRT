@@ -174,9 +174,9 @@ class hiprtTest : public ::testing::Test
 	void memset( void* ptr, int val, size_t n ) { checkOro( oroMemsetD8( reinterpret_cast<oroDeviceptr>( ptr ), val, n ) ); }
 
 	template <typename T>
-	void copyHtoD( T* dst, T* src, size_t n )
+	void copyHtoD( T* dst, const T* src, size_t n )
 	{
-		checkOro( oroMemcpyHtoD( reinterpret_cast<oroDeviceptr>( dst ), src, sizeof( T ) * n ) );
+		checkOro( oroMemcpyHtoD( reinterpret_cast<oroDeviceptr>( dst ), const_cast<T*>( src ), sizeof( T ) * n ) );
 	}
 
 	template <typename T>
@@ -193,9 +193,9 @@ class hiprtTest : public ::testing::Test
 	}
 
 	template <typename T>
-	void copyHtoDAsync( T* dst, T* src, size_t n, oroStream stream )
+	void copyHtoDAsync( T* dst, const T* src, size_t n, oroStream stream )
 	{
-		checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( dst ), src, sizeof( T ) * n, stream ) );
+		checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( dst ), const_cast<T*>( src ), sizeof( T ) * n, stream ) );
 	}
 
 	template <typename T>

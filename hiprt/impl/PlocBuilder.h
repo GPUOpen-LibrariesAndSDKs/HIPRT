@@ -142,10 +142,10 @@ void PlocBuilder::build(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<
+	using Header = typename std::conditional<
 		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
 		SceneHeader,
-		GeomHeader>::type Header;
+		GeomHeader>::type;
 
 	const uint32_t maxBoxNodeCount =
 		static_cast<uint32_t>( getMaxBoxNodeCount<BoxNode, PrimitiveNode>( primitives.getCount() ) );
@@ -418,12 +418,12 @@ void PlocBuilder::build(
 
 	if constexpr ( Timer::EnableTimer )
 	{
-		float time = timer.getTimeRecord( PairTrianglesTime ) + timer.getTimeRecord( ComputeCentroidBoxTime ) +
-					 timer.getTimeRecord( ComputeMortonCodesTime ) + timer.getTimeRecord( SortTime ) +
-					 timer.getTimeRecord( SetupClustersTime ) + timer.getTimeRecord( PlocTime ) +
-					 timer.getTimeRecord( ComputeParentAddrsTime ) + timer.getTimeRecord( ComputeFatLeavesTime ) +
-					 timer.getTimeRecord( CollapseTime ) + timer.getTimeRecord( CompactTasksTime ) +
-					 timer.getTimeRecord( PackLeavesTime );
+		const float time = timer.getTimeRecord( PairTrianglesTime ) + timer.getTimeRecord( ComputeCentroidBoxTime ) +
+						   timer.getTimeRecord( ComputeMortonCodesTime ) + timer.getTimeRecord( SortTime ) +
+						   timer.getTimeRecord( SetupClustersTime ) + timer.getTimeRecord( PlocTime ) +
+						   timer.getTimeRecord( ComputeParentAddrsTime ) + timer.getTimeRecord( ComputeFatLeavesTime ) +
+						   timer.getTimeRecord( CollapseTime ) + timer.getTimeRecord( CompactTasksTime ) +
+						   timer.getTimeRecord( PackLeavesTime );
 		std::cout << "Ploc total construction time: " << time << " ms" << std::endl;
 		std::cout << "\tpair triangles time: " << timer.getTimeRecord( PairTrianglesTime ) << " ms" << std::endl;
 		std::cout << "\tcompute centroid box time: " << timer.getTimeRecord( ComputeCentroidBoxTime ) << " ms" << std::endl;
@@ -447,10 +447,10 @@ void PlocBuilder::update(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<
+	using Header = typename std::conditional<
 		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
 		SceneHeader,
-		GeomHeader>::type Header;
+		GeomHeader>::type;
 
 	Header* header = storageMemoryArena.allocate<Header>();
 
