@@ -67,61 +67,64 @@ class hiprtewTest : public ::testing::Test
 	template <typename T>
 	void malloc( T*& ptr, size_t n )
 	{
-		oroError e = oroMalloc( (oroDeviceptr*)&ptr, sizeof( T ) * n );
+		oroError e = oroMalloc( reinterpret_cast<oroDeviceptr*>( &ptr ), sizeof( T ) * n );
 		ASSERT( e == oroSuccess );
 	}
 
 	void free( void* ptr )
 	{
-		oroError e = oroFree( (oroDeviceptr)ptr );
+		oroError e = oroFree( reinterpret_cast<oroDeviceptr>( ptr ) );
 		ASSERT( e == oroSuccess );
 	}
 
 	void memset( void* ptr, int val, size_t n )
 	{
-		oroError e = oroMemset( (oroDeviceptr)ptr, val, n );
+		oroError e = oroMemset( reinterpret_cast<oroDeviceptr>( ptr ), val, n );
 		ASSERT( e == oroSuccess );
 	}
 
 	template <typename T>
-	void copyHtoD( T* dst, T* src, size_t n )
+	void copyHtoD( T* dst, const T* src, size_t n )
 	{
-		oroError e = oroMemcpyHtoD( (oroDeviceptr)dst, src, sizeof( T ) * n );
+		oroError e = oroMemcpyHtoD( reinterpret_cast<oroDeviceptr>( dst ), const_cast<T*>( src ), sizeof( T ) * n );
 		ASSERT( e == oroSuccess );
 	}
 
 	template <typename T>
 	void copyDtoH( T* dst, T* src, size_t n )
 	{
-		oroError e = oroMemcpyDtoH( dst, (oroDeviceptr)src, sizeof( T ) * n );
+		oroError e = oroMemcpyDtoH( dst, reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n );
 		ASSERT( e == oroSuccess );
 	}
 
 	template <typename T>
 	void copyDtoD( T* dst, T* src, size_t n )
 	{
-		oroError e = oroMemcpyDtoD( (oroDeviceptr)dst, (oroDeviceptr)src, sizeof( T ) * n );
+		oroError e =
+			oroMemcpyDtoD( reinterpret_cast<oroDeviceptr>( dst ), reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n );
 		ASSERT( e == oroSuccess );
 	}
 
 	template <typename T>
-	void copyHtoDAsync( T* dst, T* src, size_t n, oroStream stream )
+	void copyHtoDAsync( T* dst, const T* src, size_t n, oroStream stream )
 	{
-		oroError e = oroMemcpyHtoDAsync( (oroDeviceptr)dst, src, sizeof( T ) * n, stream );
+		oroError e =
+			oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( dst ), const_cast<T*>( src ), sizeof( T ) * n, stream );
 		ASSERT( e == oroSuccess );
 	}
 
 	template <typename T>
 	void copyDtoHAsync( T* dst, T* src, size_t n, oroStream stream )
 	{
-		oroError e = oroMemcpyDtoHAsync( dst, (oroDeviceptr)src, sizeof( T ) * n, stream );
+		oroError e = oroMemcpyDtoHAsync( dst, reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n, stream );
 		ASSERT( e == oroSuccess );
 	}
 
 	template <typename T>
 	void copyDtoDAsync( T* dst, T* src, size_t n, oroStream stream )
 	{
-		oroError e = oroMemcpyDtoDAsync( (oroDeviceptr)dst, (oroDeviceptr)src, sizeof( T ) * n, stream );
+		oroError e = oroMemcpyDtoDAsync(
+			reinterpret_cast<oroDeviceptr>( dst ), reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n, stream );
 		ASSERT( e == oroSuccess );
 	}
 

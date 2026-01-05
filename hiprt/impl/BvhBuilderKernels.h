@@ -265,30 +265,32 @@ __device__ void InitSceneData(
 	}
 }
 
-extern "C" __global__ void InitSceneData_InstanceList_SRTFrame(
-	size_t				   size,
-	InstanceList<SRTFrame> instanceList,
-	BoxNode*			   boxNodes,
-	InstanceNode*		   primNodes,
-	Instance*			   instances,
-	Frame*				   frames,
-	SceneHeader*		   sceneHeader )
+extern "C" __global__ void InitSceneData_InstanceList_hiprtFrameSRT(
+	size_t						size,
+	InstanceList<hiprtFrameSRT> instanceList,
+	BoxNode*					boxNodes,
+	InstanceNode*				primNodes,
+	Instance*					instances,
+	Frame*						frames,
+	SceneHeader*				sceneHeader )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-	InitSceneData<InstanceList<SRTFrame>>( index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
+	InitSceneData<InstanceList<hiprtFrameSRT>>(
+		index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
 }
 
-extern "C" __global__ void InitSceneData_InstanceList_MatrixFrame(
-	size_t					  size,
-	InstanceList<MatrixFrame> instanceList,
-	BoxNode*				  boxNodes,
-	InstanceNode*			  primNodes,
-	Instance*				  instances,
-	Frame*					  frames,
-	SceneHeader*			  sceneHeader )
+extern "C" __global__ void InitSceneData_InstanceList_hiprtFrameMatrix(
+	size_t						   size,
+	InstanceList<hiprtFrameMatrix> instanceList,
+	BoxNode*					   boxNodes,
+	InstanceNode*				   primNodes,
+	Instance*					   instances,
+	Frame*						   frames,
+	SceneHeader*				   sceneHeader )
 {
 	uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-	InitSceneData<InstanceList<MatrixFrame>>( index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
+	InitSceneData<InstanceList<hiprtFrameMatrix>>(
+		index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode>
@@ -297,13 +299,14 @@ SingletonConstruction( uint32_t index, PrimitiveContainer& primitives, BoxNode* 
 {
 	if ( index > 0 ) return;
 
-	uint32_t leafType;
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-		leafType = TriangleType;
-	else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
-		leafType = CustomType;
-	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
-		leafType = InstanceType;
+	const uint32_t leafType = []() {
+		if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
+			return TriangleType;
+		else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
+			return CustomType;
+		else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+			return InstanceType;
+	}();
 
 	primNodes[0] = primitives.fetchPrimNode( 0 );
 
@@ -339,32 +342,32 @@ SingletonConstruction_AabbList_CustomNode( AabbList primitives, BoxNode* boxNode
 	SingletonConstruction<AabbList, CustomNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_SRTFrame_UserInstanceNode(
-	InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameSRT_UserInstanceNode(
+	InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	SingletonConstruction<InstanceList<SRTFrame>, InstanceNode>( index, primitives, boxNodes, primNodes );
+	SingletonConstruction<InstanceList<hiprtFrameSRT>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_SRTFrame_HwInstanceNode(
-	InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameSRT_HwInstanceNode(
+	InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	SingletonConstruction<InstanceList<SRTFrame>, InstanceNode>( index, primitives, boxNodes, primNodes );
+	SingletonConstruction<InstanceList<hiprtFrameSRT>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_MatrixFrame_UserInstanceNode(
-	InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameMatrix_UserInstanceNode(
+	InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	SingletonConstruction<InstanceList<MatrixFrame>, InstanceNode>( index, primitives, boxNodes, primNodes );
+	SingletonConstruction<InstanceList<hiprtFrameMatrix>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_MatrixFrame_HwInstanceNode(
-	InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameMatrix_HwInstanceNode(
+	InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	SingletonConstruction<InstanceList<MatrixFrame>, InstanceNode>( index, primitives, boxNodes, primNodes );
+	SingletonConstruction<InstanceList<hiprtFrameMatrix>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
 extern "C" __global__ void PairTriangles( TriangleMesh mesh, uint2* pairIndices, uint32_t* pairCounter )
@@ -448,15 +451,15 @@ extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
 }
 
 extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCentroidBox_InstanceList_SRTFrame( InstanceList<SRTFrame> primitives, Aabb* centroidBox )
+	ComputeCentroidBox_InstanceList_hiprtFrameSRT( InstanceList<hiprtFrameSRT> primitives, Aabb* centroidBox )
 {
-	ComputeCentroidBox<InstanceList<SRTFrame>>( primitives, centroidBox );
+	ComputeCentroidBox<InstanceList<hiprtFrameSRT>>( primitives, centroidBox );
 }
 
 extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCentroidBox_InstanceList_MatrixFrame( InstanceList<MatrixFrame> primitives, Aabb* centroidBox )
+	ComputeCentroidBox_InstanceList_hiprtFrameMatrix( InstanceList<hiprtFrameMatrix> primitives, Aabb* centroidBox )
 {
-	ComputeCentroidBox<InstanceList<MatrixFrame>>( primitives, centroidBox );
+	ComputeCentroidBox<InstanceList<hiprtFrameMatrix>>( primitives, centroidBox );
 }
 
 template <typename PrimitiveContainer>
@@ -491,32 +494,32 @@ extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
 }
 
 extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeBox_InstanceList_SRTFrame( InstanceList<SRTFrame> primitives, Aabb* box )
+	ComputeBox_InstanceList_hiprtFrameSRT( InstanceList<hiprtFrameSRT> primitives, Aabb* box )
 {
-	ComputeBox<InstanceList<SRTFrame>>( primitives, box );
+	ComputeBox<InstanceList<hiprtFrameSRT>>( primitives, box );
 }
 
 extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeBox_InstanceList_MatrixFrame( InstanceList<MatrixFrame> primitives, Aabb* box )
+	ComputeBox_InstanceList_hiprtFrameMatrix( InstanceList<hiprtFrameMatrix> primitives, Aabb* box )
 {
-	ComputeBox<InstanceList<MatrixFrame>>( primitives, box );
+	ComputeBox<InstanceList<hiprtFrameMatrix>>( primitives, box );
 }
 
 template <typename PrimitiveContainer>
 __device__ void
 ComputeMortonCodes( PrimitiveContainer& primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
 {
-	Aabb box = *centroidBox;
+	const Aabb box = *centroidBox;
 
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if ( index < primitives.getCount() )
 	{
-		float3 boxExtent		= box.extent();
-		float3 center			= primitives.fetchCenter( index );
-		float3 normalizedCenter = ( center - box.m_min ) / boxExtent;
-		mortonCodeKeys[index]	= computeExtendedMortonCode( normalizedCenter, boxExtent );
-		mortonCodeValues[index] = index;
+		const float3 boxExtent		  = box.extent();
+		const float3 center			  = primitives.fetchCenter( index );
+		const float3 normalizedCenter = ( center - box.m_min ) / boxExtent;
+		mortonCodeKeys[index]		  = computeExtendedMortonCode( normalizedCenter, boxExtent );
+		mortonCodeValues[index]		  = index;
 	}
 }
 
@@ -532,16 +535,16 @@ ComputeMortonCodes_AabbList( AabbList primitives, Aabb* centroidBox, uint32_t* m
 	ComputeMortonCodes<AabbList>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
-extern "C" __global__ void ComputeMortonCodes_InstanceList_SRTFrame(
-	InstanceList<SRTFrame> primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+extern "C" __global__ void ComputeMortonCodes_InstanceList_hiprtFrameSRT(
+	InstanceList<hiprtFrameSRT> primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
 {
-	ComputeMortonCodes<InstanceList<SRTFrame>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
+	ComputeMortonCodes<InstanceList<hiprtFrameSRT>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
-extern "C" __global__ void ComputeMortonCodes_InstanceList_MatrixFrame(
-	InstanceList<MatrixFrame> primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+extern "C" __global__ void ComputeMortonCodes_InstanceList_hiprtFrameMatrix(
+	InstanceList<hiprtFrameMatrix> primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
 {
-	ComputeMortonCodes<InstanceList<MatrixFrame>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
+	ComputeMortonCodes<InstanceList<hiprtFrameMatrix>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
@@ -647,7 +650,7 @@ __device__ void ResetCountersAndUpdateLeaves(
 			primNodes[index].m_mask		   = primitives.fetchMask( primIndex );
 			if ( transform.frameCount == 1 )
 				primNodes[index].m_identity =
-					primitives.copyInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
+					primitives.computeInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
 			else
 				primNodes[index].m_identity = 0;
 		}
@@ -672,26 +675,26 @@ extern "C" __global__ void ResetCountersAndUpdateLeaves_AabbList_CustomNode(
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_MatrixFrame_UserInstanceNode(
-	const SceneHeader* header, InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, UserInstanceNode* primNodes )
+extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameMatrix_UserInstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, UserInstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_MatrixFrame_HwInstanceNode(
-	const SceneHeader* header, InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, HwInstanceNode* primNodes )
+extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameMatrix_HwInstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, HwInstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_SRTFrame_UserInstanceNode(
-	const SceneHeader* header, InstanceList<SRTFrame> primitives, BoxNode* boxNodes, UserInstanceNode* primNodes )
+extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameSRT_UserInstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, UserInstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_SRTFrame_HwInstanceNode(
-	const SceneHeader* header, InstanceList<SRTFrame> primitives, BoxNode* boxNodes, HwInstanceNode* primNodes )
+extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameSRT_HwInstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, HwInstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
@@ -786,26 +789,26 @@ FitBounds_AabbList_CustomNode( GeomHeader* header, AabbList primitives, BoxNode*
 	FitBounds( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_SRTFrame_UserInstanceNode(
-	SceneHeader* header, InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void FitBounds_InstanceList_hiprtFrameSRT_UserInstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	FitBounds( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_SRTFrame_HwInstanceNode(
-	SceneHeader* header, InstanceList<SRTFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void FitBounds_InstanceList_hiprtFrameSRT_HwInstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	FitBounds( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_MatrixFrame_UserInstanceNode(
-	SceneHeader* header, InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void FitBounds_InstanceList_hiprtFrameMatrix_UserInstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	FitBounds( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_MatrixFrame_HwInstanceNode(
-	SceneHeader* header, InstanceList<MatrixFrame> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+extern "C" __global__ void FitBounds_InstanceList_hiprtFrameMatrix_HwInstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	FitBounds( header, primitives, boxNodes, primNodes );
 }
@@ -936,46 +939,46 @@ extern "C" __global__ void FitOrientedBounds_AabbList_CustomNode(
 	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_InstanceList_SRTFrame_UserInstanceNode(
-	SceneHeader*		   header,
-	InstanceList<SRTFrame> primitives,
-	Box8Node*			   boxNodes,
-	InstanceNode*		   primNodes,
-	Kdop*				   kdops,
-	uint32_t*			   updateCounters )
+extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameSRT_UserInstanceNode(
+	SceneHeader*				header,
+	InstanceList<hiprtFrameSRT> primitives,
+	Box8Node*					boxNodes,
+	InstanceNode*				primNodes,
+	Kdop*						kdops,
+	uint32_t*					updateCounters )
 {
 	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_InstanceList_SRTFrame_HwInstanceNode(
-	SceneHeader*		   header,
-	InstanceList<SRTFrame> primitives,
-	Box8Node*			   boxNodes,
-	InstanceNode*		   primNodes,
-	Kdop*				   kdops,
-	uint32_t*			   updateCounters )
+extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameSRT_HwInstanceNode(
+	SceneHeader*				header,
+	InstanceList<hiprtFrameSRT> primitives,
+	Box8Node*					boxNodes,
+	InstanceNode*				primNodes,
+	Kdop*						kdops,
+	uint32_t*					updateCounters )
 {
 	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_InstanceList_MatrixFrame_UserInstanceNode(
-	SceneHeader*			  header,
-	InstanceList<MatrixFrame> primitives,
-	Box8Node*				  boxNodes,
-	InstanceNode*			  primNodes,
-	Kdop*					  kdops,
-	uint32_t*				  updateCounters )
+extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameMatrix_UserInstanceNode(
+	SceneHeader*				   header,
+	InstanceList<hiprtFrameMatrix> primitives,
+	Box8Node*					   boxNodes,
+	InstanceNode*				   primNodes,
+	Kdop*						   kdops,
+	uint32_t*					   updateCounters )
 {
 	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_InstanceList_MatrixFrame_HwInstanceNode(
-	SceneHeader*			  header,
-	InstanceList<MatrixFrame> primitives,
-	Box8Node*				  boxNodes,
-	InstanceNode*			  primNodes,
-	Kdop*					  kdops,
-	uint32_t*				  updateCounters )
+extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameMatrix_HwInstanceNode(
+	SceneHeader*				   header,
+	InstanceList<hiprtFrameMatrix> primitives,
+	Box8Node*					   boxNodes,
+	InstanceNode*				   primNodes,
+	Kdop*						   kdops,
+	uint32_t*					   updateCounters )
 {
 	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
 }
@@ -2122,57 +2125,57 @@ extern "C" __global__ void PackLeaves_AabbList_CustomNode(
 	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_SRTFrame_UserInstanceNode(
-	uint32_t			   taskCount,
-	SceneHeader*		   header,
-	ReferenceNode*		   references,
-	BoxNode*			   boxNodes,
-	InstanceNode*		   primNodes,
-	InstanceList<SRTFrame> primitives,
-	uint3*				   taskQueue,
-	uint32_t*			   referenceIndices )
+extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameSRT_UserInstanceNode(
+	uint32_t					taskCount,
+	SceneHeader*				header,
+	ReferenceNode*				references,
+	BoxNode*					boxNodes,
+	InstanceNode*				primNodes,
+	InstanceList<hiprtFrameSRT> primitives,
+	uint3*						taskQueue,
+	uint32_t*					referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_SRTFrame_HwInstanceNode(
-	uint32_t			   taskCount,
-	SceneHeader*		   header,
-	ReferenceNode*		   references,
-	BoxNode*			   boxNodes,
-	InstanceNode*		   primNodes,
-	InstanceList<SRTFrame> primitives,
-	uint3*				   taskQueue,
-	uint32_t*			   referenceIndices )
+extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameSRT_HwInstanceNode(
+	uint32_t					taskCount,
+	SceneHeader*				header,
+	ReferenceNode*				references,
+	BoxNode*					boxNodes,
+	InstanceNode*				primNodes,
+	InstanceList<hiprtFrameSRT> primitives,
+	uint3*						taskQueue,
+	uint32_t*					referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_MatrixFrame_UserInstanceNode(
-	uint32_t				  taskCount,
-	SceneHeader*			  header,
-	ReferenceNode*			  references,
-	BoxNode*				  boxNodes,
-	InstanceNode*			  primNodes,
-	InstanceList<MatrixFrame> primitives,
-	uint3*					  taskQueue,
-	uint32_t*				  referenceIndices )
+extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameMatrix_UserInstanceNode(
+	uint32_t					   taskCount,
+	SceneHeader*				   header,
+	ReferenceNode*				   references,
+	BoxNode*					   boxNodes,
+	InstanceNode*				   primNodes,
+	InstanceList<hiprtFrameMatrix> primitives,
+	uint3*						   taskQueue,
+	uint32_t*					   referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_MatrixFrame_HwInstanceNode(
-	uint32_t				  taskCount,
-	SceneHeader*			  header,
-	ReferenceNode*			  references,
-	BoxNode*				  boxNodes,
-	InstanceNode*			  primNodes,
-	InstanceList<MatrixFrame> primitives,
-	uint3*					  taskQueue,
-	uint32_t*				  referenceIndices )
+extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameMatrix_HwInstanceNode(
+	uint32_t					   taskCount,
+	SceneHeader*				   header,
+	ReferenceNode*				   references,
+	BoxNode*					   boxNodes,
+	InstanceNode*				   primNodes,
+	InstanceList<hiprtFrameMatrix> primitives,
+	uint3*						   taskQueue,
+	uint32_t*					   referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
@@ -2206,13 +2209,13 @@ extern "C" __global__ void PatchApiNodes_AabbList( uint32_t nodeCount, ApiNode* 
 	PatchApiNodes<CustomType>( index, nodeCount, apiNodes );
 }
 
-extern "C" __global__ void PatchApiNodes_InstanceList_SRTFrame( uint32_t nodeCount, ApiNode* apiNodes )
+extern "C" __global__ void PatchApiNodes_InstanceList_hiprtFrameSRT( uint32_t nodeCount, ApiNode* apiNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PatchApiNodes<InstanceType>( index, nodeCount, apiNodes );
 }
 
-extern "C" __global__ void PatchApiNodes_InstanceList_MatrixFrame( uint32_t nodeCount, ApiNode* apiNodes )
+extern "C" __global__ void PatchApiNodes_InstanceList_hiprtFrameMatrix( uint32_t nodeCount, ApiNode* apiNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PatchApiNodes<InstanceType>( index, nodeCount, apiNodes );

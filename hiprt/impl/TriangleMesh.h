@@ -243,7 +243,7 @@ class TriangleMesh
 		m_pairIndices = pairIndices;
 	}
 
-	HIPRT_HOST_DEVICE bool pairable() { return m_triangleIndices != nullptr && m_triangleCount > 2 && m_pairCount == 0; }
+	HIPRT_HOST_DEVICE bool pairable() const { return m_triangleIndices != nullptr && m_triangleCount > 2 && m_pairCount == 0; }
 
 	HIPRT_HOST_DEVICE void
 	split( const uint32_t index, const uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const

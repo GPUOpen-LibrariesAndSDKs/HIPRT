@@ -93,8 +93,6 @@ std::filesystem::path getRootDir()
 	return std::filesystem::path( val );
 }
 
-inline float3 operator-( float3& a, float3& b ) { return float3{ a.x - b.x, a.y - b.y, a.z - b.z }; }
-
 struct EmbreeBuildNode
 {
 	float3	 m_childAabbsMin[2];
@@ -121,7 +119,7 @@ void hiprtTest::SetUp()
 	oroInitialize( (oroApi)( ORO_API_HIP | ORO_API_CUDA ), 0, g_hip_paths, g_hiprtc_paths );
 
 	checkOro( oroInit( 0 ) );
-	oroError deviceGetError = oroDeviceGet( &m_oroDevice, g_parsedArgs.m_deviceIdx );
+	const oroError deviceGetError = oroDeviceGet( &m_oroDevice, g_parsedArgs.m_deviceIdx );
 	if ( deviceGetError != oroSuccess )
 	{
 		// if failed, try to understand what happened.

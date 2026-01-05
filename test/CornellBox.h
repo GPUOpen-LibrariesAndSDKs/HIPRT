@@ -28,7 +28,7 @@
 constexpr uint32_t CornellBoxTriangleCount = 32u;
 constexpr uint32_t CornellBoxMaterialCount = 4u;
 
-const static std::array<float3, CornellBoxTriangleCount* 3> cornellBoxVertices = { { // Floor  -- white lambert
+static const std::array<float3, CornellBoxTriangleCount* 3> cornellBoxVertices = { { // Floor  -- white lambert
 																					 { 0.0f, 0.0f, 0.0f },
 																					 { 0.0f, 0.0f, 559.2f },
 																					 { 556.0f, 0.0f, 559.2f },
@@ -163,7 +163,7 @@ const static std::array<float3, CornellBoxTriangleCount* 3> cornellBoxVertices =
 																					 { 213.0f, 548.6f, 332.0f },
 																					 { 343.0f, 548.6f, 332.0f } } };
 
-static std::array<uint32_t, CornellBoxTriangleCount> cornellBoxMatIndices = { {
+static const std::array<uint32_t, CornellBoxTriangleCount> cornellBoxMatIndices = { {
 	0, 0,						  // Floor         -- white lambert
 	0, 0,						  // Ceiling       -- white lambert
 	0, 0,						  // Back wall     -- white lambert
@@ -174,10 +174,10 @@ static std::array<uint32_t, CornellBoxTriangleCount> cornellBoxMatIndices = { {
 	3, 3						  // Ceiling light -- emmissive
 } };
 
-const std::array<float3, CornellBoxMaterialCount> cornellBoxEmissionColors = {
+static const std::array<float3, CornellBoxMaterialCount> cornellBoxEmissionColors = {
 	{ { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 15.0f, 15.0f, 5.0f }
 
 	} };
 
-const std::array<float3, CornellBoxMaterialCount> cornellBoxDiffuseColors = {
+static const std::array<float3, CornellBoxMaterialCount> cornellBoxDiffuseColors = {
 	{ { 0.80f, 0.80f, 0.80f }, { 0.05f, 0.80f, 0.05f }, { 0.80f, 0.05f, 0.05f }, { 0.50f, 0.00f, 0.00f } } };

@@ -41,7 +41,7 @@ class Context
 	std::vector<hiprtGeometry>
 	createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
 
-	void destroyGeometries( const std::vector<hiprtGeometry> geometries );
+	void destroyGeometries( const std::vector<hiprtGeometry>& geometries );
 
 	void buildGeometries(
 		const std::vector<hiprtGeometryBuildInput>& buildInputs,
@@ -65,7 +65,7 @@ class Context
 	std::vector<hiprtScene>
 	createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
 
-	void destroyScenes( const std::vector<hiprtScene> scenes );
+	void destroyScenes( const std::vector<hiprtScene>& scenes );
 
 	void buildScenes(
 		const std::vector<hiprtSceneBuildInput>& buildInputs,

@@ -44,7 +44,7 @@ class MemoryArena
 		return p;
 	}
 
-	HIPRT_HOST_DEVICE size_t getStorageSize() { return m_storageSize; }
+	HIPRT_HOST_DEVICE size_t getStorageSize() const { return m_storageSize; }
 
   private:
 	hiprtDevicePtr m_data;

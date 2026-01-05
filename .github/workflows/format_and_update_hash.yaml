@@ -1,0 +1,47 @@
+name: Format and Update Hash
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  format-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      # Step 1: Run clang-format linter (in place)
+      - name: Run clang-format
+        uses: DoozyX/clang-format-lint-action@v0.20
+        with:
+          source: './hiprt ./test'
+          exclude: './contrib ./tools ./scripts'
+          extensions: 'h,cpp,c'
+          clangFormatVersion: 15
+          inplace: 'True'
+
+      # Step 2: Update commit hash in version.txt (line 4)
+      - name: Update version.txt with latest commit hash
+        run: |
+          FILE="version.txt"
+          HASH=$(git rev-parse --short HEAD)
+          if [ -f "$FILE" ]; then
+            echo "Updating $FILE with hash $HASH"
+            sed -i "4s~.*~$HASH~" "$FILE"
+          else
+            echo "File $FILE not found!"
+            exit 1
+          fi
+
+      # Step 3: Commit and push all changes (format + hash)
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9.1.1
+        with:
+          author_name: rprbuild
+          author_email: a1rpr@amd.com
+          message: 'Automatic: clang-format + hash update'

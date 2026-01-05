@@ -71,19 +71,20 @@ __device__ void SetupClusters(
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	if ( index >= primitives.getCount() ) return;
 
-	uint32_t leafType;
-	if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
-		leafType = TriangleType;
-	else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
-		leafType = CustomType;
-	else if constexpr (
-		is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
-		is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
-		leafType = InstanceType;
+	const uint32_t leafType = []() {
+		if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
+			return TriangleType;
+		else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+			return CustomType;
+		else if constexpr (
+			is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
+			is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
+			return InstanceType;
+	}();
 
-	uint32_t primIndex = sortedMortonCodeValues[index];
-	references[index]  = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
-	nodeIndices[index] = encodeNodeIndex( index, leafType );
+	const uint32_t primIndex = sortedMortonCodeValues[index];
+	references[index]		 = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
+	nodeIndices[index]		 = encodeNodeIndex( index, leafType );
 }
 
 extern "C" __global__ void SetupClusters_TriangleMesh(
@@ -98,22 +99,22 @@ extern "C" __global__ void SetupClusters_AabbList(
 	SetupClusters<AabbList>( primitives, references, sortedMortonCodeValues, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_InstanceList_SRTFrame(
-	InstanceList<SRTFrame> primitives,
-	ReferenceNode*		   references,
-	const uint32_t*		   sortedMortonCodeValues,
-	uint32_t*			   nodeIndices )
+extern "C" __global__ void SetupClusters_InstanceList_hiprtFrameSRT(
+	InstanceList<hiprtFrameSRT> primitives,
+	ReferenceNode*				references,
+	const uint32_t*				sortedMortonCodeValues,
+	uint32_t*					nodeIndices )
 {
-	SetupClusters<InstanceList<SRTFrame>>( primitives, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<InstanceList<hiprtFrameSRT>>( primitives, references, sortedMortonCodeValues, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_InstanceList_MatrixFrame(
-	InstanceList<MatrixFrame> primitives,
-	ReferenceNode*			  references,
-	const uint32_t*			  sortedMortonCodeValues,
-	uint32_t*				  nodeIndices )
+extern "C" __global__ void SetupClusters_InstanceList_hiprtFrameMatrix(
+	InstanceList<hiprtFrameMatrix> primitives,
+	ReferenceNode*				   references,
+	const uint32_t*				   sortedMortonCodeValues,
+	uint32_t*					   nodeIndices )
 {
-	SetupClusters<InstanceList<MatrixFrame>>( primitives, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<InstanceList<hiprtFrameMatrix>>( primitives, references, sortedMortonCodeValues, nodeIndices );
 }
 
 // H-PLOC: Hierarchical Parallel Locally-Ordered Clustering for Bounding Volume Hierarchy Construction

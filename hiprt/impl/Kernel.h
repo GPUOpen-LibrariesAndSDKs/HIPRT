@@ -48,23 +48,23 @@ class Kernel
 
 	Kernel( oroFunction function = 0 ) : m_function( function ) {}
 
-	void setArgs( std::vector<Argument> args );
+	void setArgs( const std::vector<Argument> args );
 
 	void launch(
-		uint32_t  gx,
-		uint32_t  gy,
-		uint32_t  gz,
-		uint32_t  bx,
-		uint32_t  by,
-		uint32_t  bz,
-		uint32_t  sharedMemBytes,
-		oroStream stream );
+		const uint32_t gx,
+		const uint32_t gy,
+		const uint32_t gz,
+		const uint32_t bx,
+		const uint32_t by,
+		const uint32_t bz,
+		const uint32_t sharedMemBytes,
+		oroStream	   stream );
 
-	void launch( uint32_t nx, oroStream stream = 0, uint32_t sharedMemBytes = 0 );
-	void launch( uint32_t nx, uint32_t tx, oroStream stream = 0, uint32_t sharedMemBytes = 0 );
+	void launch( const uint32_t nx, oroStream stream = 0, const uint32_t sharedMemBytes = 0 );
+	void launch( const uint32_t nx, const uint32_t tx, oroStream stream = 0, const uint32_t sharedMemBytes = 0 );
 
-	uint32_t getNumSmem();
-	uint32_t getNumRegs();
+	uint32_t getNumSmem() const;
+	uint32_t getNumRegs() const;
 
   private:
 	oroFunction			 m_function;

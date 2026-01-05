@@ -84,26 +84,27 @@ extern "C" __global__ void SetupLeavesAndReferences_AabbList(
 	SetupLeavesAndReferences<AabbList>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_InstanceList_SRTFrame(
-	InstanceList<SRTFrame> primitives,
-	ReferenceNode*		   references,
-	Task*				   taskQueue,
-	Aabb*				   box,
-	uint32_t*			   referenceIndices,
-	uint32_t*			   taskIndices )
+extern "C" __global__ void SetupLeavesAndReferences_InstanceList_hiprtFrameSRT(
+	InstanceList<hiprtFrameSRT> primitives,
+	ReferenceNode*				references,
+	Task*						taskQueue,
+	Aabb*						box,
+	uint32_t*					referenceIndices,
+	uint32_t*					taskIndices )
 {
-	SetupLeavesAndReferences<InstanceList<SRTFrame>>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<InstanceList<hiprtFrameSRT>>(
+		primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_InstanceList_MatrixFrame(
-	InstanceList<MatrixFrame> primitives,
-	ReferenceNode*			  references,
-	Task*					  taskQueue,
-	Aabb*					  box,
-	uint32_t*				  referenceIndices,
-	uint32_t*				  taskIndices )
+extern "C" __global__ void SetupLeavesAndReferences_InstanceList_hiprtFrameMatrix(
+	InstanceList<hiprtFrameMatrix> primitives,
+	ReferenceNode*				   references,
+	Task*						   taskQueue,
+	Aabb*						   box,
+	uint32_t*					   referenceIndices,
+	uint32_t*					   taskIndices )
 {
-	SetupLeavesAndReferences<InstanceList<MatrixFrame>>(
+	SetupLeavesAndReferences<InstanceList<hiprtFrameMatrix>>(
 		primitives, references, taskQueue, box, referenceIndices, taskIndices );
 }
 
@@ -164,14 +165,14 @@ extern "C" __global__ void BinReferencesObject(
 
 	if ( index < activeRefCount )
 	{
-		uint32_t referenceIndex = referenceIndices[index];
-		uint32_t taskIndex		= taskIndices[referenceIndex];
+		const uint32_t referenceIndex = referenceIndices[index];
+		const uint32_t taskIndex	  = taskIndices[referenceIndex];
 
-		Task		  task = taskQueue[taskIndex + taskOffset];
-		ReferenceNode ref  = references[referenceIndex];
+		const Task			task = taskQueue[taskIndex + taskOffset];
+		const ReferenceNode ref	 = references[referenceIndex];
 
-		float3 k = ( 1.0f - SbvhEpsilon ) * ( static_cast<float>( binCount ) / ( task.m_box.m_max - task.m_box.m_min ) );
-		uint3  binIndex =
+		const float3 k = ( 1.0f - SbvhEpsilon ) * ( static_cast<float>( binCount ) / ( task.m_box.m_max - task.m_box.m_min ) );
+		const uint3	 binIndex =
 			clamp( make_uint3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_uint3( 0 ), make_uint3( binCount - 1 ) );
 		uint3 binAddr = binIndex + make_uint3( 0, 1, 2 ) * binCount;
 		if ( firstTaskIndex != lastTaskIndex ) binAddr = taskIndex + taskCount * binAddr;
@@ -253,26 +254,26 @@ __device__ void BinReferencesSpatial(
 
 	if ( index < activeRefCount )
 	{
-		uint32_t referenceIndex = referenceIndices[index];
-		uint32_t taskIndex		= taskIndices[referenceIndex];
+		const uint32_t referenceIndex = referenceIndices[index];
+		const uint32_t taskIndex	  = taskIndices[referenceIndex];
 
-		Task task = taskQueue[taskIndex + taskOffset];
+		const Task task = taskQueue[taskIndex + taskOffset];
 
 		Aabb overlap = task.m_box0;
 		overlap.intersect( task.m_box1 );
 
 		if ( overlap.area() >= overlapThreshold )
 		{
-			ReferenceNode ref = references[referenceIndex];
+			const ReferenceNode ref = references[referenceIndex];
 
 			for ( uint32_t axisIndex = 0; axisIndex < 3; ++axisIndex )
 			{
 				if ( ptr( task.m_box.m_max )[axisIndex] - ptr( task.m_box.m_min )[axisIndex] < edgeThreshold ) continue;
 
-				uint32_t firstBin = binCount - 1;
-				uint32_t lastBin  = firstBin;
-				float	 binSize  = ( ptr( task.m_box.m_max )[axisIndex] - ptr( task.m_box.m_min )[axisIndex] ) /
-								static_cast<float>( binCount );
+				uint32_t	firstBin = binCount - 1;
+				uint32_t	lastBin	 = firstBin;
+				const float binSize	 = ( ptr( task.m_box.m_max )[axisIndex] - ptr( task.m_box.m_min )[axisIndex] ) /
+									  static_cast<float>( binCount );
 				for ( uint32_t i = 0; i < binCount; ++i )
 				{
 					float position = ptr( task.m_box.m_min )[axisIndex] + binSize * static_cast<float>( i + 1 );
@@ -300,8 +301,8 @@ __device__ void BinReferencesSpatial(
 					{
 						if constexpr (
 							is_same<PrimitiveContainer, TriangleMesh>::value ||
-							is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
-							is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
+							is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
+							is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
 						{
 							primitives.split(
 								ref.m_primIndex, axisIndex, position, curRef.m_box, leftRef.m_box, rightRef.m_box );
@@ -422,21 +423,21 @@ extern "C" __global__ void BinReferencesSpatial_AabbList(
 		spatialBins );
 }
 
-extern "C" __global__ void BinReferencesSpatial_InstanceList_SRTFrame(
-	uint32_t			   activeRefCount,
-	uint32_t			   binCount,
-	uint32_t			   taskOffset,
-	uint32_t			   taskCount,
-	float				   overlapThreshold,
-	float				   edgeThreshold,
-	uint32_t*			   referenceIndices,
-	uint32_t*			   taskIndices,
-	Task*				   taskQueue,
-	InstanceList<SRTFrame> primitives,
-	ReferenceNode*		   references,
-	Bin*				   spatialBins )
+extern "C" __global__ void BinReferencesSpatial_InstanceList_hiprtFrameSRT(
+	uint32_t					activeRefCount,
+	uint32_t					binCount,
+	uint32_t					taskOffset,
+	uint32_t					taskCount,
+	float						overlapThreshold,
+	float						edgeThreshold,
+	uint32_t*					referenceIndices,
+	uint32_t*					taskIndices,
+	Task*						taskQueue,
+	InstanceList<hiprtFrameSRT> primitives,
+	ReferenceNode*				references,
+	Bin*						spatialBins )
 {
-	BinReferencesSpatial<InstanceList<SRTFrame>>(
+	BinReferencesSpatial<InstanceList<hiprtFrameSRT>>(
 		activeRefCount,
 		binCount,
 		taskOffset,
@@ -451,21 +452,21 @@ extern "C" __global__ void BinReferencesSpatial_InstanceList_SRTFrame(
 		spatialBins );
 }
 
-extern "C" __global__ void BinReferencesSpatial_InstanceList_MatrixFrame(
-	uint32_t				  activeRefCount,
-	uint32_t				  binCount,
-	uint32_t				  taskOffset,
-	uint32_t				  taskCount,
-	float					  overlapThreshold,
-	float					  edgeThreshold,
-	uint32_t*				  referenceIndices,
-	uint32_t*				  taskIndices,
-	Task*					  taskQueue,
-	InstanceList<MatrixFrame> primitives,
-	ReferenceNode*			  references,
-	Bin*					  spatialBins )
+extern "C" __global__ void BinReferencesSpatial_InstanceList_hiprtFrameMatrix(
+	uint32_t					   activeRefCount,
+	uint32_t					   binCount,
+	uint32_t					   taskOffset,
+	uint32_t					   taskCount,
+	float						   overlapThreshold,
+	float						   edgeThreshold,
+	uint32_t*					   referenceIndices,
+	uint32_t*					   taskIndices,
+	Task*						   taskQueue,
+	InstanceList<hiprtFrameMatrix> primitives,
+	ReferenceNode*				   references,
+	Bin*						   spatialBins )
 {
-	BinReferencesSpatial<InstanceList<MatrixFrame>>(
+	BinReferencesSpatial<InstanceList<hiprtFrameMatrix>>(
 		activeRefCount,
 		binCount,
 		taskOffset,
@@ -785,8 +786,8 @@ __device__ void DistributeReferences(
 	else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
 		leafType = CustomType;
 	else if constexpr (
-		is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
-		is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
+		is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
+		is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
 		leafType = InstanceType;
 
 	if ( index < activeRefCount )
@@ -865,8 +866,8 @@ __device__ void DistributeReferences(
 				{
 					if constexpr (
 						is_same<PrimitiveContainer, TriangleMesh>::value ||
-						is_same<PrimitiveContainer, InstanceList<SRTFrame>>::value ||
-						is_same<PrimitiveContainer, InstanceList<MatrixFrame>>::value )
+						is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
+						is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
 					{
 						primitives.split( ref.m_primIndex, splitAxis, position, ref.m_box, leftRef.m_box, rightRef.m_box );
 					}
@@ -1009,23 +1010,23 @@ extern "C" __global__ void DistributeReferences_AabbList(
 		referenceCounter );
 }
 
-extern "C" __global__ void DistributeReferences_InstanceList_SRTFrame(
-	uint32_t			   activeRefCount,
-	uint32_t			   referenceCount,
-	uint32_t			   binCount,
-	uint32_t			   nodeCount,
-	uint32_t			   taskCount,
-	uint32_t			   taskOffset,
-	uint32_t*			   referenceIndices0,
-	uint32_t*			   referenceIndices1,
-	uint32_t*			   taskIndices,
-	Task*				   taskQueue,
-	InstanceList<SRTFrame> primitives,
-	ScratchNode*		   scratchNodes,
-	ReferenceNode*		   references,
-	uint32_t*			   referenceCounter )
+extern "C" __global__ void DistributeReferences_InstanceList_hiprtFrameSRT(
+	uint32_t					activeRefCount,
+	uint32_t					referenceCount,
+	uint32_t					binCount,
+	uint32_t					nodeCount,
+	uint32_t					taskCount,
+	uint32_t					taskOffset,
+	uint32_t*					referenceIndices0,
+	uint32_t*					referenceIndices1,
+	uint32_t*					taskIndices,
+	Task*						taskQueue,
+	InstanceList<hiprtFrameSRT> primitives,
+	ScratchNode*				scratchNodes,
+	ReferenceNode*				references,
+	uint32_t*					referenceCounter )
 {
-	DistributeReferences<InstanceList<SRTFrame>>(
+	DistributeReferences<InstanceList<hiprtFrameSRT>>(
 		activeRefCount,
 		referenceCount,
 		binCount,
@@ -1042,23 +1043,23 @@ extern "C" __global__ void DistributeReferences_InstanceList_SRTFrame(
 		referenceCounter );
 }
 
-extern "C" __global__ void DistributeReferences_InstanceList_MatrixFrame(
-	uint32_t				  activeRefCount,
-	uint32_t				  referenceCount,
-	uint32_t				  binCount,
-	uint32_t				  nodeCount,
-	uint32_t				  taskCount,
-	uint32_t				  taskOffset,
-	uint32_t*				  referenceIndices0,
-	uint32_t*				  referenceIndices1,
-	uint32_t*				  taskIndices,
-	Task*					  taskQueue,
-	InstanceList<MatrixFrame> primitives,
-	ScratchNode*			  scratchNodes,
-	ReferenceNode*			  references,
-	uint32_t*				  referenceCounter )
+extern "C" __global__ void DistributeReferences_InstanceList_hiprtFrameMatrix(
+	uint32_t					   activeRefCount,
+	uint32_t					   referenceCount,
+	uint32_t					   binCount,
+	uint32_t					   nodeCount,
+	uint32_t					   taskCount,
+	uint32_t					   taskOffset,
+	uint32_t*					   referenceIndices0,
+	uint32_t*					   referenceIndices1,
+	uint32_t*					   taskIndices,
+	Task*						   taskQueue,
+	InstanceList<hiprtFrameMatrix> primitives,
+	ScratchNode*				   scratchNodes,
+	ReferenceNode*				   references,
+	uint32_t*					   referenceCounter )
 {
-	DistributeReferences<InstanceList<MatrixFrame>>(
+	DistributeReferences<InstanceList<hiprtFrameMatrix>>(
 		activeRefCount,
 		referenceCount,
 		binCount,

@@ -119,8 +119,8 @@ Kernel Compiler::getKernel(
 {
 	std::lock_guard<std::mutex> lock( m_kernelMutex );
 
-	std::string cacheName  = moduleName.string() + funcName;
-	auto		cacheEntry = m_kernelCache.find( cacheName );
+	const std::string cacheName	 = moduleName.string() + funcName;
+	auto			  cacheEntry = m_kernelCache.find( cacheName );
 	if ( cacheEntry != m_kernelCache.end() ) return cacheEntry->second;
 
 	oroFunction function;
@@ -141,7 +141,7 @@ Kernel Compiler::getKernel(
 
 		if ( numHeaders == 0 )
 		{
-			std::string src = readSourceCode( moduleName );
+			const std::string src = readSourceCode( moduleName );
 			buildKernels(
 				context,
 				funcNames,
@@ -168,7 +168,7 @@ Kernel Compiler::getKernel(
 				headers.push_back( headerData[i].c_str() );
 			}
 
-			std::string src = headersIn[numHeaders - 1];
+			const std::string src = headersIn[numHeaders - 1];
 			buildKernels(
 				context,
 				funcNames,
@@ -255,8 +255,9 @@ void Compiler::buildKernels(
 	}
 	else
 	{
-		std::string cacheName = getCacheFilename( context, src, moduleName, options, funcNameSets, numGeomTypes, numRayTypes );
-		bool		upToDate  = isCachedFileUpToDate( m_cacheDirectory / cacheName, moduleName );
+		const std::string cacheName =
+			getCacheFilename( context, src, moduleName, options, funcNameSets, numGeomTypes, numRayTypes );
+		const bool upToDate = isCachedFileUpToDate( m_cacheDirectory / cacheName, moduleName );
 
 		orortcProgram prog;
 		std::string	  binary;
@@ -478,7 +479,7 @@ Compiler::readSourceCode( const std::filesystem::path& path, std::optional<std::
 	std::ifstream file( path );
 	if ( !file.is_open() )
 	{
-		std::string msg = Utility::format( "Unable to open '%s'", path.string().c_str() );
+		const std::string msg = Utility::format( "Unable to open '%s'", path.string().c_str() );
 		throw std::runtime_error( msg );
 	}
 	size_t sizeFile;
@@ -492,9 +493,9 @@ Compiler::readSourceCode( const std::filesystem::path& path, std::optional<std::
 		{
 			if ( line.find( "#include" ) != std::string::npos )
 			{
-				size_t		pa	= line.find( "<" );
-				size_t		pb	= line.find( ">" );
-				std::string buf = line.substr( pa + 1, pb - pa - 1 );
+				const size_t	  pa  = line.find( "<" );
+				const size_t	  pb  = line.find( ">" );
+				const std::string buf = line.substr( pa + 1, pb - pa - 1 );
 				includes.value().push_back( buf );
 				src += line + '\n';
 			}
@@ -519,7 +520,7 @@ void Compiler::addCommonOpts( Context& context, std::vector<const char*>& opts, 
 			opts.push_back( "-ffast-math" );
 	}
 
-	uint32_t rtip = context.getRtip();
+	const uint32_t rtip = context.getRtip();
 	if ( rtip > 0 )
 	{
 		m_rtipStr = "-DHIPRT_RTIP=" + std::to_string( rtip );
@@ -532,8 +533,8 @@ void Compiler::addCommonOpts( Context& context, std::vector<const char*>& opts, 
 
 std::filesystem::path Compiler::getBitcodePath( bool amd )
 {
-	std::string hipSdkVersion = "_" + std::string( HIP_VERSION_STR );
-	std::string filename	  = "hiprt" + std::string( HIPRT_VERSION_STR );
+	const std::string hipSdkVersion = "_" + std::string( HIP_VERSION_STR );
+	std::string		  filename		= "hiprt" + std::string( HIPRT_VERSION_STR );
 
 	if ( amd ) filename += hipSdkVersion;
 
@@ -550,8 +551,8 @@ std::filesystem::path Compiler::getBitcodePath( bool amd )
 
 std::filesystem::path Compiler::getFatbinPath( bool amd )
 {
-	std::string hipSdkVersion = "_" + std::string( HIP_VERSION_STR );
-	std::string filename	  = "hiprt" + std::string( HIPRT_VERSION_STR );
+	const std::string hipSdkVersion = "_" + std::string( HIP_VERSION_STR );
+	std::string		  filename		= "hiprt" + std::string( HIPRT_VERSION_STR );
 	if ( amd ) filename += hipSdkVersion;
 
 	if ( amd )
@@ -591,7 +592,7 @@ void Compiler::addCustomFuncsSwitchCase(
 		{
 			for ( uint32_t j = 0; j < numGeomTypes; ++j )
 			{
-				uint32_t k = numGeomTypes * i + j;
+				const uint32_t k = numGeomTypes * i + j;
 				if ( funcNameSets.value()[k].intersectFuncName != nullptr )
 				{
 					const std::string intersectFuncName = funcNameSets.value()[k].intersectFuncName;
@@ -673,7 +674,7 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 		std::ifstream		  file( path, std::ios::in | std::ios::binary );
 		if ( !file.is_open() )
 		{
-			std::string msg = Utility::format( "Unable to open '%s'", path.string().c_str() );
+			const std::string msg = Utility::format( "Unable to open '%s'", path.string().c_str() );
 			throw std::runtime_error( msg );
 		}
 		file.read( reinterpret_cast<char*>( &checksumValue ), sizeof( long long ) );
@@ -686,7 +687,7 @@ std::string Compiler::loadCacheFileToBinary( const std::string& cacheName, const
 		std::ifstream		  file( path, std::ios::in | std::ios::binary | std::ios::ate );
 		if ( !file.is_open() )
 		{
-			std::string msg = Utility::format( "Unable to open '%s'", path.string().c_str() );
+			const std::string msg = Utility::format( "Unable to open '%s'", path.string().c_str() );
 			throw std::runtime_error( msg );
 		}
 		size_t binarySize = file.tellg();

@@ -142,10 +142,10 @@ void BvhImporter::build(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<
+	using Header = typename std::conditional<
 		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
 		SceneHeader,
-		GeomHeader>::type Header;
+		GeomHeader>::type;
 
 	const uint32_t maxBoxNodeCount =
 		static_cast<uint32_t>( getMaxBoxNodeCount<BoxNode, PrimitiveNode>( nodes.getReferenceCount() ) );
@@ -367,10 +367,10 @@ void BvhImporter::update(
 	oroStream				stream,
 	MemoryArena&			storageMemoryArena )
 {
-	typedef typename std::conditional<
+	using Header = typename std::conditional<
 		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
 		SceneHeader,
-		GeomHeader>::type Header;
+		GeomHeader>::type;
 
 	Header* header = storageMemoryArena.allocate<Header>();
 

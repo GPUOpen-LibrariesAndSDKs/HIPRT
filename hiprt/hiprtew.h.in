@@ -54,7 +54,7 @@ extern "C" {
 
 /* Utility macros. */
 
-typedef HMODULE DynamicLibrary;
+using DynamicLibrary = HMODULE;
 
 #define dynamic_library_open( path ) LoadLibraryA( path )
 #define dynamic_library_close( lib ) FreeLibrary( lib )
@@ -62,7 +62,7 @@ typedef HMODULE DynamicLibrary;
 #else
 #include <dlfcn.h>
 
-typedef void* DynamicLibrary;
+using DynamicLibrary = void*;
 
 #define dynamic_library_open( path ) dlopen( path, RTLD_NOW )
 #define dynamic_library_close( lib ) dlclose( lib )
@@ -99,16 +99,19 @@ enum
 };
 
 // function types
-typedef hiprtError HIPRTAPI HIPRTAPI
-thiprtCreateContext( uint32_t hiprtApiVersion, hiprtContextCreationInput& input, hiprtContext& outContext );
-typedef hiprtError HIPRTAPI HIPRTAPI thiprtDestroyContext( hiprtContext context );
-typedef hiprtError HIPRTAPI			 thiprtCreateGeometry(
-			 hiprtContext					context,
-			 const hiprtGeometryBuildInput& buildInput,
-			 const hiprtBuildOptions		buildOptions,
-			 hiprtGeometry&					geometryOut );
-typedef hiprtError HIPRTAPI thiprtDestroyGeometry( hiprtContext context, hiprtGeometry outGeometry );
-typedef hiprtError HIPRTAPI thiprtBuildGeometry(
+using thiprtCreateContext = hiprtError
+HIPRTAPI( uint32_t hiprtApiVersion, hiprtContextCreationInput& input, hiprtContext& outContext );
+using thiprtDestroyContext = hiprtError HIPRTAPI( hiprtContext context );
+
+using thiprtCreateGeometry = hiprtError HIPRTAPI(
+	hiprtContext				   context,
+	const hiprtGeometryBuildInput& buildInput,
+	const hiprtBuildOptions		   buildOptions,
+	hiprtGeometry&				   geometryOut );
+
+using thiprtDestroyGeometry = hiprtError HIPRTAPI( hiprtContext context, hiprtGeometry outGeometry );
+
+using thiprtBuildGeometry = hiprtError HIPRTAPI(
 	hiprtContext				   context,
 	hiprtBuildOperation			   buildOperation,
 	const hiprtGeometryBuildInput& buildInput,
@@ -116,7 +119,8 @@ typedef hiprtError HIPRTAPI thiprtBuildGeometry(
 	hiprtDevicePtr				   temporaryBuffer,
 	hiprtApiStream				   stream,
 	hiprtGeometry				   geometryOut );
-typedef hiprtError HIPRTAPI thiprtBuildGeometries(
+
+using thiprtBuildGeometries = hiprtError HIPRTAPI(
 	hiprtContext				   context,
 	hiprtBuildOperation			   buildOperation,
 	uint32_t					   numGeometries,
@@ -125,27 +129,34 @@ typedef hiprtError HIPRTAPI thiprtBuildGeometries(
 	hiprtDevicePtr				   temporaryBuffer,
 	hiprtApiStream				   stream,
 	hiprtGeometry*				   geometriesOut );
-typedef hiprtError HIPRTAPI thiprtGetGeometryBuildTemporaryBufferSize(
+
+using thiprtGetGeometryBuildTemporaryBufferSize = hiprtError HIPRTAPI(
 	hiprtContext context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions, size_t& outSize );
-typedef hiprtError HIPRTAPI
-thiprtCompactGeometry( hiprtContext context, hiprtApiStream stream, hiprtGeometry geometryIn, hiprtGeometry& geometryOut );
-typedef hiprtError HIPRTAPI thiprtCompactGeometries(
+
+using thiprtCompactGeometry = hiprtError
+HIPRTAPI( hiprtContext context, hiprtApiStream stream, hiprtGeometry geometryIn, hiprtGeometry& geometryOut );
+
+using thiprtCompactGeometries = hiprtError HIPRTAPI(
 	hiprtContext	context,
 	uint32_t		numGeometries,
 	hiprtApiStream	stream,
 	hiprtGeometry*	geometriesIn,
 	hiprtGeometry** geometriesOut );
-typedef hiprtError HIPRTAPI thiprtCreateScene(
+
+using thiprtCreateScene = hiprtError HIPRTAPI(
 	hiprtContext context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions, hiprtScene& outScene );
-typedef hiprtError HIPRTAPI thiprtCreateScenes(
+
+using thiprtCreateScenes = hiprtError HIPRTAPI(
 	hiprtContext				context,
 	uint32_t					numScenes,
 	const hiprtSceneBuildInput* buildInputs,
 	const hiprtBuildOptions		buildOptions,
 	hiprtScene**				scenesOut );
-typedef hiprtError HIPRTAPI thiprtDestroyScene( hiprtContext context, hiprtScene outScene );
-typedef hiprtError HIPRTAPI thiprtDestroyScenes( hiprtContext context, uint32_t numScenes, hiprtScene* scenes );
-typedef hiprtError HIPRTAPI thiprtBuildScene(
+
+using thiprtDestroyScene  = hiprtError	HIPRTAPI( hiprtContext context, hiprtScene outScene );
+using thiprtDestroyScenes = hiprtError HIPRTAPI( hiprtContext context, uint32_t numScenes, hiprtScene* scenes );
+
+using thiprtBuildScene = hiprtError HIPRTAPI(
 	hiprtContext				context,
 	hiprtBuildOperation			buildOperation,
 	const hiprtSceneBuildInput* buildInput,
@@ -153,7 +164,8 @@ typedef hiprtError HIPRTAPI thiprtBuildScene(
 	hiprtDevicePtr				temporaryBuffer,
 	hiprtApiStream				stream,
 	hiprtScene					sceneOut );
-typedef hiprtError HIPRTAPI thiprtBuildScenes(
+
+using thiprtBuildScenes = hiprtError HIPRTAPI(
 	hiprtContext				context,
 	hiprtBuildOperation			buildOperation,
 	uint32_t					numScenes,
@@ -162,41 +174,55 @@ typedef hiprtError HIPRTAPI thiprtBuildScenes(
 	hiprtDevicePtr				temporaryBuffer,
 	hiprtApiStream				stream,
 	hiprtScene*					scenesOut );
-typedef hiprtError HIPRTAPI
-thiprtCompactScene( hiprtContext context, hiprtApiStream stream, hiprtScene sceneIn, hiprtScene& sceneOut );
-typedef hiprtError HIPRTAPI thiprtCompactScenes(
-	hiprtContext context, uint32_t numScenes, hiprtApiStream stream, hiprtScene* scenesIn, hiprtScene** scenesOut );
-typedef hiprtError HIPRTAPI thiprtGetSceneBuildTemporaryBufferSize(
-	hiprtContext context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions, size_t* outSize );
-typedef hiprtError HIPRTAPI thiprtGetScenesBuildTemporaryBufferSize(
+
+using thiprtCompactScene = hiprtError
+HIPRTAPI( hiprtContext context, hiprtApiStream stream, hiprtScene sceneIn, hiprtScene& sceneOut );
+
+using thiprtCompactScenes = hiprtError
+HIPRTAPI( hiprtContext context, uint32_t numScenes, hiprtApiStream stream, hiprtScene* scenesIn, hiprtScene** scenesOut );
+
+using thiprtGetSceneBuildTemporaryBufferSize = hiprtError
+HIPRTAPI( hiprtContext context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions, size_t* outSize );
+
+using thiprtGetScenesBuildTemporaryBufferSize = hiprtError HIPRTAPI(
 	hiprtContext				context,
 	uint32_t					numScenes,
 	const hiprtSceneBuildInput* buildInput,
 	const hiprtBuildOptions		buildOptions,
 	size_t&						sizeOut );
-typedef hiprtError HIPRTAPI thiprtGetGeometriesBuildTemporaryBufferSize(
+
+using thiprtGetGeometriesBuildTemporaryBufferSize = hiprtError HIPRTAPI(
 	hiprtContext				   context,
 	uint32_t					   numGeometries,
 	const hiprtGeometryBuildInput* buildInputs,
 	const hiprtBuildOptions		   buildOptions,
 	size_t&						   sizeOut );
-typedef hiprtError HIPRTAPI
-thiprtCreateFuncTable( hiprtContext context, uint32_t numGeomTypes, uint32_t numRayTypes, hiprtFuncTable& outFuncTable );
-typedef hiprtError HIPRTAPI
-thiprtSetFuncTable( hiprtContext context, hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set );
-typedef hiprtError HIPRTAPI thiprtDestroyFuncTable( hiprtContext context, hiprtFuncTable funcTable );
-typedef hiprtError HIPRTAPI thiprtCreateGlobalStackBuffer(
-	hiprtContext context, const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut );
-typedef hiprtError HIPRTAPI thiprtDestroyGlobalStackBuffer( hiprtContext context, hiprtGlobalStackBuffer stackBuffer );
-typedef hiprtError HIPRTAPI thiprtSaveGeometry( hiprtContext context, hiprtGeometry inGeometry, const char* filename );
-typedef hiprtError HIPRTAPI thiprtLoadGeometry( hiprtContext context, hiprtGeometry& outGeometry, const char* filename );
-typedef hiprtError HIPRTAPI thiprtSaveScene( hiprtContext context, hiprtScene inScene, const char* filename );
-typedef hiprtError HIPRTAPI thiprtLoadScene( hiprtContext context, hiprtScene& outScene, const char* filename );
-typedef hiprtError HIPRTAPI
-thiprtExportGeometryAabb( hiprtContext context, hiprtGeometry inGeometry, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax );
-typedef hiprtError HIPRTAPI
-thiprtExportSceneAabb( hiprtContext context, hiprtScene inScene, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax );
-typedef hiprtError HIPRTAPI thiprtBuildTraceKernels(
+
+using thiprtCreateFuncTable = hiprtError
+HIPRTAPI( hiprtContext context, uint32_t numGeomTypes, uint32_t numRayTypes, hiprtFuncTable& outFuncTable );
+
+using thiprtSetFuncTable = hiprtError
+HIPRTAPI( hiprtContext context, hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set );
+
+using thiprtDestroyFuncTable = hiprtError HIPRTAPI( hiprtContext context, hiprtFuncTable funcTable );
+
+using thiprtCreateGlobalStackBuffer = hiprtError
+HIPRTAPI( hiprtContext context, const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut );
+
+using thiprtDestroyGlobalStackBuffer = hiprtError HIPRTAPI( hiprtContext context, hiprtGlobalStackBuffer stackBuffer );
+
+using thiprtSaveGeometry = hiprtError HIPRTAPI( hiprtContext context, hiprtGeometry inGeometry, const char* filename );
+using thiprtLoadGeometry = hiprtError HIPRTAPI( hiprtContext context, hiprtGeometry& outGeometry, const char* filename );
+
+using thiprtSaveScene = hiprtError HIPRTAPI( hiprtContext context, hiprtScene inScene, const char* filename );
+using thiprtLoadScene = hiprtError HIPRTAPI( hiprtContext context, hiprtScene& outScene, const char* filename );
+
+using thiprtExportGeometryAabb = hiprtError
+HIPRTAPI( hiprtContext context, hiprtGeometry inGeometry, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax );
+using thiprtExportSceneAabb = hiprtError
+HIPRTAPI( hiprtContext context, hiprtScene inScene, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax );
+
+using thiprtBuildTraceKernels = hiprtError HIPRTAPI(
 	hiprtContext	  context,
 	uint32_t		  numFunctions,
 	const char**	  funcNames,
@@ -213,7 +239,8 @@ typedef hiprtError HIPRTAPI thiprtBuildTraceKernels(
 	hiprtApiFunction* functionsOut,
 	hiprtApiModule*	  moduleOut,
 	bool			  cache );
-typedef hiprtError HIPRTAPI thiprtBuildTraceKernelsFromBitcode(
+
+using thiprtBuildTraceKernelsFromBitcode = hiprtError HIPRTAPI(
 	hiprtContext	  context,
 	uint32_t		  numFunctions,
 	const char**	  funcNames,
@@ -225,8 +252,9 @@ typedef hiprtError HIPRTAPI thiprtBuildTraceKernelsFromBitcode(
 	hiprtFuncNameSet* funcNameSets,
 	hiprtApiFunction* functionsOut,
 	bool			  cache );
-typedef hiprtError thiprtSetCacheDirPath( hiprtContext context, const char* path );
-typedef hiprtError thiprtSetLogLevel( hiprtContext context, hiprtLogLevel level );
+
+using thiprtSetCacheDirPath = hiprtError HIPRTAPI( hiprtContext context, const char* path );
+using thiprtSetLogLevel		= hiprtError	 HIPRTAPI( hiprtContext context, hiprtLogLevel level );
 
 // function pointers
 extern thiprtCreateContext*							hiprtCreateContext;

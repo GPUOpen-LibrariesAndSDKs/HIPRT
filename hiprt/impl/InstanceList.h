@@ -209,13 +209,13 @@ class InstanceList
 
 	HIPRT_HOST_DEVICE void convertFrame( const uint32_t index )
 	{
-		if ( m_frameCount > 0 && m_apiFrames != nullptr && m_frames != nullptr ) m_frames[index] = m_apiFrames[index].convert();
+		if ( m_frameCount > 0 && m_apiFrames != nullptr && m_frames != nullptr ) m_frames[index] = Frame( m_apiFrames[index] );
 	}
 
-	HIPRT_HOST_DEVICE bool copyInvTransformMatrix( const uint32_t index, float ( &matrix )[3][4] ) const
+	HIPRT_HOST_DEVICE bool computeInvTransformMatrix( const uint32_t index, float ( &matrix )[3][4] ) const
 	{
 		const Frame frame = fetchFrame( index );
-		return hiprt::copyInvTransformMatrix( frame, matrix );
+		return hiprt::computeInvTransformMatrix( frame, matrix );
 	}
 
 	HIPRT_HOST_DEVICE uint32_t getCount() const { return m_instanceCount; }

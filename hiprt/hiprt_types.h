@@ -31,20 +31,20 @@ struct _hiprtScene;
 struct _hiprtContext;
 struct _hiprtFuncTable;
 
-typedef void*			 hiprtDevicePtr;
-typedef _hiprtGeometry*	 hiprtGeometry;
-typedef _hiprtScene*	 hiprtScene;
-typedef _hiprtContext*	 hiprtContext;
-typedef _hiprtFuncTable* hiprtFuncTable;
-typedef uint32_t		 hiprtLogLevel;
-typedef uint32_t		 hiprtBuildFlags;
-typedef uint32_t		 hiprtRayMask;
+using hiprtDevicePtr  = void*;
+using hiprtGeometry	  = _hiprtGeometry*;
+using hiprtScene	  = _hiprtScene*;
+using hiprtContext	  = _hiprtContext*;
+using hiprtFuncTable  = _hiprtFuncTable*;
+using hiprtLogLevel	  = uint32_t;
+using hiprtBuildFlags = uint32_t;
+using hiprtRayMask	  = uint32_t;
 
-typedef int	  hiprtApiDevice;	// hipDevice, cuDevice
-typedef void* hiprtApiCtx;		// hipCtx, cuCtx
-typedef void* hiprtApiStream;	// hipStream, cuStream
-typedef void* hiprtApiFunction; // hipFunction, cuFunction
-typedef void* hiprtApiModule;	// hipModule, cuModule
+using hiprtApiDevice   = int;	// hipDevice, cuDevice
+using hiprtApiCtx	   = void*; // hipCtx, cuCtx
+using hiprtApiStream   = void*; // hipStream, cuStream
+using hiprtApiFunction = void*; // hipFunction, cuFunction
+using hiprtApiModule   = void*; // hipModule, cuModule
 
 /** \brief Ray traversal type.
  *
@@ -490,7 +490,7 @@ HIPRT_STATIC_ASSERT( sizeof( hiprtInstance ) == 16 );
  * are evaluated with the primitive of corresponding instance if the result is
  * 0. The transformation header defines the offset and the number of consecutive
  * transformation frames in the frame array for each instance. More than one frame
- * is interpreted as motion blur. If the transformation headers is NULL, it
+ * is interpreted as motion blur. If the transformation headers is nullptr, it
  * assumes one frame per instance. Optionally, it is possible to import a custom
  * BVH by setting nodes and the corresponding build flag.
  */
@@ -498,11 +498,11 @@ struct alignas( 16 ) hiprtSceneBuildInput
 {
 	/*!< Array of instanceCount pointers to instances */
 	hiprtDevicePtr instances;
-	/*!< Array of instanceCount transform headers (optional: per object frame assumed if NULL) */
+	/*!< Array of instanceCount transform headers (optional: per object frame assumed if nullptr) */
 	hiprtDevicePtr instanceTransformHeaders;
 	/*!< Array of frameCount frames (supposed to be ordered according to time) */
 	hiprtDevicePtr instanceFrames;
-	/*!< Per object bit masks for instance masking (optional: if NULL masks treated as hiprtFullRayMask) */
+	/*!< Per object bit masks for instance masking (optional: if nullptr masks treated as hiprtFullRayMask) */
 	hiprtDevicePtr instanceMasks;
 	/*!< Custom Bvh nodes (optional) */
 	hiprtBvhNodeList nodeList;

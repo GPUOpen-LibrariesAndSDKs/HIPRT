@@ -29,11 +29,11 @@ namespace hiprt
 {
 struct alignas( 32 ) Bin
 {
-	HIPRT_HOST_DEVICE float cost() { return m_box.area() * m_counter; }
+	HIPRT_HOST_DEVICE float cost() const { return m_box.area() * m_counter; }
 
-	HIPRT_HOST_DEVICE float leftCost() { return m_box.area() * m_enter; }
+	HIPRT_HOST_DEVICE float leftCost() const { return m_box.area() * m_enter; }
 
-	HIPRT_HOST_DEVICE float rightCost() { return m_box.area() * m_exit; }
+	HIPRT_HOST_DEVICE float rightCost() const { return m_box.area() * m_exit; }
 
 	HIPRT_HOST_DEVICE void reset()
 	{
