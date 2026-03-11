@@ -628,8 +628,27 @@ install(FILES ${HIPRT_ORO_HEADERS}
 
 # add hipfb files
 if(PRECOMPILE AND NOT BAKE_COMPILED_KERNEL)
-	install(FILES ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP}
-			DESTINATION bin)
+	# compile.py also exports the HIPRT bitcode as: hiprt<ver>_<hip>_amd_lib_<os>.bc
+	get_filename_component(KERNEL_HIPRT_COMP_NAME "${KERNEL_HIPRT_COMP}" NAME)
+	string(REPLACE "_amd.hipfb" "_amd_lib_${KERNEL_OS_POSTFIX}.bc" KERNEL_HIPRT_BC_NAME "${KERNEL_HIPRT_COMP_NAME}")
+
+	if(CMAKE_CONFIGURATION_TYPES)
+		# Multi-config generators (e.g. Visual Studio): install from the selected config output folder.
+		get_filename_component(KERNEL_OROCHI_COMP_NAME "${KERNEL_OROCHI_COMP}" NAME)
+
+		install(FILES "${BASE_OUTPUT_DIR}/Debug/${KERNEL_HIPRT_COMP_NAME}" "${BASE_OUTPUT_DIR}/Debug/${KERNEL_OROCHI_COMP_NAME}" "${BASE_OUTPUT_DIR}/Debug/${KERNEL_HIPRT_BC_NAME}"
+				DESTINATION bin
+				CONFIGURATIONS Debug)
+		install(FILES "${BASE_OUTPUT_DIR}/Release/${KERNEL_HIPRT_COMP_NAME}" "${BASE_OUTPUT_DIR}/Release/${KERNEL_OROCHI_COMP_NAME}" "${BASE_OUTPUT_DIR}/Release/${KERNEL_HIPRT_BC_NAME}"
+				DESTINATION bin
+				CONFIGURATIONS Release RelWithDebInfo MinSizeRel)
+	else()
+		get_filename_component(KERNEL_HIPRT_COMP_DIR "${KERNEL_HIPRT_COMP}" DIRECTORY)
+		set(KERNEL_HIPRT_BC "${KERNEL_HIPRT_COMP_DIR}/${KERNEL_HIPRT_BC_NAME}")
+
+		install(FILES ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP} ${KERNEL_HIPRT_BC}
+				DESTINATION bin)
+	endif()
 endif()
 
 
