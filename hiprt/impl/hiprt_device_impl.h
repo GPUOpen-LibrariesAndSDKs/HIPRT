@@ -1823,24 +1823,29 @@ HIPRT_DEVICE float3 hiprtPointObjectToWorld(
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	float3				p			= point;
 
-	uint32_t depth;
+	uint32_t depth = 0;
 #pragma unroll
-	for ( depth = 1; depth < hiprtMaxInstanceLevels; ++depth )
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
 	{
-		sceneHeaders[depth - 1] = sceneHeader;
-		const auto& instance	= sceneHeader->m_instances[instanceIDs[depth - 1]];
+		sceneHeaders[i] = sceneHeader;
+		const auto& instance = sceneHeader->m_instances[instanceIDs[i]];
+		++depth;
 		if ( instance.m_type != hiprtInstanceTypeScene ) break;
 		sceneHeader = instance.m_scene;
 	}
 
 #pragma unroll
-	for ( int32_t i = depth - 1; i >= 0; --i )
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
 	{
-		sceneHeader				  = sceneHeaders[i];
-		const auto&		 instance = sceneHeader->m_instances[instanceIDs[i]];
-		hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
-		hiprt::Frame	 frame	  = tr.interpolateFrames( time );
-		p						  = frame.transform( p );
+		int32_t j = depth - 1 - i;
+		if ( j >= 0 )
+		{
+			sceneHeader				  = sceneHeaders[j];
+			const auto&		 instance = sceneHeader->m_instances[instanceIDs[j]];
+			hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
+			hiprt::Frame	 frame	  = tr.interpolateFrames( time );
+			p						  = frame.transform( p );
+		}
 	}
 
 	return p;
@@ -1873,24 +1878,29 @@ HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
 	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
 	float3				v			= vector;
 
-	uint32_t depth;
+	uint32_t depth = 0;
 #pragma unroll
-	for ( depth = 1; depth < hiprtMaxInstanceLevels; ++depth )
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
 	{
-		sceneHeaders[depth - 1] = sceneHeader;
-		const auto& instance	= sceneHeader->m_instances[instanceIDs[depth - 1]];
+		sceneHeaders[i] = sceneHeader;
+		const auto& instance = sceneHeader->m_instances[instanceIDs[i]];
+		++depth;
 		if ( instance.m_type != hiprtInstanceTypeScene ) break;
 		sceneHeader = instance.m_scene;
 	}
 
 #pragma unroll
-	for ( int32_t i = depth - 1; i >= 0; --i )
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
 	{
-		sceneHeader				  = sceneHeaders[i];
-		const auto&		 instance = sceneHeader->m_instances[instanceIDs[i]];
-		hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
-		hiprt::Frame	 frame	  = tr.interpolateFrames( time );
-		v						  = frame.transformVector( v );
+		int32_t j = depth - 1 - i;
+		if ( j >= 0 )
+		{
+			sceneHeader				  = sceneHeaders[j];
+			const auto&		 instance = sceneHeader->m_instances[instanceIDs[j]];
+			hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
+			hiprt::Frame	 frame	  = tr.interpolateFrames( time );
+			v						  = frame.transformVector( v );
+		}
 	}
 
 	return v;
