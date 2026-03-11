@@ -1305,7 +1305,7 @@ struct alignas( 32 ) ReferenceNode
 {
 	ReferenceNode() = default;
 	HIPRT_HOST_DEVICE	   ReferenceNode( uint32_t primIndex ) : m_primIndex( primIndex ) {}
-	HIPRT_HOST_DEVICE	   ReferenceNode( uint32_t primIndex, const Aabb& box ) : m_primIndex( primIndex ), m_box( box ) {}
+	HIPRT_HOST_DEVICE	   ReferenceNode( uint32_t primIndex, const Aabb& box ) : m_box( box ), m_primIndex( primIndex ) {}
 	HIPRT_HOST_DEVICE Aabb aabb() const { return m_box; };
 
 	Aabb	 m_box;

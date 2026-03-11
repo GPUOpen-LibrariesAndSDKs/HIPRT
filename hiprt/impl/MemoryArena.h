@@ -30,7 +30,7 @@ class MemoryArena
 {
   public:
 	HIPRT_HOST_DEVICE MemoryArena( hiprtDevicePtr data, size_t storageSize, uint32_t alignment )
-		: m_data( data ), m_storageSize( storageSize ), m_alignment( alignment ), m_offset( 0 )
+		: m_data( data ), m_alignment( alignment ), m_offset( 0 ), m_storageSize( storageSize )
 	{
 	}
 
