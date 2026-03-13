@@ -19,37 +19,54 @@ This is the main repository for the source code for HIPRT.
 3. `git submodule update --init --recursive`
 4. `git lfs fetch` (To get resources for running performance tests)
 
-Then, you can use either premake or cmake.
-   
-&nbsp;&nbsp;&nbsp;On Windows with premake:  
-&nbsp;&nbsp;&nbsp;5. `set HIP_PATH=C:\Program Files\AMD\ROCm\6.2\`  (optional: change default HIP SDK path)  
-&nbsp;&nbsp;&nbsp;6. `.\tools\premake5\win\premake5.exe vs2022`  
-&nbsp;&nbsp;&nbsp;7. `Open build\hiprt.sln with Visual Studio 2022.`  
+### Building with CMake Presets (recommended)
 
-&nbsp;&nbsp;&nbsp;On Linux with premake:  
-&nbsp;&nbsp;&nbsp;5. `export HIP_PATH=/opt/rocm`  (optional: change default HIP SDK path)  
-&nbsp;&nbsp;&nbsp;6. `./tools/premake5/linux64/premake5 gmake`  
-&nbsp;&nbsp;&nbsp;7. `make -C build -j config=release_x64`  
+```bash
+# List all presets
+cmake --list-presets
 
-&nbsp;&nbsp;&nbsp;Example with Cmake on Windows:  
-&nbsp;&nbsp;&nbsp;5. `mkdir build`  
-&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -DHIP_PATH="C:\Program Files\AMD\ROCm\5.7" -S . -B build`  
-&nbsp;&nbsp;&nbsp;7. `Open build\hiprt.sln with Visual Studio 2022.`  
+# Configure + build (Ninja, cross-platform)
+cmake --preset plain
+cmake --build --preset plain-release
 
-&nbsp;&nbsp;&nbsp;Example with Cmake on Linux:  
-&nbsp;&nbsp;&nbsp;5. `mkdir build`  
-&nbsp;&nbsp;&nbsp;6. `cmake -DCMAKE_BUILD_TYPE=Release -DBITCODE=OFF -DHIP_PATH="/opt/rocm" -S . -B build`  
-&nbsp;&nbsp;&nbsp;7. `cmake --build build --config Release`  
+# Configure + build using Visual Studio 2022
+cmake --preset plain-vs2022
+cmake --build --preset plain-vs2022-release
 
+# Configure + build using Visual Studio 2019
+cmake --preset plain-vs2019
+cmake --build --preset plain-vs2019-release
+```
 
+Available configure presets:
 
+| Preset | Description |
+|--------|-------------|
+| `plain` | Baseline library, no precompile, JIT mode |
+| `bake-kernel` | Stringified kernel source embedded in binary |
+| `precompile` | External `.hipfb` generated at build time |
+| `bake-compiled` | Compiled kernel blobs embedded in binary |
+| `bake-compiled-nozip` | Same without Zstd compression |
+| `nvidia` | AMD + NVIDIA fatbin path |
+| `nvidia-only` | CI fast-path for NVIDIA-only machines |
+| `no-tests` | Library-only build (e.g. for FetchContent consumers) |
+| `plain-vs2022` | Plain build with Visual Studio 17 2022 generator |
+| `plain-vs2019` | Plain build with Visual Studio 16 2019 generator |
+
+### Building with CMake manually
+
+#### On Windows:  
+5. `cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DHIP_PATH="C:\Program Files\AMD\ROCm\6.4"`  
+6. `cmake --build build --config Release`  
+
+#### On Linux:  
+5. `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DHIP_PATH=/opt/rocm`  
+6. `cmake --build build -j`  
 
 ### Using Bitcode
-Add the option `--bitcode` in premake, or `-DBITCODE=ON` in cmake to enable precompiled bitcode. 
+Pass `-DBITCODE=ON` to cmake, or use the `precompile` preset to enable precompiled bitcode.
 
-#### Generation of bitcode
-- After premake, go to `scripts/bitcodes`, then run `python compile.py` which compiles kernels to bitcode and fatbinary.
-- Or pass `--precompile` to premake, or `-DPRECOMPILE=ON` in cmake . It executes the `compile.py` during premake. Note that you cannot do it in git bash on windows (because of hipcc...)
+With `PRECOMPILE=ON`, kernel compilation happens at build time via CMake custom commands — no external scripts needed.
 
 
 ## Running Unit Tests
@@ -64,10 +81,7 @@ Example: `..\dist\bin\Release\unittest64.exe --width=512 --height=512 --referenc
 ## Developing HIPRT
 
 ### Compiling Bundled Bitcode and Fatbinary 
-- Clone `hipSdk` repo to the root directory.
-- Go to `scripts/bitcodes`, run `python compile.py` which uses `hipcc` from the `hipSdk` directory. (todo. make it more general, maybe search for `hipcc` from path, if it's not found, use the directory above or something like this)
-	- Note use python version 3.*+.
-	- Git bash shell is not supported for compile.py.
+Use the `precompile` preset or pass `-DPRECOMPILE=ON` to cmake. Kernel compilation is handled by CMake custom commands invoking `hipcc`/`amdclang++`/`nvcc` directly — no external Python scripts needed.
 
 ### Coding Guidelines
 - Resolve compiler warnings.
