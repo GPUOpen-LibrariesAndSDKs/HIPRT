@@ -252,7 +252,7 @@ class TraversalBase
   public:
 	HIPRT_DEVICE TraversalBase(
 		const hiprtRay& ray, Stack& stack, hiprtTraversalHint hint, void* payload, hiprtFuncTable funcTable, uint32_t rayType )
-		: m_ray( ray ), m_stack( stack ), m_payload( payload ), m_rayType( rayType ), m_nodeIndex( RootIndex ), m_hint( hint )
+		: m_ray( ray ), m_stack( stack ), m_payload( payload ), m_nodeIndex( RootIndex ), m_rayType( rayType ), m_hint( hint )
 	{
 		if ( funcTable != nullptr ) m_tableHeader = *reinterpret_cast<hiprtFuncTableHeader*>( funcTable );
 #if HIPRT_RTIP >= 11
@@ -939,8 +939,8 @@ HIPRT_DEVICE SceneTraversal<Stack, InstanceStack, TraversalType>::SceneTraversal
 	hiprtFuncTable	   funcTable,
 	uint32_t		   rayType,
 	float			   time )
-	: TraversalBase<Stack, TraversalType>( ray, stack, hint, payload, funcTable, rayType ), m_time( time ), m_mask( mask ),
-	  m_instanceStack( instanceStack ), m_level( 0u )
+	: TraversalBase<Stack, TraversalType>( ray, stack, hint, payload, funcTable, rayType ), m_instanceStack( instanceStack ), m_mask( mask ),
+	  m_level( 0u ), m_time( time )
 {
 	SceneHeader* sceneHeader = reinterpret_cast<SceneHeader*>( scene );
 	m_boxNodes				 = sceneHeader->m_boxNodes;
