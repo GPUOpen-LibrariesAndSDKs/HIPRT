@@ -1926,6 +1926,108 @@ HIPRT_DEVICE float3 hiprtVectorWorldToObject(
 	return v;
 }
 
+// transformation getters
+HIPRT_DEVICE hiprtFrameSRT hiprtGetObjectToWorldFrameSRT( hiprtScene scene, uint32_t instanceID, float time )
+{
+    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+    const hiprt::Transform    tr(
+           sceneHeader->m_frames,
+           sceneHeader->m_instances[instanceID].m_frameIndex,
+           sceneHeader->m_instances[instanceID].m_frameCount );
+    const hiprt::Frame frame = tr.interpolateFrames( time );
+
+	hiprt::SRTFrame srtFrame;
+#if defined( HIPRT_MATRIX_FRAME )
+	hiprtFrameMatrix mf;
+	memcpy( mf.matrix, frame.m_matrix, sizeof( mf.matrix ) );
+	mf.time = frame.m_time;
+	srtFrame = hiprt::SRTFrame( mf );
+#else
+	srtFrame = frame;
+#endif
+
+    hiprtFrameSRT result;
+    result.rotation    = hiprt::qtToAxisAngle( srtFrame.m_rotation );
+    result.scale       = srtFrame.m_scale;
+    result.translation = srtFrame.m_translation;
+    result.time        = srtFrame.m_time;
+    return result;
+}
+
+HIPRT_DEVICE hiprtFrameSRT hiprtGetWorldToObjectFrameSRT( hiprtScene scene, uint32_t instanceID, float time )
+{
+    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+    const hiprt::Transform    tr(
+           sceneHeader->m_frames,
+           sceneHeader->m_instances[instanceID].m_frameIndex,
+           sceneHeader->m_instances[instanceID].m_frameCount );
+    const hiprt::Frame frame = tr.interpolateFrames( time );
+
+    float matrixInv[3][4];
+    hiprt::computeInvTransformMatrix( frame, matrixInv );
+
+    hiprtFrameMatrix mf;
+    memcpy( mf.matrix, matrixInv, sizeof( matrixInv ) );
+    mf.time = frame.m_time;
+
+    const hiprt::SRTFrame invSrtFrame( mf );
+
+    hiprtFrameSRT result;
+    result.rotation    = hiprt::qtToAxisAngle( invSrtFrame.m_rotation );
+    result.scale       = invSrtFrame.m_scale;
+    result.translation = invSrtFrame.m_translation;
+    result.time        = invSrtFrame.m_time;
+    return result;
+}
+
+HIPRT_DEVICE hiprtFrameMatrix hiprtGetObjectToWorldFrameMatrix( hiprtScene scene, uint32_t instanceID, float time )
+{
+    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+    const hiprt::Transform    tr(
+           sceneHeader->m_frames,
+           sceneHeader->m_instances[instanceID].m_frameIndex,
+           sceneHeader->m_instances[instanceID].m_frameCount );
+    const hiprt::Frame frame = tr.interpolateFrames( time );
+
+	hiprtFrameMatrix result;
+#if defined( HIPRT_MATRIX_FRAME )
+	memcpy( result.matrix, frame.m_matrix, sizeof( result.matrix ) );
+	result.time = frame.m_time;
+#else
+	float Q[3][3];
+	hiprt::qtToRotationMatrix( frame.m_rotation, Q );
+	for ( uint32_t i = 0; i < 3; ++i )
+	{
+		result.matrix[i][0] = Q[i][0] * frame.m_scale.x;
+		result.matrix[i][1] = Q[i][1] * frame.m_scale.y + Q[i][0] * frame.m_shear.x;
+		result.matrix[i][2] = Q[i][2] * frame.m_scale.z + Q[i][1] * frame.m_shear.z + Q[i][0] * frame.m_shear.y;
+	}
+	result.matrix[0][3] = frame.m_translation.x;
+	result.matrix[1][3] = frame.m_translation.y;
+	result.matrix[2][3] = frame.m_translation.z;
+	result.time         = frame.m_time;
+#endif
+    return result;
+}
+
+HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix( hiprtScene scene, uint32_t instanceID, float time )
+{
+    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+    const hiprt::Transform    tr(
+           sceneHeader->m_frames,
+           sceneHeader->m_instances[instanceID].m_frameIndex,
+           sceneHeader->m_instances[instanceID].m_frameCount );
+    const hiprt::Frame frame = tr.interpolateFrames( time );
+
+    float matrixInv[3][4];
+    hiprt::computeInvTransformMatrix( frame, matrixInv );
+
+    hiprtFrameMatrix result;
+    memcpy( result.matrix, matrixInv, sizeof( result.matrix ) );
+    result.time = frame.m_time;
+    return result;
+}
+
 // explicit template instatiation
 template class hiprtPrivateStack_impl<uint32_t, hiprtPrivateStack::StackSize>;
 template class hiprtGlobalStack_impl<uint32_t, false>;
