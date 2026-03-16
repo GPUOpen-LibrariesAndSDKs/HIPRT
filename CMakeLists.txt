@@ -17,14 +17,7 @@ option(COMPILED_COMPRESSION "enable compression of compiled kernels" ON) # this 
 
 option(FORCE_DISABLE_CUDA "By default Cuda support is automatically added if a Cuda install is detected. Turn this flag to ON to force Cuda to be disabled." OFF)
 
-
-find_program(PYTHON_EXECUTABLE
-	NAMES python
-	PATHS /usr/bin /usr/local/bin /opt/local/bin
-)
-message(STATUS "Python path = ${PYTHON_EXECUTABLE}")
-
-
+find_package(Python COMPONENTS Interpreter REQUIRED)
 
 # GENERATE_BAKE_KERNEL is enabled by default if we use the flags 'BAKE_KERNEL' or 'BITCODE'.
 # It can be forced to OFF, but in this case, some building functions from the HIPRT API, like hiprtBuildTraceKernelsFromBitcode will fail.
@@ -425,10 +418,10 @@ if(PRECOMPILE)
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_common.h
 	)
 
-	message(">> add_custom_command: ${PYTHON_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
+	message(">> add_custom_command: ${Python_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
 	add_custom_command(
 			OUTPUT ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP}
-			COMMAND ${PYTHON_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
+			COMMAND ${Python_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			COMMENT "Precompiling kernels via compile.py"
 			VERBATIM
@@ -447,10 +440,10 @@ if(PRECOMPILE)
 		${CMAKE_SOURCE_DIR}/test/bitcodes/unit_test.cpp
 		)
 		
-		message(">> add_custom_command: ${PYTHON_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
+		message(">> add_custom_command: ${Python_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
 		add_custom_command(
 			OUTPUT ${KERNEL_UNITTEST_COMP}
-			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
+			COMMAND ${Python_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
 			DEPENDS ${KERNEL_HIPRT_COMP}  # Ensure compile.py has already run.
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			COMMENT "Precompiling unit tests kernels via precompile_bitcode.py"
@@ -488,7 +481,7 @@ if ( BAKE_COMPILED_KERNEL )
 		# 1) Create the Zstd archive
 		COMMAND	${CMAKE_COMMAND}  -DINPUT_FILE=${KERNEL_HIPRT_COMP} -DOUTPUT_FILE=${KERNEL_HIPRT_COMP_COMPRESSED} -DDO_COMPRESS=${COMPILED_COMPRESSION}  -P ${ARCHIVE_SCRIPT}
 		# 2) Run the Python converter on that archive
-		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_COMP_COMPRESSED} ${KERNEL_HIPRT_H} ${COMPILED_COMPRESSION}
+		COMMAND ${Python_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_COMP_COMPRESSED} ${KERNEL_HIPRT_H} ${COMPILED_COMPRESSION}
 		DEPENDS ${KERNEL_HIPRT_COMP}  # Ensure compile.py has already run.
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMENT "Converting HIPRT compiled kernel to header"
@@ -502,7 +495,7 @@ if ( BAKE_COMPILED_KERNEL )
 		# 1) Create the Zstd archive
 		COMMAND	${CMAKE_COMMAND}  -DINPUT_FILE=${KERNEL_OROCHI_COMP} -DOUTPUT_FILE=${KERNEL_OROCHI_COMP_COMPRESSED} -DDO_COMPRESS=${COMPILED_COMPRESSION}  -P ${ARCHIVE_SCRIPT}
 		# 2) Run the Python converter on that archive
-		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_COMP_COMPRESSED} ${KERNEL_OROCHI_H} ${COMPILED_COMPRESSION}
+		COMMAND ${Python_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_COMP_COMPRESSED} ${KERNEL_OROCHI_H} ${COMPILED_COMPRESSION}
 		DEPENDS ${KERNEL_OROCHI_COMP}  # Ensure compile.py has already run.
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMENT "Converting Orochi compiled kernel to header"
