@@ -39,6 +39,8 @@ Context::Context( const hiprtContextCreationInput& input )
 	oroApi api = ( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA;
 	oroCtxCreateFromRaw( &m_ctxt, api, input.ctxt );
 	m_device = oroSetRawDevice( api, input.device );
+	checkOro( oroCtxSetCurrent( m_ctxt ) );
+	m_compiler.init();
 }
 
 Context::~Context()
