@@ -69,7 +69,8 @@ HIPRT_STATIC_ASSERT( !UseBakedCode || BakedCodeIsGenerated );
 
 namespace hiprt
 {
-Compiler::Compiler()
+
+void Compiler::init()
 {
 	if ( UseBitcode || UseBakedCompiledKernel || hiprtcCreateProgram == nullptr || hiprtcCompileProgram == nullptr ||
 		 hiprtcDestroyProgram == nullptr )

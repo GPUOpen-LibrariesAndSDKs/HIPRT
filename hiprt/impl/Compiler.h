@@ -35,8 +35,9 @@ class Context;
 class Compiler
 {
   public:
-	Compiler();
 	~Compiler();
+
+	void init();
 
 	Kernel getKernel(
 		Context&					 context,

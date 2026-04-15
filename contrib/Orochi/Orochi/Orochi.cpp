@@ -938,8 +938,9 @@ oroDevice oroGetRawDevice( oroDevice dev )
 
 oroDevice oroSetRawDevice( oroApi api, oroDevice dev ) 
 {
-	ioroDevice d( dev );
+	ioroDevice d{};
 	d.setApi( api );
+	d.setDevice( dev );
 	return *(oroDevice*)&d;
 }
 
