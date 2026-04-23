@@ -1,0 +1,199 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 20,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "plain",
+            "displayName": "Plain (JIT mode)",
+            "description": "Baseline library, no precompile, JIT mode",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja Multi-Config",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
+            }
+        },
+        {
+            "name": "bake-kernel",
+            "displayName": "Bake Kernel (string-embedded)",
+            "description": "Stringified kernel source embedded in binary",
+            "inherits": "plain",
+            "cacheVariables": {
+                "BAKE_KERNEL": "ON"
+            }
+        },
+        {
+            "name": "precompile",
+            "displayName": "Precompile (external .hipfb)",
+            "description": "External .hipfb generated at build time",
+            "inherits": "plain",
+            "cacheVariables": {
+                "PRECOMPILE": "ON",
+                "BITCODE": "ON"
+            }
+        },
+        {
+            "name": "bake-compiled",
+            "displayName": "Bake Compiled (embedded kernel blobs)",
+            "description": "Compiled kernel blobs embedded in binary with Zstd compression",
+            "inherits": "plain",
+            "cacheVariables": {
+                "PRECOMPILE": "ON",
+                "BAKE_COMPILED_KERNEL": "ON",
+                "COMPILED_COMPRESSION": "ON"
+            }
+        },
+        {
+            "name": "bake-compiled-nozip",
+            "displayName": "Bake Compiled (no compression)",
+            "description": "Compiled kernel blobs embedded in binary without Zstd compression",
+            "inherits": "plain",
+            "cacheVariables": {
+                "PRECOMPILE": "ON",
+                "BAKE_COMPILED_KERNEL": "ON",
+                "COMPILED_COMPRESSION": "OFF"
+            }
+        },
+        {
+            "name": "nvidia",
+            "displayName": "AMD + NVIDIA",
+            "description": "AMD + NVIDIA fatbin path",
+            "inherits": "plain",
+            "cacheVariables": {
+                "PRECOMPILE": "ON",
+                "FORCE_DISABLE_CUDA": "OFF"
+            }
+        },
+        {
+            "name": "nvidia-only",
+            "displayName": "NVIDIA only (CI)",
+            "description": "CI fast-path for NVIDIA-only machines",
+            "inherits": "plain",
+            "cacheVariables": {
+                "PRECOMPILE": "ON",
+                "FORCE_DISABLE_CUDA": "OFF",
+                "NO_UNITTEST": "ON"
+            }
+        },
+        {
+            "name": "no-tests",
+            "displayName": "Library only (no tests)",
+            "description": "Library-only build (e.g. for FetchContent consumers)",
+            "inherits": "plain",
+            "cacheVariables": {
+                "NO_UNITTEST": "ON"
+            }
+        },
+        {
+            "name": "plain-vs2022",
+            "displayName": "Plain (VS 2022)",
+            "description": "Baseline library using Visual Studio 2022 generator",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Visual Studio 17 2022",
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
+            },
+            "cacheVariables": {}
+        },
+        {
+            "name": "plain-vs2019",
+            "displayName": "Plain (VS 2019)",
+            "description": "Baseline library using Visual Studio 2019 generator",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Visual Studio 16 2019",
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
+            },
+            "cacheVariables": {}
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "plain-release",
+            "configurePreset": "plain",
+            "configuration": "Release"
+        },
+        {
+            "name": "plain-debug",
+            "configurePreset": "plain",
+            "configuration": "Debug"
+        },
+        {
+            "name": "bake-kernel-release",
+            "configurePreset": "bake-kernel",
+            "configuration": "Release"
+        },
+        {
+            "name": "bake-kernel-debug",
+            "configurePreset": "bake-kernel",
+            "configuration": "Debug"
+        },
+        {
+            "name": "precompile-release",
+            "configurePreset": "precompile",
+            "configuration": "Release"
+        },
+        {
+            "name": "bake-compiled-release",
+            "configurePreset": "bake-compiled",
+            "configuration": "Release"
+        },
+        {
+            "name": "bake-compiled-nozip-release",
+            "configurePreset": "bake-compiled-nozip",
+            "configuration": "Release"
+        },
+        {
+            "name": "nvidia-release",
+            "configurePreset": "nvidia",
+            "configuration": "Release"
+        },
+        {
+            "name": "nvidia-only-release",
+            "configurePreset": "nvidia-only",
+            "configuration": "Release"
+        },
+        {
+            "name": "no-tests-release",
+            "configurePreset": "no-tests",
+            "configuration": "Release"
+        },
+        {
+            "name": "plain-vs2022-release",
+            "configurePreset": "plain-vs2022",
+            "configuration": "Release"
+        },
+        {
+            "name": "plain-vs2019-release",
+            "configurePreset": "plain-vs2019",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "plain-release",
+            "configurePreset": "plain",
+            "configuration": "Release"
+        },
+        {
+            "name": "bake-kernel-release",
+            "configurePreset": "bake-kernel",
+            "configuration": "Release"
+        },
+        {
+            "name": "precompile-release",
+            "configurePreset": "precompile",
+            "configuration": "Release"
+        },
+        {
+            "name": "bake-compiled-release",
+            "configurePreset": "bake-compiled",
+            "configuration": "Release"
+        }
+    ]
+}

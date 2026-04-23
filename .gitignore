@@ -16,5 +16,12 @@ hiprt/cache/Kernels.h
 hiprt/cache/KernelArgs.h
 PUBLIC_OUT/
 hiprt/impl/bvh_build_array.h
+contrib/Orochi/ParallelPrimitives/cache/Kernels.h
+contrib/Orochi/ParallelPrimitives/cache/KernelArgs.h
+contrib/Orochi/ParallelPrimitives/cache/oro_compiled_kernels.h
 scripts/bitcodes/__pycache__/
+CMakeUserPresets.json
+tmp.txt
 test/common/meshes/lfs
+
+install/
