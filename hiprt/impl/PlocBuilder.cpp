@@ -39,7 +39,7 @@ size_t PlocBuilder::getTemporaryBufferSize( const size_t count )
 }
 
 size_t PlocBuilder::getTemporaryBufferSize(
-	[[maybe_unused]] Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	[[maybe_unused]] GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount = getPrimCount( buildInput );
 	size_t		 size	   = getTemporaryBufferSize( primCount );
@@ -54,7 +54,7 @@ size_t PlocBuilder::getTemporaryBufferSize(
 }
 
 size_t PlocBuilder::getTemporaryBufferSize(
-	[[maybe_unused]] Context&				 context,
+	[[maybe_unused]] GpuContext&				 context,
 	const hiprtSceneBuildInput&				 buildInput,
 	[[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
@@ -62,7 +62,7 @@ size_t PlocBuilder::getTemporaryBufferSize(
 }
 
 size_t PlocBuilder::getStorageBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	   = getPrimCount( buildInput );
 	const size_t primNodeCount = getMaxPrimNodeCount( buildInput, context.getRtip(), primCount );
@@ -72,7 +72,7 @@ size_t PlocBuilder::getStorageBufferSize(
 }
 
 size_t PlocBuilder::getStorageBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	  = buildInput.instanceCount;
 	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, context.getRtip(), primCount );
@@ -81,7 +81,7 @@ size_t PlocBuilder::getStorageBufferSize(
 }
 
 void PlocBuilder::build(
-	Context&					   context,
+	GpuContext&					   context,
 	const hiprtGeometryBuildInput& buildInput,
 	const hiprtBuildOptions		   buildOptions,
 	hiprtDevicePtr				   temporaryBuffer,
@@ -121,7 +121,7 @@ void PlocBuilder::build(
 }
 
 void PlocBuilder::build(
-	Context&					context,
+	GpuContext&					context,
 	const hiprtSceneBuildInput& buildInput,
 	const hiprtBuildOptions		buildOptions,
 	hiprtDevicePtr				temporaryBuffer,
@@ -161,7 +161,7 @@ void PlocBuilder::build(
 }
 
 void PlocBuilder::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtGeometryBuildInput&	buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,
@@ -195,7 +195,7 @@ void PlocBuilder::update(
 }
 
 void PlocBuilder::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtSceneBuildInput&		buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,

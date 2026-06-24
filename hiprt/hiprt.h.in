@@ -600,6 +600,28 @@ HIPRT_API hiprtError hiprtSetCacheDirPath( hiprtContext context, const char* pat
  */
 HIPRT_API hiprtError hiprtSetLogLevel( hiprtContext context, hiprtLogLevel level );
 
+/** \brief Returns the Embree CpuGeometryData pointer associated with a geometry handle.
+ *
+ * Works for both pure-CPU (hiprtDeviceCPU) and hybrid (hiprtDeviceAMD | hiprtDeviceCPU) contexts.
+ * Returns nullptr if the handle has no CPU mirror (pure GPU context).
+ * The returned pointer is opaque; cast it to hiprt::CpuGeometryData* in hiprt_cpu.h.
+ *
+ * \param geometry The geometry handle.
+ * \return Pointer to the internal CpuGeometryData, or nullptr.
+ */
+HIPRT_API void* hiprtGetInternalCpuDataFromGeometry( hiprtGeometry geometry );
+
+/** \brief Returns the Embree CpuSceneData pointer associated with a scene handle.
+ *
+ * Works for both pure-CPU (hiprtDeviceCPU) and hybrid (hiprtDeviceAMD | hiprtDeviceCPU) contexts.
+ * Returns nullptr if the handle has no CPU mirror (pure GPU context).
+ * The returned pointer is opaque; cast it to hiprt::CpuSceneData* in hiprt_cpu.h.
+ *
+ * \param scene The scene handle.
+ * \return Pointer to the internal CpuSceneData, or nullptr.
+ */
+HIPRT_API void* hiprtGetInternalCpuDataFromScene( hiprtScene scene );
+
 #ifdef __cplusplus
 }
 #endif

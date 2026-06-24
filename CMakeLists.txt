@@ -594,6 +594,17 @@ endif()
 
 target_include_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi)
+target_include_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/include)
+
+if(WIN32)
+	target_link_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/win)
+	target_link_libraries(${HIPRT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/win/embree4.lib)
+endif()
+
+if(UNIX)
+	target_link_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/linux)
+	target_link_libraries(${HIPRT_NAME} embree4 tbb)
+endif()
 
 file(GLOB_RECURSE hiprt_sources "${CMAKE_CURRENT_SOURCE_DIR}/hiprt/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/hiprt/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/hiprt/*.inl")
 list(FILTER hiprt_sources EXCLUDE REGEX "hiprt/bitcodes/.*")
@@ -664,7 +675,18 @@ if(NOT NO_UNITTEST)
 		target_link_libraries(unittest PRIVATE pthread dl)
 	endif()
 
-	file(GLOB_RECURSE unittest_sources "${CMAKE_CURRENT_SOURCE_DIR}/test/hiprtT*.h" "${CMAKE_CURRENT_SOURCE_DIR}/test/hiprtT*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/test/shared.h" "${CMAKE_CURRENT_SOURCE_DIR}/test/main.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/test/CornellBox.h" "${CMAKE_CURRENT_SOURCE_DIR}/test/kernels/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/contrib/gtest-1.6.0/gtest-all.cc")
+	file(GLOB_RECURSE unittest_sources
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/hiprtT*.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/hiprtT*.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/Cpu*Test.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/Cpu*Test.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/Hybrid*Test.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/Hybrid*Test.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/shared.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/main.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/CornellBox.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/test/kernels/*.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/contrib/gtest-1.6.0/gtest-all.cc")
 
 
 	target_sources(unittest PRIVATE ${unittest_sources} ${orochi_sources})
@@ -720,3 +742,23 @@ if(HIPRTEW)
 
 	target_compile_definitions(hiprtewtest PRIVATE GTEST_HAS_TR1_TUPLE=0)
 endif()
+
+
+# Project: CPU dispatch smoke test
+# Tiny standalone program that proves hiprtCreateContext(deviceType=hiprtDeviceCPU)
+# routes through CpuContext (not GpuContext). It does not need a GPU.
+# add_executable(cpu_smoke ${CMAKE_CURRENT_SOURCE_DIR}/test/cpu_smoke.cpp)
+
+# target_include_directories(cpu_smoke PRIVATE
+#	${CMAKE_CURRENT_SOURCE_DIR}
+#	${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi)
+
+# target_link_libraries(cpu_smoke PRIVATE ${HIPRT_NAME})
+
+# if(WIN32)
+# 	target_link_libraries(cpu_smoke PRIVATE version)
+# endif()
+
+# if( CMAKE_BUILD_TYPE STREQUAL "Debug" )
+# 	set_target_properties(cpu_smoke PROPERTIES OUTPUT_NAME "cpu_smokeD")
+# endif()

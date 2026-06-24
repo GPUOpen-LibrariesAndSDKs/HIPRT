@@ -32,7 +32,7 @@
 namespace hiprt
 {
 size_t SbvhBuilder::getTemporaryBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	size_t size = getTemporaryBufferSize<hiprtGeometryBuildInput>( context, buildInput, buildOptions );
 	if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh )
@@ -47,13 +47,13 @@ size_t SbvhBuilder::getTemporaryBufferSize(
 }
 
 size_t SbvhBuilder::getTemporaryBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	return getTemporaryBufferSize<hiprtSceneBuildInput>( context, buildInput, buildOptions );
 }
 
 size_t SbvhBuilder::getStorageBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const float	 alpha			   = buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits ? 1.0f : Alpha;
 	const size_t primCount		   = getPrimCount( buildInput );
@@ -65,7 +65,7 @@ size_t SbvhBuilder::getStorageBufferSize(
 }
 
 size_t SbvhBuilder::getStorageBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const float	 alpha			   = buildOptions.buildFlags & hiprtBuildFlagBitDisableSpatialSplits ? 1.0f : Alpha;
 	const size_t primCount		   = buildInput.instanceCount;
@@ -81,7 +81,7 @@ size_t SbvhBuilder::getStorageBufferSize(
 }
 
 void SbvhBuilder::build(
-	Context&					   context,
+	GpuContext&					   context,
 	const hiprtGeometryBuildInput& buildInput,
 	const hiprtBuildOptions		   buildOptions,
 	hiprtDevicePtr				   temporaryBuffer,
@@ -119,7 +119,7 @@ void SbvhBuilder::build(
 }
 
 void SbvhBuilder::build(
-	Context&					context,
+	GpuContext&					context,
 	const hiprtSceneBuildInput& buildInput,
 	const hiprtBuildOptions		buildOptions,
 	hiprtDevicePtr				temporaryBuffer,
@@ -159,7 +159,7 @@ void SbvhBuilder::build(
 }
 
 void SbvhBuilder::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtGeometryBuildInput&	buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,
@@ -191,7 +191,7 @@ void SbvhBuilder::update(
 }
 
 void SbvhBuilder::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtSceneBuildInput&		buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,

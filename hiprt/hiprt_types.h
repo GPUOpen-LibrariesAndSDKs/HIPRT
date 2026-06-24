@@ -309,16 +309,21 @@ struct hiprtFuncNameSet
 /** \brief Device type.
  *
  */
-enum hiprtDeviceType
+enum hiprtDeviceType : uint32_t
 {
-	/*!< AMD device */
-	hiprtDeviceAMD,
-	/*!< Nvidia device */
-	hiprtDeviceNVIDIA,
+	hiprtDeviceAMD    = 1 << 0,
+	hiprtDeviceNVIDIA = 1 << 1,
+	hiprtDeviceCPU    = 1 << 2,
 };
 
 /** \brief Context creation input.
  *
+ * Hybrid mode is selected with hiprtDeviceAMD | hiprtDeviceCPU or
+ * hiprtDeviceNVIDIA | hiprtDeviceCPU.
+ *
+ * For hiprtDeviceCPU and hybrid modes, all geometry/scene build inputs
+ * (vertices, indices, instances, transforms, etc.) must be host-readable.
+ * Use managed/UVA or pinned mapped allocations so Embree can read them on CPU.
  */
 struct hiprtContextCreationInput
 {
@@ -328,6 +333,8 @@ struct hiprtContextCreationInput
 	hiprtApiDevice device;
 	/*!< HIPRT API device type */
 	hiprtDeviceType deviceType;
+	/*!< HIPRT API CPU Device type, number of threads */
+	uint32_t        numCpuThreads = 0;
 };
 
 /** \brief Various flags controlling scene/geometry build process.

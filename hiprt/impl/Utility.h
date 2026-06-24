@@ -29,7 +29,7 @@
 
 namespace hiprt
 {
-class Context;
+class GpuContext;
 
 class Utility
 {

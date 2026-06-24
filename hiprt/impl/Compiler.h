@@ -31,7 +31,7 @@
 
 namespace hiprt
 {
-class Context;
+class GpuContext;
 class Compiler
 {
   public:
@@ -40,7 +40,7 @@ class Compiler
 	void init();
 
 	Kernel getKernel(
-		Context&					 context,
+		GpuContext&					 context,
 		const std::filesystem::path& moduleName,
 		const std::string&			 funcName,
 		std::vector<const char*>&	 options,
@@ -58,7 +58,7 @@ class Compiler
 		orortcProgram&					progOut );
 
 	void buildKernels(
-		Context&							 context,
+		GpuContext&							 context,
 		const std::vector<const char*>&		 funcNames,
 		const std::string&					 src,
 		const std::filesystem::path&		 moduleName,
@@ -74,7 +74,7 @@ class Compiler
 		bool								 cache );
 
 	void buildKernelsFromBitcode(
-		Context&							 context,
+		GpuContext&							 context,
 		const std::vector<const char*>&		 funcNames,
 		const std::filesystem::path&		 moduleName,
 		const std::string_view				 bitcodeBinary,
@@ -105,10 +105,10 @@ class Compiler
 		uint32_t									 numGeomTypes = 0,
 		uint32_t									 numRayTypes  = 1 );
 
-	void addCommonOpts( Context& context, std::vector<const char*>& opts, bool extended );
+	void addCommonOpts( GpuContext& context, std::vector<const char*>& opts, bool extended );
 
 	std::string getCacheFilename(
-		Context&									 context,
+		GpuContext&									 context,
 		const std::string&							 src,
 		const std::filesystem::path&				 moduleName,
 		std::optional<std::vector<const char*>>		 options	  = std::nullopt,
@@ -123,7 +123,7 @@ class Compiler
 	oroFunction getFunctionFromPrecompiledBinary( const std::string& funcName );
 
 	std::string buildFunctionTableBitcode(
-		Context& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets );
+		GpuContext& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets );
 
 	std::filesystem::path m_cacheDirectory = "cache";
 

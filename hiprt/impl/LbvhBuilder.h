@@ -26,7 +26,7 @@
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/BvhNode.h>
-#include <hiprt/impl/Context.h>
+#include <hiprt/impl/GpuContext.h>
 #include <hiprt/impl/Header.h>
 #include <hiprt/impl/Kernel.h>
 #include <hiprt/impl/MemoryArena.h>
@@ -68,19 +68,19 @@ class LbvhBuilder
 	static size_t getTemporaryBufferSize( const size_t count );
 
 	static size_t
-	getTemporaryBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getTemporaryBufferSize( GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getTemporaryBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getTemporaryBufferSize( GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getStorageBufferSize( GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getStorageBufferSize( GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static void build(
-		Context&					   context,
+		GpuContext&					   context,
 		const hiprtGeometryBuildInput& buildInput,
 		const hiprtBuildOptions		   buildOptions,
 		hiprtDevicePtr				   temporaryBuffer,
@@ -88,7 +88,7 @@ class LbvhBuilder
 		hiprtDevicePtr				   buffer );
 
 	static void build(
-		Context&					context,
+		GpuContext&					context,
 		const hiprtSceneBuildInput& buildInput,
 		const hiprtBuildOptions		buildOptions,
 		hiprtDevicePtr				temporaryBuffer,
@@ -97,7 +97,7 @@ class LbvhBuilder
 
 	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void build(
-		Context&				context,
+		GpuContext&				context,
 		PrimitiveContainer&		primitives,
 		const hiprtBuildOptions buildOptions,
 		uint32_t				geomType,
@@ -106,7 +106,7 @@ class LbvhBuilder
 		MemoryArena&			storageMemoryArena );
 
 	static void update(
-		Context&					   context,
+		GpuContext&					   context,
 		const hiprtGeometryBuildInput& buildInput,
 		const hiprtBuildOptions		   buildOptions,
 		hiprtDevicePtr				   temporaryBuffer,
@@ -114,7 +114,7 @@ class LbvhBuilder
 		hiprtDevicePtr				   buffer );
 
 	static void update(
-		Context&					context,
+		GpuContext&					context,
 		const hiprtSceneBuildInput& buildInput,
 		const hiprtBuildOptions		buildOptions,
 		hiprtDevicePtr				temporaryBuffer,
@@ -123,7 +123,7 @@ class LbvhBuilder
 
 	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void update(
-		Context&				context,
+		GpuContext&				context,
 		PrimitiveContainer&		primitives,
 		const hiprtBuildOptions buildOptions,
 		oroStream				stream,
@@ -132,7 +132,7 @@ class LbvhBuilder
 
 template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void LbvhBuilder::build(
-	Context&				context,
+	GpuContext&				context,
 	PrimitiveContainer&		primitives,
 	const hiprtBuildOptions buildOptions,
 	uint32_t				geomType,
@@ -431,7 +431,7 @@ void LbvhBuilder::build(
 
 template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void LbvhBuilder::update(
-	Context&				context,
+	GpuContext&				context,
 	PrimitiveContainer&		primitives,
 	const hiprtBuildOptions buildOptions,
 	oroStream				stream,

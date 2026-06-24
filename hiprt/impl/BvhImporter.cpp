@@ -32,19 +32,19 @@
 namespace hiprt
 {
 size_t BvhImporter::getTemporaryBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	return getTemporaryBufferSize<hiprtGeometryBuildInput>( context, buildInput, buildOptions );
 }
 
 size_t BvhImporter::getTemporaryBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	return getTemporaryBufferSize<hiprtSceneBuildInput>( context, buildInput, buildOptions );
 }
 
 size_t BvhImporter::getStorageBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount		   = getPrimCount( buildInput );
 	const size_t maxReferenceCount = buildInput.nodeList.nodeCount;
@@ -55,7 +55,7 @@ size_t BvhImporter::getStorageBufferSize(
 }
 
 size_t BvhImporter::getStorageBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount		   = buildInput.instanceCount;
 	const size_t maxReferenceCount = buildInput.nodeList.nodeCount;
@@ -70,7 +70,7 @@ size_t BvhImporter::getStorageBufferSize(
 }
 
 void BvhImporter::build(
-	Context&					   context,
+	GpuContext&					   context,
 	const hiprtGeometryBuildInput& buildInput,
 	const hiprtBuildOptions		   buildOptions,
 	hiprtDevicePtr				   temporaryBuffer,
@@ -112,7 +112,7 @@ void BvhImporter::build(
 }
 
 void BvhImporter::build(
-	Context&					context,
+	GpuContext&					context,
 	const hiprtSceneBuildInput& buildInput,
 	const hiprtBuildOptions		buildOptions,
 	hiprtDevicePtr				temporaryBuffer,
@@ -154,7 +154,7 @@ void BvhImporter::build(
 }
 
 void BvhImporter::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtGeometryBuildInput&	buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,
@@ -189,7 +189,7 @@ void BvhImporter::update(
 	}
 }
 void BvhImporter::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtSceneBuildInput&		buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,

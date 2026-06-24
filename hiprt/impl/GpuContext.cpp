@@ -25,7 +25,7 @@
 #include <hiprt/impl/BvhCommon.h>
 #include <hiprt/impl/BvhImporter.h>
 #include <hiprt/impl/BatchBuilder.h>
-#include <hiprt/impl/Context.h>
+#include <hiprt/impl/GpuContext.h>
 #include <hiprt/impl/Header.h>
 #include <hiprt/impl/LbvhBuilder.h>
 #include <hiprt/impl/PlocBuilder.h>
@@ -34,7 +34,7 @@
 
 namespace hiprt
 {
-Context::Context( const hiprtContextCreationInput& input )
+GpuContext::GpuContext( const hiprtContextCreationInput& input )
 {
 	oroApi api = ( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA;
 	oroCtxCreateFromRaw( &m_ctxt, api, input.ctxt );
@@ -43,14 +43,14 @@ Context::Context( const hiprtContextCreationInput& input )
 	m_compiler.init();
 }
 
-Context::~Context()
+GpuContext::~GpuContext()
 {
 	m_oroutils.unloadKernelCache();
 	oroCtxCreateFromRawDestroy( m_ctxt );
 }
 
 std::vector<hiprtGeometry>
-Context::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
+GpuContext::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -112,7 +112,7 @@ Context::createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInpu
 	return geometries;
 }
 
-void Context::destroyGeometries( const std::vector<hiprtGeometry>& geometries )
+void GpuContext::destroyGeometries( const std::vector<hiprtGeometry>& geometries )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -141,7 +141,7 @@ void Context::destroyGeometries( const std::vector<hiprtGeometry>& geometries )
 	}
 }
 
-void Context::buildGeometries(
+void GpuContext::buildGeometries(
 	const std::vector<hiprtGeometryBuildInput>& buildInputs,
 	const hiprtBuildOptions						buildOptions,
 	hiprtDevicePtr								temporaryBuffer,
@@ -200,7 +200,7 @@ void Context::buildGeometries(
 	}
 }
 
-void Context::updateGeometries(
+void GpuContext::updateGeometries(
 	const std::vector<hiprtGeometryBuildInput>& buildInputs,
 	const hiprtBuildOptions						buildOptions,
 	hiprtDevicePtr								temporaryBuffer,
@@ -238,7 +238,7 @@ void Context::updateGeometries(
 	}
 }
 
-size_t Context::getGeometriesBuildTempBufferSize(
+size_t GpuContext::getGeometriesBuildTempBufferSize(
 	const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 {
 	std::vector<hiprtGeometryBuildInput> batchInputs;
@@ -289,7 +289,7 @@ size_t Context::getGeometriesBuildTempBufferSize(
 	return size;
 }
 
-std::vector<hiprtGeometry> Context::compactGeometries( const std::vector<hiprtGeometry>& geometriesIn, oroStream stream )
+std::vector<hiprtGeometry> GpuContext::compactGeometries( const std::vector<hiprtGeometry>& geometriesIn, oroStream stream )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -355,7 +355,7 @@ std::vector<hiprtGeometry> Context::compactGeometries( const std::vector<hiprtGe
 }
 
 std::vector<hiprtScene>
-Context::createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
+GpuContext::createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -426,7 +426,7 @@ Context::createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, con
 	return scenes;
 }
 
-void Context::destroyScenes( const std::vector<hiprtScene>& scenes )
+void GpuContext::destroyScenes( const std::vector<hiprtScene>& scenes )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -455,7 +455,7 @@ void Context::destroyScenes( const std::vector<hiprtScene>& scenes )
 	}
 }
 
-void Context::buildScenes(
+void GpuContext::buildScenes(
 	const std::vector<hiprtSceneBuildInput>& buildInputs,
 	const hiprtBuildOptions					 buildOptions,
 	hiprtDevicePtr							 temporaryBuffer,
@@ -523,7 +523,7 @@ void Context::buildScenes(
 	}
 }
 
-void Context::updateScenes(
+void GpuContext::updateScenes(
 	const std::vector<hiprtSceneBuildInput>& buildInputs,
 	const hiprtBuildOptions					 buildOptions,
 	hiprtDevicePtr							 temporaryBuffer,
@@ -570,7 +570,7 @@ void Context::updateScenes(
 	}
 }
 
-size_t Context::getScenesBuildTempBufferSize(
+size_t GpuContext::getScenesBuildTempBufferSize(
 	const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 {
 	std::vector<hiprtSceneBuildInput> batchInputs;
@@ -631,7 +631,7 @@ size_t Context::getScenesBuildTempBufferSize(
 	return size;
 }
 
-std::vector<hiprtScene> Context::compactScenes( const std::vector<hiprtScene>& scenesIn, oroStream stream )
+std::vector<hiprtScene> GpuContext::compactScenes( const std::vector<hiprtScene>& scenesIn, oroStream stream )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -711,7 +711,7 @@ std::vector<hiprtScene> Context::compactScenes( const std::vector<hiprtScene>& s
 	return scenesOut;
 }
 
-hiprtFuncTable Context::createFuncTable( uint32_t numGeomTypes, uint32_t numRayTypes )
+hiprtFuncTable GpuContext::createFuncTable( uint32_t numGeomTypes, uint32_t numRayTypes )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -731,7 +731,7 @@ hiprtFuncTable Context::createFuncTable( uint32_t numGeomTypes, uint32_t numRayT
 	return reinterpret_cast<hiprtFuncTable>( ptr );
 }
 
-void Context::setFuncTable( hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set )
+void GpuContext::setFuncTable( hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -743,13 +743,13 @@ void Context::setFuncTable( hiprtFuncTable funcTable, uint32_t geomType, uint32_
 		oroMemcpyHtoD( reinterpret_cast<oroDeviceptr>( &header.funcDataSets[index] ), &set, sizeof( hiprtFuncDataSet ) ) );
 }
 
-void Context::destroyFuncTable( hiprtFuncTable funcTable )
+void GpuContext::destroyFuncTable( hiprtFuncTable funcTable )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 	checkOro( oroFree( reinterpret_cast<oroDeviceptr>( funcTable ) ) );
 }
 
-void Context::createGlobalStackBuffer( const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut )
+void GpuContext::createGlobalStackBuffer( const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -778,13 +778,13 @@ void Context::createGlobalStackBuffer( const hiprtGlobalStackBufferInput& input,
 	}
 }
 
-void Context::destroyGlobalStackBuffer( hiprtGlobalStackBuffer stackBuffer )
+void GpuContext::destroyGlobalStackBuffer( hiprtGlobalStackBuffer stackBuffer )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 	checkOro( oroFree( reinterpret_cast<oroDeviceptr>( stackBuffer.stackData ) ) );
 }
 
-void Context::saveGeometry( hiprtGeometry inGeometry, const std::string& filename )
+void GpuContext::saveGeometry( hiprtGeometry inGeometry, const std::string& filename )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -809,7 +809,7 @@ void Context::saveGeometry( hiprtGeometry inGeometry, const std::string& filenam
 	file.write( reinterpret_cast<char*>( buffer.data() ), header.m_size );
 }
 
-hiprtGeometry Context::loadGeometry( const std::string& filename )
+hiprtGeometry GpuContext::loadGeometry( const std::string& filename )
 {
 	std::ifstream file( filename, std::ios::in | std::ios::binary );
 
@@ -852,14 +852,14 @@ hiprtGeometry Context::loadGeometry( const std::string& filename )
 	return geometry;
 }
 
-void Context::saveScene( [[maybe_unused]] hiprtScene inScene, [[maybe_unused]] const std::string& filename )
+void GpuContext::saveScene( [[maybe_unused]] hiprtScene inScene, [[maybe_unused]] const std::string& filename )
 {
 	throw std::runtime_error( "Not implemented" );
 }
 
-hiprtScene Context::loadScene( [[maybe_unused]] const std::string& filename ) { throw std::runtime_error( "Not implemented" ); }
+hiprtScene GpuContext::loadScene( [[maybe_unused]] const std::string& filename ) { throw std::runtime_error( "Not implemented" ); }
 
-void Context::exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax )
+void GpuContext::exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -876,7 +876,7 @@ void Context::exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, 
 	outAabbMax = box.m_max;
 }
 
-void Context::exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax )
+void GpuContext::exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax )
 {
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
 
@@ -893,7 +893,7 @@ void Context::exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& o
 	outAabbMax = box.m_max;
 }
 
-void Context::buildKernels(
+void GpuContext::buildKernels(
 	const std::vector<const char*>&		 funcNames,
 	const std::string&					 src,
 	const std::filesystem::path&		 moduleName,
@@ -925,7 +925,7 @@ void Context::buildKernels(
 		cache );
 }
 
-void Context::buildKernelsFromBitcode(
+void GpuContext::buildKernelsFromBitcode(
 	const std::vector<const char*>&		 funcNames,
 	const std::filesystem::path&		 moduleName,
 	const std::string_view				 bitcodeBinary,
@@ -940,9 +940,9 @@ void Context::buildKernelsFromBitcode(
 		*this, funcNames, moduleName, bitcodeBinary, numGeomTypes, numRayTypes, funcNameSets, functions, cache );
 }
 
-void Context::setCacheDir( const std::filesystem::path& path ) { m_compiler.setCacheDir( path ); }
+void GpuContext::setCacheDir( const std::filesystem::path& path ) { m_compiler.setCacheDir( path ); }
 
-uint32_t Context::getSMCount() const
+uint32_t GpuContext::getSMCount() const
 {
 	int smCount;
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
@@ -950,7 +950,7 @@ uint32_t Context::getSMCount() const
 	return smCount;
 }
 
-uint32_t Context::getMaxBlockSize() const
+uint32_t GpuContext::getMaxBlockSize() const
 {
 	oroDeviceProp prop;
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
@@ -958,7 +958,7 @@ uint32_t Context::getMaxBlockSize() const
 	return prop.maxThreadsPerBlock;
 }
 
-uint32_t Context::getMaxGridSize() const
+uint32_t GpuContext::getMaxGridSize() const
 {
 	oroDeviceProp prop;
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
@@ -966,7 +966,7 @@ uint32_t Context::getMaxGridSize() const
 	return prop.maxGridSize[0];
 }
 
-std::string Context::getDeviceName() const
+std::string GpuContext::getDeviceName() const
 {
 	oroDeviceProp prop;
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
@@ -974,7 +974,7 @@ std::string Context::getDeviceName() const
 	return std::string( prop.name );
 }
 
-std::string Context::getGcnArchName() const
+std::string GpuContext::getGcnArchName() const
 {
 	oroDeviceProp prop;
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
@@ -982,7 +982,7 @@ std::string Context::getGcnArchName() const
 	return std::string( prop.gcnArchName );
 }
 
-std::string Context::getDriverVersion() const
+std::string GpuContext::getDriverVersion() const
 {
 	int driverVersion;
 	checkOro( oroCtxSetCurrent( m_ctxt ) );
@@ -990,7 +990,7 @@ std::string Context::getDriverVersion() const
 	return std::to_string( driverVersion );
 }
 
-uint32_t Context::getRtip() const
+uint32_t GpuContext::getRtip() const
 {
 	std::string deviceName = getDeviceName();
 	std::string archName   = getGcnArchName();
@@ -1043,13 +1043,13 @@ uint32_t Context::getRtip() const
 	return rtip;
 }
 
-uint32_t Context::getBranchingFactor() const
+uint32_t GpuContext::getBranchingFactor() const
 {
 	if ( getRtip() >= 31 ) return 8;
 	return 4;
 }
 
-uint32_t Context::getWarpSize() const
+uint32_t GpuContext::getWarpSize() const
 {
 	std::string deviceName = getDeviceName();
 	std::string archName   = getGcnArchName();
@@ -1070,19 +1070,19 @@ uint32_t Context::getWarpSize() const
 	return warpSize;
 }
 
-size_t Context::getTriangleNodeSize() const
+size_t GpuContext::getTriangleNodeSize() const
 {
 	if ( getRtip() >= 31 ) return sizeof( TrianglePacketNode );
 	return sizeof( TrianglePairNode );
 }
 
-size_t Context::getBoxNodeSize() const
+size_t GpuContext::getBoxNodeSize() const
 {
 	if ( getRtip() >= 31 ) return sizeof( Box8Node );
 	return sizeof( Box4Node );
 }
 
-size_t Context::getInstanceNodeSize() const
+size_t GpuContext::getInstanceNodeSize() const
 {
 	if ( getRtip() >= 31 ) return sizeof( HwInstanceNode );
 	return sizeof( UserInstanceNode );

@@ -26,7 +26,7 @@
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/BvhNode.h>
-#include <hiprt/impl/Context.h>
+#include <hiprt/impl/GpuContext.h>
 #include <hiprt/impl/Header.h>
 #include <hiprt/impl/Kernel.h>
 #include <hiprt/impl/MemoryArena.h>
@@ -56,21 +56,21 @@ class BatchBuilder
 
 	template <typename BuildInput>
 	static size_t getTemporaryBufferSize(
-		[[maybe_unused]] Context& context, const std::vector<BuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
+		[[maybe_unused]] GpuContext& context, const std::vector<BuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 	{
 		return RoundUp( sizeof( BuildInput ) * buildInputs.size(), DefaultAlignment ) +
 			   RoundUp( sizeof( hiprtDevicePtr ) * buildInputs.size(), DefaultAlignment );
 	}
 
 	static size_t
-	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
+	getStorageBufferSize( GpuContext& context, const hiprtGeometryBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
+	getStorageBufferSize( GpuContext& context, const hiprtSceneBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
 
 	template <typename BuildInput>
 	static void build(
-		Context&					   context,
+		GpuContext&					   context,
 		const std::vector<BuildInput>& buildInputs,
 		const hiprtBuildOptions		   buildOptions,
 		hiprtDevicePtr				   temporaryBuffer,
@@ -80,7 +80,7 @@ class BatchBuilder
 
 template <typename BuildInput>
 void BatchBuilder::build(
-	Context&					   context,
+	GpuContext&					   context,
 	const std::vector<BuildInput>& buildInputs,
 	const hiprtBuildOptions		   buildOptions,
 	hiprtDevicePtr				   temporaryBuffer,

@@ -33,7 +33,7 @@ DECLARE_TYPE_TRAITS( hiprtSceneBuildInput );
 #endif
 
 size_t BatchBuilder::getStorageBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	  = getPrimCount( buildInput );
 	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, context.getRtip(), primCount );
@@ -42,7 +42,7 @@ size_t BatchBuilder::getStorageBufferSize(
 }
 
 size_t BatchBuilder::getStorageBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	  = buildInput.instanceCount;
 	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, context.getRtip(), primCount );

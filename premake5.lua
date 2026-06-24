@@ -132,6 +132,19 @@ workspace "hiprt"
     files {"contrib/Orochi/contrib/hipew/**.h", "contrib/Orochi/contrib/hipew/**.cpp"}
     files {"contrib/Orochi/ParallelPrimitives/**.h", "contrib/Orochi/ParallelPrimitives/**.cpp"}
 
+    externalincludedirs { "contrib/embree/include/" }
+    if os.istarget("windows") then
+        libdirs { "contrib/embree/win/" }
+    end
+    if os.istarget("linux") then
+        local embree_rel_path = "contrib/embree/linux"
+        local project_root = path.getabsolute(".")
+        local embree_abs_path = path.join(project_root, embree_rel_path)
+        libdirs { embree_rel_path }
+        linkoptions { "-Wl,-rpath," .. embree_abs_path }
+    end
+    links { "embree4", "tbb" }
+
 	if not _OPTIONS["noUnittest"] then
 		project( "unittest" )
 			cppdialect "C++17"
@@ -149,7 +162,7 @@ workspace "hiprt"
 			if os.ishost("linux") then
 				links { "pthread", "dl" }
 			end
-			files { "test/hiprtT*.h", "test/hiprtT*.cpp", "test/shared.h", "test/main.cpp", "test/CornellBox.h", "test/kernels/*.h" }
+			files { "test/hiprtT*.h", "test/hiprtT*.cpp", "test/Cpu*Test.h", "test/Cpu*Test.cpp", "test/Hybrid*Test.h", "test/Hybrid*Test.cpp", "test/shared.h", "test/main.cpp", "test/CornellBox.h", "test/kernels/*.h" }
 			externalincludedirs { "./contrib/Orochi/" }
 			files {"contrib/Orochi/Orochi/**.h", "contrib/Orochi/Orochi/**.cpp"}
 			files {"contrib/Orochi/contrib/cuew/**.h", "contrib/Orochi/contrib/cuew/**.cpp"}

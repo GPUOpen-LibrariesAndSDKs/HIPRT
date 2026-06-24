@@ -42,7 +42,7 @@ size_t LbvhBuilder::getTemporaryBufferSize( const size_t count )
 }
 
 size_t LbvhBuilder::getTemporaryBufferSize(
-	[[maybe_unused]] Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+	[[maybe_unused]] GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount = getPrimCount( buildInput );
 	size_t		 size	   = getTemporaryBufferSize( primCount );
@@ -57,7 +57,7 @@ size_t LbvhBuilder::getTemporaryBufferSize(
 }
 
 size_t LbvhBuilder::getTemporaryBufferSize(
-	[[maybe_unused]] Context&				 context,
+	[[maybe_unused]] GpuContext&				 context,
 	const hiprtSceneBuildInput&				 buildInput,
 	[[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
@@ -65,7 +65,7 @@ size_t LbvhBuilder::getTemporaryBufferSize(
 }
 
 size_t LbvhBuilder::getStorageBufferSize(
-	Context& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtGeometryBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	   = getPrimCount( buildInput );
 	const size_t primNodeCount = getMaxPrimNodeCount( buildInput, context.getRtip(), primCount );
@@ -75,7 +75,7 @@ size_t LbvhBuilder::getStorageBufferSize(
 }
 
 size_t LbvhBuilder::getStorageBufferSize(
-	Context& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
+	GpuContext& context, const hiprtSceneBuildInput& buildInput, [[maybe_unused]] const hiprtBuildOptions buildOptions )
 {
 	const size_t primCount	  = buildInput.instanceCount;
 	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, context.getRtip(), primCount );
@@ -84,7 +84,7 @@ size_t LbvhBuilder::getStorageBufferSize(
 }
 
 void LbvhBuilder::build(
-	Context&					   context,
+	GpuContext&					   context,
 	const hiprtGeometryBuildInput& buildInput,
 	const hiprtBuildOptions		   buildOptions,
 	hiprtDevicePtr				   temporaryBuffer,
@@ -124,7 +124,7 @@ void LbvhBuilder::build(
 }
 
 void LbvhBuilder::build(
-	Context&					context,
+	GpuContext&					context,
 	const hiprtSceneBuildInput& buildInput,
 	const hiprtBuildOptions		buildOptions,
 	hiprtDevicePtr				temporaryBuffer,
@@ -164,7 +164,7 @@ void LbvhBuilder::build(
 }
 
 void LbvhBuilder::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtGeometryBuildInput&	buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,
@@ -198,7 +198,7 @@ void LbvhBuilder::update(
 }
 
 void LbvhBuilder::update(
-	Context&						context,
+	GpuContext&						context,
 	const hiprtSceneBuildInput&		buildInput,
 	const hiprtBuildOptions			buildOptions,
 	[[maybe_unused]] hiprtDevicePtr temporaryBuffer,

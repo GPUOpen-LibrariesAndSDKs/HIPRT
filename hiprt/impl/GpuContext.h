@@ -23,6 +23,8 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
+#include "ContextBase.h"
+
 #include <Orochi/Orochi.h>
 #include <hiprt/hiprt_types.h>
 #include <hiprt/impl/Compiler.h>
@@ -32,75 +34,75 @@
 
 namespace hiprt
 {
-class Context
+class GpuContext : public ContextBase
 {
   public:
-	Context( const hiprtContextCreationInput& input );
-	~Context();
+	 GpuContext( const hiprtContextCreationInput& input );
+	~GpuContext() override;
 
 	std::vector<hiprtGeometry>
-	createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
+	createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions ) override;
 
-	void destroyGeometries( const std::vector<hiprtGeometry>& geometries );
+	void destroyGeometries( const std::vector<hiprtGeometry>& geometries ) override;
 
 	void buildGeometries(
 		const std::vector<hiprtGeometryBuildInput>& buildInputs,
 		const hiprtBuildOptions						buildOptions,
 		hiprtDevicePtr								temporaryBuffer,
 		oroStream									stream,
-		std::vector<hiprtDevicePtr>&				buffers );
+		std::vector<hiprtDevicePtr>&				buffers ) override;
 
 	void updateGeometries(
 		const std::vector<hiprtGeometryBuildInput>& buildInputs,
 		const hiprtBuildOptions						buildOptions,
 		hiprtDevicePtr								temporaryBuffer,
 		oroStream									stream,
-		std::vector<hiprtDevicePtr>&				buffers );
+		std::vector<hiprtDevicePtr>&				buffers ) override;
 
 	size_t getGeometriesBuildTempBufferSize(
-		const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
+		const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions ) override;
 
-	std::vector<hiprtGeometry> compactGeometries( const std::vector<hiprtGeometry>& geometries, oroStream stream );
+	std::vector<hiprtGeometry> compactGeometries( const std::vector<hiprtGeometry>& geometries, oroStream stream ) override;
 
 	std::vector<hiprtScene>
-	createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
+	createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions ) override;
 
-	void destroyScenes( const std::vector<hiprtScene>& scenes );
+	void destroyScenes( const std::vector<hiprtScene>& scenes ) override;
 
 	void buildScenes(
 		const std::vector<hiprtSceneBuildInput>& buildInputs,
 		const hiprtBuildOptions					 buildOptions,
 		hiprtDevicePtr							 temporaryBuffer,
 		oroStream								 stream,
-		std::vector<hiprtDevicePtr>&			 buffers );
+		std::vector<hiprtDevicePtr>&			 buffers ) override;
 
 	void updateScenes(
 		const std::vector<hiprtSceneBuildInput>& buildInputs,
 		const hiprtBuildOptions					 buildOptions,
 		hiprtDevicePtr							 temporaryBuffer,
 		oroStream								 stream,
-		std::vector<hiprtDevicePtr>&			 buffers );
+		std::vector<hiprtDevicePtr>&			 buffers ) override;
 
-	size_t
-	getScenesBuildTempBufferSize( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
+	size_t getScenesBuildTempBufferSize(
+		const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions ) override;
 
-	std::vector<hiprtScene> compactScenes( const std::vector<hiprtScene>& scenes, oroStream stream );
+	std::vector<hiprtScene> compactScenes( const std::vector<hiprtScene>& scenes, oroStream stream ) override;
 
-	hiprtFuncTable createFuncTable( uint32_t numGeomTypes, uint32_t numRayTypes );
-	void		   setFuncTable( hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set );
-	void		   destroyFuncTable( hiprtFuncTable funcTable );
+	hiprtFuncTable createFuncTable( uint32_t numGeomTypes, uint32_t numRayTypes ) override;
+	void		   setFuncTable( hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set ) override;
+	void		   destroyFuncTable( hiprtFuncTable funcTable ) override;
 
-	void createGlobalStackBuffer( const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut );
-	void destroyGlobalStackBuffer( hiprtGlobalStackBuffer stackBuffer );
+	void createGlobalStackBuffer( const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut ) override;
+	void destroyGlobalStackBuffer( hiprtGlobalStackBuffer stackBuffer ) override;
 
-	void		  saveGeometry( hiprtGeometry inGeometry, const std::string& filename );
-	hiprtGeometry loadGeometry( const std::string& filename );
+	void		  saveGeometry( hiprtGeometry inGeometry, const std::string& filename ) override;
+	hiprtGeometry loadGeometry( const std::string& filename ) override;
 
-	void	   saveScene( hiprtScene inScene, const std::string& filename );
-	hiprtScene loadScene( const std::string& filename );
+	void	   saveScene( hiprtScene inScene, const std::string& filename ) override;
+	hiprtScene loadScene( const std::string& filename ) override;
 
-	void exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax );
-	void exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax );
+	void exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax ) override;
+	void exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax ) override;
 
 	void buildKernels(
 		const std::vector<const char*>&		 funcNames,
@@ -114,7 +116,7 @@ class Context
 		const std::vector<hiprtFuncNameSet>& funcNameSets,
 		std::vector<oroFunction>&			 functions,
 		oroModule&							 module,
-		bool								 cache );
+		bool								 cache ) override;
 
 	void buildKernelsFromBitcode(
 		const std::vector<const char*>&		 funcNames,
@@ -124,11 +126,20 @@ class Context
 		uint32_t							 numRayTypes,
 		const std::vector<hiprtFuncNameSet>& funcNameSets,
 		std::vector<oroFunction>&			 functions,
-		bool								 cache );
+		bool								 cache ) override;
 
-	void setCacheDir( const std::filesystem::path& path );
+	void setCacheDir( const std::filesystem::path& path ) override;
 
-	void setLogLevel( hiprtLogLevel level ) { m_logger.setLevel( level ); }
+	void setLogLevel( hiprtLogLevel level ) override { m_logger.setLevel( level ); }
+
+	struct CpuGeometryData* getCpuGeom( hiprtGeometry ) override
+	{
+		return nullptr;
+	};
+	struct CpuSceneData*	getCpuScene( hiprtScene )	override
+	{
+		return nullptr;
+	};
 
 	template <typename... Args>
 	void logInfo( Args... args ) const
@@ -147,6 +158,7 @@ class Context
 	{
 		m_logger.print( hiprtLogLevelError, args... );
 	}
+
 
 	uint32_t	getSMCount() const;
 	uint32_t	getMaxBlockSize() const;

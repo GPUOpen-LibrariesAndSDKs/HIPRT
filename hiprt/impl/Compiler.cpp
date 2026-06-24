@@ -26,7 +26,7 @@
 #include <hiprt/impl/Compiler.h>
 #include <hiprt/impl/Error.h>
 #include <hiprt/impl/Utility.h>
-#include <hiprt/impl/Context.h>
+#include <hiprt/impl/GpuContext.h>
 #include <regex>
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
 #include <hiprt/cache/Kernels.h>
@@ -110,7 +110,7 @@ Compiler::~Compiler()
 }
 
 Kernel Compiler::getKernel(
-	Context&					 context,
+	GpuContext&					 context,
 	const std::filesystem::path& moduleName,
 	const std::string&			 funcName,
 	std::vector<const char*>&	 options,
@@ -230,7 +230,7 @@ void Compiler::buildProgram(
 }
 
 void Compiler::buildKernels(
-	Context&							 context,
+	GpuContext&							 context,
 	const std::vector<const char*>&		 funcNames,
 	const std::string&					 src,
 	const std::filesystem::path&		 moduleName,
@@ -336,7 +336,7 @@ void Compiler::buildKernels(
 }
 
 void Compiler::buildKernelsFromBitcode(
-	Context&							 context,
+	GpuContext&							 context,
 	const std::vector<const char*>&		 funcNames,
 	const std::filesystem::path&		 moduleName,
 	const std::string_view				 bitcodeBinary,
@@ -511,7 +511,7 @@ Compiler::readSourceCode( const std::filesystem::path& path, std::optional<std::
 	return src;
 }
 
-void Compiler::addCommonOpts( Context& context, std::vector<const char*>& opts, bool extended )
+void Compiler::addCommonOpts( GpuContext& context, std::vector<const char*>& opts, bool extended )
 {
 	if ( !extended ) // do not use fast math for trace kernel (the fast math option can be passed from the application)
 	{
@@ -625,7 +625,7 @@ void Compiler::addCustomFuncsSwitchCase(
 }
 
 std::string Compiler::getCacheFilename(
-	Context&									 context,
+	GpuContext&									 context,
 	const std::string&							 src,
 	const std::filesystem::path&				 moduleName,
 	std::optional<std::vector<const char*>>		 options,
@@ -813,7 +813,7 @@ oroFunction Compiler::getFunctionFromPrecompiledBinary( const std::string& funcN
 }
 
 std::string Compiler::buildFunctionTableBitcode(
-	Context& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets )
+	GpuContext& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets )
 {
 	if constexpr ( BakedCodeIsGenerated )
 	{

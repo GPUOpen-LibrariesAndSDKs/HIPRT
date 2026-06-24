@@ -25,7 +25,7 @@
 #pragma once
 #include <hiprt/impl/Aabb.h>
 #include <hiprt/impl/BvhNode.h>
-#include <hiprt/impl/Context.h>
+#include <hiprt/impl/GpuContext.h>
 #include <hiprt/impl/Header.h>
 #include <hiprt/impl/Kernel.h>
 #include <hiprt/impl/MemoryArena.h>
@@ -49,22 +49,22 @@ class BvhImporter
 
 	template <typename BuildInput>
 	static size_t
-	getTemporaryBufferSize( Context& context, const BuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getTemporaryBufferSize( GpuContext& context, const BuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getTemporaryBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getTemporaryBufferSize( GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getTemporaryBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getTemporaryBufferSize( GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getStorageBufferSize( GpuContext& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static size_t
-	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
+	getStorageBufferSize( GpuContext& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static void build(
-		Context&					   context,
+		GpuContext&					   context,
 		const hiprtGeometryBuildInput& buildInput,
 		const hiprtBuildOptions		   buildOptions,
 		hiprtDevicePtr				   temporaryBuffer,
@@ -72,7 +72,7 @@ class BvhImporter
 		hiprtDevicePtr				   buffer );
 
 	static void build(
-		Context&					context,
+		GpuContext&					context,
 		const hiprtSceneBuildInput& buildInput,
 		const hiprtBuildOptions		buildOptions,
 		hiprtDevicePtr				temporaryBuffer,
@@ -81,7 +81,7 @@ class BvhImporter
 
 	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void build(
-		Context&				context,
+		GpuContext&				context,
 		PrimitiveContainer&		primitives,
 		NodeList&				nodes,
 		const hiprtBuildOptions buildOptions,
@@ -91,7 +91,7 @@ class BvhImporter
 		MemoryArena&			storageMemoryArena );
 
 	static void update(
-		Context&					   context,
+		GpuContext&					   context,
 		const hiprtGeometryBuildInput& buildInput,
 		const hiprtBuildOptions		   buildOptions,
 		hiprtDevicePtr				   temporaryBuffer,
@@ -99,7 +99,7 @@ class BvhImporter
 		hiprtDevicePtr				   buffer );
 
 	static void update(
-		Context&					context,
+		GpuContext&					context,
 		const hiprtSceneBuildInput& buildInput,
 		const hiprtBuildOptions		buildOptions,
 		hiprtDevicePtr				temporaryBuffer,
@@ -108,7 +108,7 @@ class BvhImporter
 
 	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void update(
-		Context&				context,
+		GpuContext&				context,
 		PrimitiveContainer&		primitives,
 		const NodeList&			nodes,
 		const hiprtBuildOptions buildOptions,
@@ -118,7 +118,7 @@ class BvhImporter
 
 template <typename BuildInput>
 size_t
-BvhImporter::getTemporaryBufferSize( Context& context, const BuildInput& buildInput, const hiprtBuildOptions buildOptions )
+BvhImporter::getTemporaryBufferSize( GpuContext& context, const BuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	const bool kdops = context.getRtip() >= 31 && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableOrientedBoundingBoxes );
 	const size_t count		  = buildInput.nodeList.nodeCount;
@@ -133,7 +133,7 @@ BvhImporter::getTemporaryBufferSize( Context& context, const BuildInput& buildIn
 
 template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void BvhImporter::build(
-	Context&				context,
+	GpuContext&				context,
 	PrimitiveContainer&		primitives,
 	NodeList&				nodes,
 	const hiprtBuildOptions buildOptions,
@@ -360,7 +360,7 @@ void BvhImporter::build(
 
 template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void BvhImporter::update(
-	Context&				context,
+	GpuContext&				context,
 	PrimitiveContainer&		primitives,
 	const NodeList&			nodes,
 	const hiprtBuildOptions buildOptions,
