@@ -2250,14 +2250,20 @@ inline static hipError_t hipChooseDeviceR0600_cu4oro(int* device, const hipDevic
     cdprop.regsPerBlock = prop->regsPerBlock;
     cdprop.warpSize = prop->warpSize;
     cdprop.maxThreadsPerBlock = prop->maxThreadsPerBlock;
+#if CUDA_VERSION < 13000
     cdprop.clockRate = prop->clockRate;
+#endif
     cdprop.totalConstMem = prop->totalConstMem;
     cdprop.multiProcessorCount = prop->multiProcessorCount;
     cdprop.l2CacheSize = prop->l2CacheSize;
     cdprop.maxThreadsPerMultiProcessor = prop->maxThreadsPerMultiProcessor;
+#if CUDA_VERSION < 13000
     cdprop.computeMode = prop->computeMode;
+#endif
     cdprop.canMapHostMemory = prop->canMapHostMemory;
+#if CUDA_VERSION < 13000
     cdprop.memoryClockRate = prop->memoryClockRate;
+#endif
     cdprop.memoryBusWidth = prop->memoryBusWidth;
     return hipCUDAErrorTohipError(cudaChooseDevice(device, &cdprop));
 }
@@ -2635,21 +2641,31 @@ inline static hipError_t hipGetDevicePropertiesR0600_cu4oro(hipDeviceProp_t* p_p
     p_prop->maxGridSize[0] = cdprop.maxGridSize[0];
     p_prop->maxGridSize[1] = cdprop.maxGridSize[1];
     p_prop->maxGridSize[2] = cdprop.maxGridSize[2];
+#if CUDA_VERSION < 13000
     p_prop->clockRate = cdprop.clockRate;
+#endif
     p_prop->totalConstMem = cdprop.totalConstMem;
     p_prop->major = cdprop.major;
     p_prop->minor = cdprop.minor;
     p_prop->textureAlignment = cdprop.textureAlignment;
     p_prop->texturePitchAlignment = cdprop.texturePitchAlignment;
+#if CUDA_VERSION < 13000
     p_prop->deviceOverlap = cdprop.deviceOverlap;
+#endif
     p_prop->multiProcessorCount = cdprop.multiProcessorCount;
+#if CUDA_VERSION < 13000
     p_prop->kernelExecTimeoutEnabled = cdprop.kernelExecTimeoutEnabled;
+#endif
     p_prop->integrated = cdprop.integrated;
     p_prop->canMapHostMemory = cdprop.canMapHostMemory;
+#if CUDA_VERSION < 13000
     p_prop->computeMode = cdprop.computeMode;
+#endif
     p_prop->maxTexture1D = cdprop.maxTexture1D;
     p_prop->maxTexture1DMipmap = cdprop.maxTexture1DMipmap;
+#if CUDA_VERSION < 13000
     p_prop->maxTexture1DLinear = cdprop.maxTexture1DLinear;
+#endif
     p_prop->maxTexture2D[0] = cdprop.maxTexture2D[0];
     p_prop->maxTexture2D[1] = cdprop.maxTexture2D[1];
     p_prop->maxTexture2DMipmap[0] = cdprop.maxTexture2DMipmap[0];
@@ -2696,7 +2712,9 @@ inline static hipError_t hipGetDevicePropertiesR0600_cu4oro(hipDeviceProp_t* p_p
     p_prop->tccDriver = cdprop.tccDriver;
     p_prop->asyncEngineCount = cdprop.asyncEngineCount;
     p_prop->unifiedAddressing = cdprop.unifiedAddressing;
+#if CUDA_VERSION < 13000
     p_prop->memoryClockRate = cdprop.memoryClockRate;
+#endif
     p_prop->memoryBusWidth = cdprop.memoryBusWidth;
     p_prop->l2CacheSize = cdprop.l2CacheSize;
     p_prop->maxThreadsPerMultiProcessor = cdprop.maxThreadsPerMultiProcessor;
@@ -2709,13 +2727,17 @@ inline static hipError_t hipGetDevicePropertiesR0600_cu4oro(hipDeviceProp_t* p_p
     p_prop->isMultiGpuBoard = cdprop.isMultiGpuBoard;
     p_prop->multiGpuBoardGroupID = cdprop.multiGpuBoardGroupID;
     p_prop->hostNativeAtomicSupported = cdprop.hostNativeAtomicSupported;
+#if CUDA_VERSION < 13000
     p_prop->singleToDoublePrecisionPerfRatio = cdprop.singleToDoublePrecisionPerfRatio;
+#endif
     p_prop->pageableMemoryAccess = cdprop.pageableMemoryAccess;
     p_prop->concurrentManagedAccess = cdprop.concurrentManagedAccess;
     p_prop->computePreemptionSupported = cdprop.computePreemptionSupported;
     p_prop->canUseHostPointerForRegisteredMem = cdprop.canUseHostPointerForRegisteredMem;
     p_prop->cooperativeLaunch = cdprop.cooperativeLaunch;
+#if CUDA_VERSION < 13000
     p_prop->cooperativeMultiDeviceLaunch = cdprop.cooperativeMultiDeviceLaunch;
+#endif
     p_prop->sharedMemPerBlockOptin = cdprop.sharedMemPerBlockOptin;
     p_prop->pageableMemoryAccessUsesHostPageTables = cdprop.pageableMemoryAccessUsesHostPageTables;
     p_prop->directManagedMemAccessFromHost = cdprop.directManagedMemAccessFromHost;
@@ -2871,7 +2893,11 @@ inline static hipError_t hipDeviceGetAttribute_cu4oro(int* pi, hipDeviceAttribut
             cdattr = cudaDevAttrCooperativeLaunch;
             break;
         case hipDeviceAttributeCooperativeMultiDeviceLaunch:
+#if CUDA_VERSION < 13000
             cdattr = cudaDevAttrCooperativeMultiDeviceLaunch;
+#else
+            cdattr = cudaDevAttrCooperativeLaunch;
+#endif
             break;
         case hipDeviceAttributeHostRegisterSupported:
             cdattr = cudaDevAttrHostRegisterSupported;
@@ -3331,7 +3357,11 @@ inline static hipError_t hipEventQuery_cu4oro(hipEvent_t event) {
 }
 
 inline static hipError_t hipCtxCreate_cu4oro(hipCtx_t* ctx, unsigned int flags, hipDevice_t device) {
+#if CUDA_VERSION >= 13000
+    return hipCUResultTohipError(cuCtxCreate(ctx, nullptr, flags, device));
+#else
     return hipCUResultTohipError(cuCtxCreate(ctx, flags, device));
+#endif
 }
 
 inline static hipError_t hipCtxDestroy_cu4oro(hipCtx_t ctx) {

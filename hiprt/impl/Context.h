@@ -30,9 +30,11 @@
 #include <hiprt/impl/Logger.h>
 #include <ParallelPrimitives/RadixSort.h>
 
+#include <hiprt/impl/ContextBase.h>
+
 namespace hiprt
 {
-class Context
+class Context : public ContextBase
 {
   public:
 	Context( const hiprtContextCreationInput& input );
@@ -99,8 +101,8 @@ class Context
 	void	   saveScene( hiprtScene inScene, const std::string& filename );
 	hiprtScene loadScene( const std::string& filename );
 
-	void exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax );
-	void exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax );
+	virtual void exportGeometryAabb( hiprtGeometry inGeometry, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax ) override;
+	virtual void exportSceneAabb( hiprtScene inScene, hiprtFloat3& outAabbMin, hiprtFloat3& outAabbMax ) override;
 
 	void buildKernels(
 		const std::vector<const char*>&		 funcNames,
@@ -148,6 +150,11 @@ class Context
 		m_logger.print( hiprtLogLevelError, args... );
 	}
 
+	virtual void logError( const char* msg ) const override
+	{
+		m_logger.print( hiprtLogLevelError, msg );
+	}
+
 	uint32_t	getSMCount() const;
 	uint32_t	getMaxBlockSize() const;
 	uint32_t	getMaxGridSize() const;
@@ -165,6 +172,9 @@ class Context
 	size_t	 getTriangleNodeSize() const;
 	size_t	 getBoxNodeSize() const;
 	size_t	 getInstanceNodeSize() const;
+
+	virtual CpuGeometryData* getCpuGeom( hiprtGeometry geom ) override { return nullptr; }
+	virtual CpuSceneData* getCpuScene( hiprtScene scene ) override { return nullptr; }
 
   private:
 	oroDevice	m_device;

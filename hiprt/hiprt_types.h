@@ -309,12 +309,14 @@ struct hiprtFuncNameSet
 /** \brief Device type.
  *
  */
-enum hiprtDeviceType
+enum hiprtDeviceType : uint32_t
 {
 	/*!< AMD device */
-	hiprtDeviceAMD,
+	hiprtDeviceAMD    = 1 << 0,
 	/*!< Nvidia device */
-	hiprtDeviceNVIDIA,
+	hiprtDeviceNVIDIA = 1 << 1,
+	/*!< CPU device */
+	hiprtDeviceCPU    = 1 << 2,
 };
 
 /** \brief Context creation input.
@@ -328,6 +330,8 @@ struct hiprtContextCreationInput
 	hiprtApiDevice device;
 	/*!< HIPRT API device type */
 	hiprtDeviceType deviceType;
+	/*!< Number of CPU threads (0 = use all available hardware threads) */
+	uint32_t numCpuThreads = 0;
 };
 
 /** \brief Various flags controlling scene/geometry build process.

@@ -591,6 +591,9 @@ if(WIN32)
 	target_link_libraries(${HIPRT_NAME} version)
 endif()
 
+if(WIN32 AND cuda_path)
+	target_link_libraries(${HIPRT_NAME} "${cuda_path}/lib/x64/cuda.lib" "${cuda_path}/lib/x64/cudart.lib")
+endif()
 
 target_include_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/Orochi)
@@ -719,4 +722,17 @@ if(HIPRTEW)
 	target_include_directories(hiprtewtest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/gtest-1.6.0)
 
 	target_compile_definitions(hiprtewtest PRIVATE GTEST_HAS_TR1_TUPLE=0)
+endif()
+
+
+
+# Fix hiprt03001 to find embree
+target_include_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/include)
+target_compile_definitions(${HIPRT_NAME} PRIVATE HIPEW_DO_NOT_CHECK_VERSION)
+if(WIN32)
+	target_link_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/win)
+	target_link_libraries(${HIPRT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/win/embree4.lib)
+elseif(UNIX)
+	target_link_directories(${HIPRT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/contrib/embree/linux)
+	target_link_libraries(${HIPRT_NAME} embree4 tbb)
 endif()

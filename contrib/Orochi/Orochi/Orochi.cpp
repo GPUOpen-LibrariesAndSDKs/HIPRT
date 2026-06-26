@@ -23,6 +23,7 @@
 
 
 #include <Orochi/Orochi.h>
+#include <iostream>
 #include <stdio.h>
 #include <string.h>
 #include <unordered_map>
@@ -844,6 +845,9 @@ int oroInitialize( oroApi api, oroU32 flags,
 	int e = 0;
 	s_loadedApis = 0;
 
+	if( api == ORO_API_AUTOMATIC )
+		api = (oroApi)(ORO_API_CUDA | ORO_API_HIP);
+
 	if( api & ORO_API_CUDA )
 	{
 		#ifdef OROCHI_ENABLE_CUEW
@@ -1154,7 +1158,11 @@ oroError OROAPI oroCtxCreate(oroCtx* pctx, unsigned int flags, oroDevice dev)
 	if( s_api & ORO_API_CUDADRIVER ) 
 	{
 		#ifdef OROCHI_ENABLE_CUEW
+		#if CUDA_VERSION >= 13000
+		CU4ORO::CUresult e = CU4ORO::cuCtxCreate( oroCtx2cu( pctx ), nullptr, flags, d.getDevice() );
+		#else
 		CU4ORO::CUresult e = CU4ORO::cuCtxCreate( oroCtx2cu( pctx ), flags, d.getDevice() );
+		#endif
 		if ( e != CU4ORO::CUDA_SUCCESS )
 			return cu2oro(e);
 		#endif

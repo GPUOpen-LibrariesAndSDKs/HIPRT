@@ -99,8 +99,8 @@ static DynamicLibrary nvrtc_lib = NULL;
 // It's recommanded to use similar versions in the #include of CUDA SDK.
 // If this assert is wrong, it's advised either to install a CUDA SDK closed to version 12020 or search on the Orochi github a branch matching the CUDA SDK you are using.
 // checking the major-version number only:
-static_assert(  ((int)CUDA_VERSION / (int)1000) ==  ((int)12020/ (int)1000)  );
-static_assert(  ((int)CUDART_VERSION / (int)1000) ==  ((int)12020/ (int)1000)  );
+static_assert(  ((int)CUDA_VERSION / (int)1000) ==  ((int)12020/ (int)1000) || ((int)CUDA_VERSION / (int)1000) ==  ((int)13000/ (int)1000)  );
+static_assert(  ((int)CUDART_VERSION / (int)1000) ==  ((int)12020/ (int)1000) || ((int)CUDART_VERSION / (int)1000) ==  ((int)13000/ (int)1000)  );
 #endif
 
 
@@ -862,7 +862,7 @@ static int cuewCudaInit(const char** customPaths_Cuda, const char** customPaths_
 #ifdef _WIN32
   // Expected in c:/windows/system or similar, no path needed.
   const char *cuda_paths[] = {"nvcuda.dll", NULL};
-  const char *cudart_paths[] = {"cudart64_12.dll", NULL};
+  const char *cudart_paths[] = {"cudart64_13.dll", "cudart64_12.dll", NULL};
 #elif defined(__APPLE__)
   // Default installation path.
   const char *cuda_paths[] = {"/usr/local/cuda/lib/libcuda.dylib", NULL};
@@ -1629,7 +1629,8 @@ static int cuewNvrtcInit(const char** customPaths_NvRTC)
   /* Library paths. */
 #ifdef _WIN32
   /* Expected in c:/windows/system or similar, no path needed. */
-  const char* nvrtc_paths[] = {"nvrtc64_120_0.dll",
+  const char* nvrtc_paths[] = {"nvrtc64_130_0.dll",
+                               "nvrtc64_120_0.dll",
                                "nvrtc64_112_0.dll",
                                "nvrtc64_101_0.dll",
                                "nvrtc64_100_0.dll",
