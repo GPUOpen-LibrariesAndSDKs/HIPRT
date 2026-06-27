@@ -46,6 +46,10 @@
 #  define WIN32_LEAN_AND_MEAN
 #  define VC_EXTRALEAN
 #  include <windows.h>
+#  include <algorithm>
+#  include <cstdlib>
+#  include <string>
+#  include <vector>
 
 /* Utility macros. */
 
@@ -54,6 +58,93 @@ typedef HMODULE DynamicLibrary;
 #  define dynamic_library_open(path)         LoadLibraryA(path)
 #  define dynamic_library_close(lib)         FreeLibrary(lib)
 #  define dynamic_library_find(lib, symbol)  GetProcAddress(lib, symbol)
+
+static std::string hipew_get_env(const char* name)
+{
+  char* value = nullptr;
+  size_t size = 0;
+  if (_dupenv_s(&value, &size, name) != 0 || value == nullptr)
+    return std::string();
+  std::string result(value);
+  std::free(value);
+  return result;
+}
+
+static bool hipew_directory_exists(const std::string& path)
+{
+  if (path.empty())
+    return false;
+  DWORD attributes = GetFileAttributesA(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static std::string hipew_join_path(const std::string& base, const char* leaf)
+{
+  if (base.empty())
+    return std::string(leaf);
+  const char last = base.back();
+  if (last == '\\' || last == '/')
+    return base + leaf;
+  return base + "\\" + leaf;
+}
+
+static void hipew_append_unique(std::vector<std::string>& paths, const std::string& path)
+{
+  if (path.empty() || std::find(paths.begin(), paths.end(), path) != paths.end())
+    return;
+  paths.push_back(path);
+}
+
+static void hipew_append_rocm_bin(std::vector<std::string>& paths, const std::string& root)
+{
+  if (root.empty())
+    return;
+  if (hipew_directory_exists(root))
+    hipew_append_unique(paths, root);
+  const std::string bin = hipew_join_path(root, "bin");
+  if (hipew_directory_exists(bin))
+    hipew_append_unique(paths, bin);
+}
+
+static std::vector<std::string> hipew_rocm_bin_paths()
+{
+  std::vector<std::string> result;
+
+  hipew_append_rocm_bin(result, hipew_get_env("ROCM_HOME"));
+  hipew_append_rocm_bin(result, hipew_get_env("ROCM_PATH"));
+  hipew_append_rocm_bin(result, hipew_get_env("HIP_PATH"));
+
+  const std::string virtual_env = hipew_get_env("VIRTUAL_ENV");
+  if (!virtual_env.empty()) {
+    hipew_append_rocm_bin(result, hipew_join_path(virtual_env, "Lib\\site-packages\\_rocm_sdk_devel"));
+    hipew_append_rocm_bin(result, hipew_join_path(virtual_env, "Lib\\site-packages\\rocm_sdk_devel"));
+  }
+
+  return result;
+}
+
+static const char** hipew_make_library_paths(
+    const char* const* dll_names,
+    std::vector<std::string>& storage,
+    std::vector<const char*>& pointers)
+{
+  storage.clear();
+  pointers.clear();
+
+  const std::vector<std::string> rocm_bins = hipew_rocm_bin_paths();
+
+  for (size_t i = 0; dll_names[i] != nullptr; ++i) {
+    hipew_append_unique(storage, dll_names[i]);
+    for (const std::string& bin : rocm_bins)
+      hipew_append_unique(storage, hipew_join_path(bin, dll_names[i]));
+  }
+
+  for (const std::string& path : storage)
+    pointers.push_back(path.c_str());
+  pointers.push_back(nullptr);
+
+  return pointers.data();
+}
 #else
 #  include <dlfcn.h>
 
@@ -619,12 +710,18 @@ void hipewInit( int* resultDriver, int* resultRtc, uint32_t flags, const char** 
 
 #ifdef _WIN32
   // Expected in C:/Windows/System32 or similar, no path needed.
-  const char* hip_paths[] = {
+  const char* hip_dll_names[] = {
       "amdhip64_7.dll", 
       "amdhip64_6.dll", 
       "amdhip64.dll",   // <- hip '5.x' DLL.
       NULL };
-  const char* hiprtc_paths[] = {
+  const char* hiprtc_dll_names[] = {
+      "hiprtc07013.dll",
+      "hiprtc07012.dll",
+      "hiprtc07011.dll",
+      "hiprtc07010.dll",
+      "hiprtc0709.dll",
+      "hiprtc0708.dll",
       "hiprtc0707.dll",
       "hiprtc0706.dll",
       "hiprtc0705.dll",
@@ -645,6 +742,12 @@ void hipewInit( int* resultDriver, int* resultRtc, uint32_t flags, const char** 
       "hiprtc0504.dll",
       "hiprtc0503.dll",
       NULL };
+  static std::vector<std::string> hip_path_storage;
+  static std::vector<const char*> hip_path_pointers;
+  static std::vector<std::string> hiprtc_path_storage;
+  static std::vector<const char*> hiprtc_path_pointers;
+  const char** hip_paths = hipew_make_library_paths(hip_dll_names, hip_path_storage, hip_path_pointers);
+  const char** hiprtc_paths = hipew_make_library_paths(hiprtc_dll_names, hiprtc_path_storage, hiprtc_path_pointers);
 #elif defined(__APPLE__)
   // Default installation path. 
   const char *hip_paths[] = {"", NULL};

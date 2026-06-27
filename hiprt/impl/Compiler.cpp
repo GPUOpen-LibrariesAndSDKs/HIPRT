@@ -28,6 +28,10 @@
 #include <hiprt/impl/Utility.h>
 #include <hiprt/impl/Context.h>
 #include <regex>
+#if defined( _WIN32 )
+#define NOMINMAX
+#include <Windows.h>
+#endif
 #if defined( HIPRT_BAKE_KERNEL_GENERATED )
 #include <hiprt/cache/Kernels.h>
 #include <hiprt/cache/KernelArgs.h>
@@ -70,17 +74,36 @@ HIPRT_STATIC_ASSERT( !UseBakedCode || BakedCodeIsGenerated );
 namespace hiprt
 {
 
+#if defined( _WIN32 )
+template <typename T> T hiprtcSymbol( const char* name )
+{
+	HMODULE module = GetModuleHandleA( "hiprtc07013.dll" );
+	if ( !module )
+	{
+		std::string path = Utility::getEnvVariable( "HIP_PATH" );
+		if ( !path.empty() ) path += "\\bin\\hiprtc07013.dll";
+		module = LoadLibraryA( path.empty() ? "hiprtc07013.dll" : path.c_str() );
+	}
+	if ( !module ) throw std::runtime_error( "Could not load hiprtc07013.dll" );
+	auto result = reinterpret_cast<T>( GetProcAddress( module, name ) );
+	if ( !result ) throw std::runtime_error( std::string( "Could not resolve " ) + name );
+	return result;
+}
+#endif
+
 void Compiler::init()
 {
-	if ( UseBitcode || UseBakedCompiledKernel || hiprtcCreateProgram == nullptr || hiprtcCompileProgram == nullptr ||
-		 hiprtcDestroyProgram == nullptr )
+	if ( UseBitcode || UseBakedCompiledKernel )
 	{
 		// If we use the precompiled bitcode, we won't check RTIP 3.1 support through HIPRTC.
-		// Or, if the HIP Run Time Compiler is not loaded (e.g. hiprtc0604.dll) , we can't check RTIP 3.1 support.
-
 		// We'll assume it's supported, and Context::getRtip is supposed to make extra checks to be sure it's actually
 		// supported.
 		m_rtip31Support = true;
+	}
+	else if ( hiprtcCreateProgram == nullptr || hiprtcCompileProgram == nullptr || hiprtcDestroyProgram == nullptr )
+	{
+		throw std::runtime_error(
+			"HIPRT could not load HIPRTC. Make sure the ROCm HIPRTC DLL (for example hiprtc07013.dll) is on PATH." );
 	}
 	else
 	{
@@ -201,29 +224,78 @@ void Compiler::buildProgram(
 	std::vector<const char*>&		headers,
 	std::vector<const char*>&		includeNames,
 	std::vector<const char*>&		options,
-	orortcProgram&					progOut )
+	orortcProgram&					progOut,
+	bool							amd )
 {
-	checkOrortc( orortcCreateProgram(
-		&progOut,
-		src.c_str(),
-		moduleName.string().c_str(),
-		static_cast<int>( headers.size() ),
-		headers.data(),
-		includeNames.data() ) );
+	std::string programName = moduleName.string();
+	if ( amd )
+	{
+		programName = moduleName.filename().string();
+		if ( programName.empty() ) programName = "hiprt_program";
+		programName += ".hip";
+	}
+	const int	  headerCount = static_cast<int>( headers.size() );
+	const char** headerPtr	  = headerCount ? headers.data() : nullptr;
+	const char** includePtr	  = headerCount ? includeNames.data() : nullptr;
 
-	for ( size_t i = 0; i < funcNames.size(); ++i )
-		checkOrortc( orortcAddNameExpression( progOut, funcNames[i] ) );
+	if ( amd )
+	{
+		hiprtcProgram hipProg = nullptr;
+		using CreateProgramFn =
+			hiprtcResult ( * )( hiprtcProgram*, const char*, const char*, int, const char**, const char** );
+		checkOrortc( static_cast<orortcResult>( hiprtcSymbol<CreateProgramFn>( "hiprtcCreateProgram" )(
+			&hipProg,
+			src.c_str(),
+			programName.c_str(),
+			headerCount,
+			headerPtr,
+			includePtr ) ) );
+		progOut = reinterpret_cast<orortcProgram>( hipProg );
+	}
+	else
+	{
+		checkOrortc( orortcCreateProgram(
+			&progOut,
+			src.c_str(),
+			programName.c_str(),
+			headerCount,
+			headerPtr,
+			includePtr ) );
+	}
 
-	orortcResult e = orortcCompileProgram( progOut, static_cast<int>( options.size() ), options.data() );
+	// HIPRT requests exported C kernel names in the AMD path, so there is no
+	// lowering step needed here.
+
+	orortcResult e = amd
+						 ? static_cast<orortcResult>( hiprtcSymbol<hiprtcResult ( * )( hiprtcProgram, int, const char** )>(
+							   "hiprtcCompileProgram" )(
+							   reinterpret_cast<hiprtcProgram>( progOut ), static_cast<int>( options.size() ), options.data() ) )
+						 : orortcCompileProgram( progOut, static_cast<int>( options.size() ), options.data() );
 	if ( e != ORORTC_SUCCESS )
 	{
 		size_t logSize;
-		checkOrortc( orortcGetProgramLogSize( progOut, &logSize ) );
+		if ( amd )
+		{
+			using GetProgramLogSizeFn = hiprtcResult ( * )( hiprtcProgram, size_t* );
+			checkOrortc( static_cast<orortcResult>(
+				hiprtcSymbol<GetProgramLogSizeFn>( "hiprtcGetProgramLogSize" )(
+					reinterpret_cast<hiprtcProgram>( progOut ), &logSize ) ) );
+		}
+		else
+			checkOrortc( orortcGetProgramLogSize( progOut, &logSize ) );
 
 		if ( logSize )
 		{
 			std::string log( logSize, '\0' );
-			checkOrortc( orortcGetProgramLog( progOut, &log[0] ) );
+			if ( amd )
+			{
+				using GetProgramLogFn = hiprtcResult ( * )( hiprtcProgram, char* );
+				checkOrortc( static_cast<orortcResult>(
+					hiprtcSymbol<GetProgramLogFn>( "hiprtcGetProgramLog" )(
+						reinterpret_cast<hiprtcProgram>( progOut ), &log[0] ) ) );
+			}
+			else
+				checkOrortc( orortcGetProgramLog( progOut, &log[0] ) );
 			throw std::runtime_error( "Runtime compilation failed:\n" + log );
 		}
 	}
@@ -311,16 +383,94 @@ void Compiler::buildKernels(
 			std::string				 includePath = "-I" + Utility::getRootDir().string();
 			opts.push_back( includePath.c_str() );
 			addCommonOpts( context, opts, extended );
+			const bool amd = context.getDeviceName().find( "NVIDIA" ) == std::string::npos;
 
-			buildProgram( funcNames, extSrc, moduleName, headers, includeNames, opts, prog );
+			buildProgram( funcNames, extSrc, moduleName, headers, includeNames, opts, prog, amd );
 
-			size_t binarySize = 0;
-			checkOrortc( orortcGetCodeSize( prog, &binarySize ) );
+			size_t	   binarySize = 0;
+			if ( amd )
+			{
+#if defined( _WIN32 )
+				using GetCodeSizeFn = hiprtcResult ( * )( hiprtcProgram, size_t* );
+				checkOrortc( static_cast<orortcResult>(
+					hiprtcSymbol<GetCodeSizeFn>( "hiprtcGetCodeSize" )( reinterpret_cast<hiprtcProgram>( prog ), &binarySize ) ) );
+#else
+				checkOrortc( static_cast<orortcResult>( hiprtcGetCodeSize( reinterpret_cast<hiprtcProgram>( prog ), &binarySize ) ) );
+#endif
+			}
+			else
+				checkOrortc( orortcGetCodeSize( prog, &binarySize ) );
+			if ( binarySize == 0 )
+			{
+				size_t logSize = 0;
+				if ( amd )
+				{
+#if defined( _WIN32 )
+					using GetProgramLogSizeFn = hiprtcResult ( * )( hiprtcProgram, size_t* );
+					checkOrortc( static_cast<orortcResult>(
+						hiprtcSymbol<GetProgramLogSizeFn>( "hiprtcGetProgramLogSize" )(
+							reinterpret_cast<hiprtcProgram>( prog ), &logSize ) ) );
+#else
+					checkOrortc(
+						static_cast<orortcResult>( hiprtcGetProgramLogSize( reinterpret_cast<hiprtcProgram>( prog ), &logSize ) ) );
+#endif
+				}
+				else
+					checkOrortc( orortcGetProgramLogSize( prog, &logSize ) );
+				std::string log;
+				if ( logSize )
+				{
+					log.resize( logSize, '\0' );
+					if ( amd )
+					{
+#if defined( _WIN32 )
+						using GetProgramLogFn = hiprtcResult ( * )( hiprtcProgram, char* );
+						checkOrortc( static_cast<orortcResult>(
+							hiprtcSymbol<GetProgramLogFn>( "hiprtcGetProgramLog" )(
+								reinterpret_cast<hiprtcProgram>( prog ), &log[0] ) ) );
+#else
+						checkOrortc(
+							static_cast<orortcResult>( hiprtcGetProgramLog( reinterpret_cast<hiprtcProgram>( prog ), &log[0] ) ) );
+#endif
+					}
+					else
+						checkOrortc( orortcGetProgramLog( prog, &log[0] ) );
+				}
+				std::string optsString;
+				for ( const char* opt : opts )
+					optsString += std::string( opt ? opt : "<null>" ) + "\n";
+				throw std::runtime_error(
+					"HIPRT runtime compilation produced an empty code object for '" + moduleName.string() +
+					"' (source size " + std::to_string( extSrc.size() ) + ", contains InitGeomData=" +
+					( extSrc.find( "InitGeomData" ) != std::string::npos ? "yes" : "no" ) +
+					"). Options:\n" + optsString + "Compiler log:\n" + log );
+			}
 			binary.resize( binarySize );
-			checkOrortc( orortcGetCode( prog, binary.data() ) );
+			if ( amd )
+			{
+#if defined( _WIN32 )
+				using GetCodeFn = hiprtcResult ( * )( hiprtcProgram, char* );
+				checkOrortc( static_cast<orortcResult>(
+					hiprtcSymbol<GetCodeFn>( "hiprtcGetCode" )( reinterpret_cast<hiprtcProgram>( prog ), binary.data() ) ) );
+#else
+				checkOrortc( static_cast<orortcResult>( hiprtcGetCode( reinterpret_cast<hiprtcProgram>( prog ), binary.data() ) ) );
+#endif
+			}
+			else
+				checkOrortc( orortcGetCode( prog, binary.data() ) );
 
 			if ( cache ) cacheBinaryToFile( binary, cacheName, context.getDeviceName() );
-			checkOrortc( orortcDestroyProgram( &prog ) );
+			if ( amd )
+			{
+				using DestroyProgramFn = hiprtcResult ( * )( hiprtcProgram* );
+				hiprtcProgram hipProg = reinterpret_cast<hiprtcProgram>( prog );
+				checkOrortc( static_cast<orortcResult>(
+					hiprtcSymbol<DestroyProgramFn>( "hiprtcDestroyProgram" )( &hipProg ) ) );
+			}
+			else
+			{
+				checkOrortc( orortcDestroyProgram( &prog ) );
+			}
 		}
 
 		checkOro( oroModuleLoadData( &module, binary.data() ) );
@@ -528,7 +678,26 @@ void Compiler::addCommonOpts( Context& context, std::vector<const char*>& opts, 
 		opts.push_back( m_rtipStr.c_str() );
 	}
 
+	std::string archName = context.getGcnArchName();
+	if ( size_t pos = archName.find( ':' ); pos != std::string::npos )
+		archName.resize( pos );
+	if ( !archName.empty() && context.getDeviceName().find( "NVIDIA" ) == std::string::npos )
+	{
+		m_archStr = "--gpu-architecture=" + archName;
+		opts.push_back( m_archStr.c_str() );
+	}
+
+	if ( const std::string hipPath = Utility::getEnvVariable( "HIP_PATH" ); !hipPath.empty() )
+	{
+		m_hipIncludeStr = "-I" + hipPath + "/include";
+		opts.push_back( m_hipIncludeStr.c_str() );
+	}
+
+	opts.push_back( "-include" );
+	opts.push_back( "hip/hip_runtime.h" );
+	opts.push_back( "-D__HIP_PLATFORM_AMD__=1" );
 	opts.push_back( "-D__USE_HIP__" );
+	opts.push_back( "-D__KERNELCC__" );
 	opts.push_back( "-std=c++17" );
 }
 
@@ -587,7 +756,8 @@ void Compiler::addCustomFuncsSwitchCase(
 		"geomType;\n\t[[maybe_unused]] const void* data = tableHeader.funcDataSets[index].filterFuncData;\n\tswitch ( index ) "
 		"\n\t{\n";
 	std::string funcDecls;
-	if ( funcNameSets )
+	const uint32_t funcNameSetCount = numGeomTypes * numRayTypes;
+	if ( funcNameSets && funcNameSets->size() >= funcNameSetCount )
 	{
 		for ( uint32_t i = 0; i < numRayTypes; ++i )
 		{
@@ -641,7 +811,8 @@ std::string Compiler::getCacheFilename(
 	moduleHash			   = Utility::format( "%08x", Utility::hashString( moduleHash ) );
 
 	std::string optionHash = moduleName.string();
-	if ( funcNameSets )
+	const uint32_t funcNameSetCount = numGeomTypes * numRayTypes;
+	if ( funcNameSets && funcNameSets->size() >= funcNameSetCount )
 	{
 		for ( uint32_t i = 0; i < numRayTypes; ++i )
 		{
@@ -855,21 +1026,47 @@ std::string Compiler::buildFunctionTableBitcode(
 		std::vector<const char*> funcNames;
 		orortcProgram			 prog;
 
-		buildProgram( funcNames, src, std::string(), headers, includeNames, options, prog );
+		buildProgram( funcNames, src, std::string(), headers, includeNames, options, prog, amd );
 
 		size_t size = 0;
 		if ( amd )
-			checkOrortc( orortcGetBitcodeSize( prog, &size ) );
+		{
+#if defined( _WIN32 )
+			using GetBitcodeSizeFn = hiprtcResult ( * )( hiprtcProgram, size_t* );
+			checkOrortc( static_cast<orortcResult>(
+				hiprtcSymbol<GetBitcodeSizeFn>( "hiprtcGetBitcodeSize" )(
+					reinterpret_cast<hiprtcProgram>( prog ), &size ) ) );
+#else
+			checkOrortc( static_cast<orortcResult>( hiprtcGetBitcodeSize( reinterpret_cast<hiprtcProgram>( prog ), &size ) ) );
+#endif
+		}
 		else
 			checkOrortc( orortcGetCodeSize( prog, &size ) );
 
 		std::string binary;
 		binary.resize( size );
 		if ( amd )
-			checkOrortc( orortcGetBitcode( prog, binary.data() ) );
+		{
+#if defined( _WIN32 )
+			using GetBitcodeFn = hiprtcResult ( * )( hiprtcProgram, char* );
+			checkOrortc( static_cast<orortcResult>(
+				hiprtcSymbol<GetBitcodeFn>( "hiprtcGetBitcode" )(
+					reinterpret_cast<hiprtcProgram>( prog ), binary.data() ) ) );
+#else
+			checkOrortc( static_cast<orortcResult>( hiprtcGetBitcode( reinterpret_cast<hiprtcProgram>( prog ), binary.data() ) ) );
+#endif
+		}
 		else
 			checkOrortc( orortcGetCode( prog, binary.data() ) );
-		checkOrortc( orortcDestroyProgram( &prog ) );
+		if ( amd )
+		{
+			using DestroyProgramFn = hiprtcResult ( * )( hiprtcProgram* );
+			hiprtcProgram hipProg = reinterpret_cast<hiprtcProgram>( prog );
+			checkOrortc( static_cast<orortcResult>(
+				hiprtcSymbol<DestroyProgramFn>( "hiprtcDestroyProgram" )( &hipProg ) ) );
+		}
+		else
+			checkOrortc( orortcDestroyProgram( &prog ) );
 		return binary;
 	}
 	else

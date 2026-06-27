@@ -31,16 +31,108 @@
 
 #ifdef _WIN32
 
-const char* g_hip_paths[] = {
-	"amdhip64_7.dll",
-	"amdhip64_6.dll",
-	"amdhip64.dll", // <- hip '5.x' DLL.
-	nullptr };
+#include <algorithm>
+#include <cstdlib>
+#include <string>
+#include <vector>
 
-const char* g_hiprtc_paths[] = { "hiprtc0707.dll", "hiprtc0706.dll", "hiprtc0705.dll", "hiprtc0704.dll", "hiprtc0703.dll",
-								 "hiprtc0702.dll", "hiprtc0701.dll", "hiprtc0700.dll", "hiprtc0605.dll", "hiprtc0604.dll",
-								 "hiprtc0603.dll", "hiprtc0602.dll", "hiprtc0601.dll", "hiprtc0600.dll", "hiprtc0507.dll",
-								 "hiprtc0506.dll", "hiprtc0505.dll", "hiprtc0504.dll", "hiprtc0503.dll", nullptr };
+namespace hiprt
+{
+namespace detail
+{
+inline std::string getEnvVariable( const char* name )
+{
+	const char* value = std::getenv( name );
+	return value ? std::string( value ) : std::string();
+}
+
+inline std::string joinPath( const std::string& base, const char* leaf )
+{
+	if ( base.empty() ) return std::string( leaf );
+	const char last = base.back();
+	if ( last == '\\' || last == '/' ) return base + leaf;
+	return base + "\\" + leaf;
+}
+
+inline void appendUnique( std::vector<std::string>& paths, const std::string& path )
+{
+	if ( path.empty() || std::find( paths.begin(), paths.end(), path ) != paths.end() ) return;
+	paths.push_back( path );
+}
+
+inline void appendRocmRoot( std::vector<std::string>& paths, const std::string& root )
+{
+	if ( root.empty() ) return;
+	appendUnique( paths, root );
+	appendUnique( paths, joinPath( root, "bin" ) );
+}
+
+inline std::vector<std::string> rocmBinPaths()
+{
+	std::vector<std::string> result;
+	appendRocmRoot( result, getEnvVariable( "ROCM_HOME" ) );
+	appendRocmRoot( result, getEnvVariable( "ROCM_PATH" ) );
+	appendRocmRoot( result, getEnvVariable( "HIP_PATH" ) );
+
+	const std::string virtualEnv = getEnvVariable( "VIRTUAL_ENV" );
+	if ( !virtualEnv.empty() )
+	{
+		appendRocmRoot( result, joinPath( virtualEnv, "Lib\\site-packages\\_rocm_sdk_devel" ) );
+		appendRocmRoot( result, joinPath( virtualEnv, "Lib\\site-packages\\rocm_sdk_devel" ) );
+	}
+
+	return result;
+}
+
+inline const char** makeLibraryPaths(
+	const char* const*		  dllNames,
+	std::vector<std::string>& storage,
+	std::vector<const char*>& pointers )
+{
+	storage.clear();
+	pointers.clear();
+
+	const std::vector<std::string> rocmBins = rocmBinPaths();
+	for ( size_t i = 0; dllNames[i] != nullptr; ++i )
+	{
+		appendUnique( storage, dllNames[i] );
+		for ( const std::string& bin : rocmBins )
+			appendUnique( storage, joinPath( bin, dllNames[i] ) );
+	}
+
+	for ( const std::string& path : storage )
+		pointers.push_back( path.c_str() );
+	pointers.push_back( nullptr );
+
+	return pointers.data();
+}
+
+inline const char** getHipPaths()
+{
+	static const char*		  dllNames[] = { "amdhip64_7.dll", "amdhip64_6.dll", "amdhip64.dll", nullptr };
+	static std::vector<std::string> storage;
+	static std::vector<const char*> pointers;
+	return makeLibraryPaths( dllNames, storage, pointers );
+}
+
+inline const char** getHiprtcPaths()
+{
+	static const char* dllNames[] = { "hiprtc07013.dll", "hiprtc07012.dll", "hiprtc07011.dll", "hiprtc07010.dll",
+									  "hiprtc0709.dll",  "hiprtc0708.dll",	"hiprtc0707.dll",  "hiprtc0706.dll",
+									  "hiprtc0705.dll",  "hiprtc0704.dll",	"hiprtc0703.dll",  "hiprtc0702.dll",
+									  "hiprtc0701.dll",  "hiprtc0700.dll",	"hiprtc0605.dll",  "hiprtc0604.dll",
+									  "hiprtc0603.dll",  "hiprtc0602.dll",	"hiprtc0601.dll",  "hiprtc0600.dll",
+									  "hiprtc0507.dll",  "hiprtc0506.dll",	"hiprtc0505.dll",  "hiprtc0504.dll",
+									  "hiprtc0503.dll",  nullptr };
+	static std::vector<std::string> storage;
+	static std::vector<const char*> pointers;
+	return makeLibraryPaths( dllNames, storage, pointers );
+}
+} // namespace detail
+} // namespace hiprt
+
+static const char** g_hip_paths	= hiprt::detail::getHipPaths();
+static const char** g_hiprtc_paths = hiprt::detail::getHiprtcPaths();
 #elif defined( __APPLE__ )
 
 const char** g_hip_paths	= nullptr;

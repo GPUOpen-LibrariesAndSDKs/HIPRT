@@ -55,7 +55,8 @@ class Compiler
 		std::vector<const char*>&		headers,
 		std::vector<const char*>&		includeNames,
 		std::vector<const char*>&		options,
-		orortcProgram&					progOut );
+		orortcProgram&					progOut,
+		bool							amd = false );
 
 	void buildKernels(
 		Context&							 context,
@@ -130,6 +131,8 @@ class Compiler
 	bool m_rtip31Support = false;
 
 	std::string m_rtipStr;
+	std::string m_archStr;
+	std::string m_hipIncludeStr;
 
 	std::mutex					  m_kernelMutex;
 	std::map<std::string, Kernel> m_kernelCache;

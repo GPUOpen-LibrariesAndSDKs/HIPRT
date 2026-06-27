@@ -31,6 +31,7 @@
 #include <hiprt/impl/PlocBuilder.h>
 #include <hiprt/impl/SbvhBuilder.h>
 #include <hiprt/impl/Transform.h>
+#include <cstdlib>
 
 namespace hiprt
 {
@@ -992,6 +993,9 @@ std::string Context::getDriverVersion() const
 
 uint32_t Context::getRtip() const
 {
+	if ( const char* forceRtip = std::getenv( "HIPRT_FORCE_RTIP" ) )
+		return static_cast<uint32_t>( std::atoi( forceRtip ) );
+
 	std::string deviceName = getDeviceName();
 	std::string archName   = getGcnArchName();
 
