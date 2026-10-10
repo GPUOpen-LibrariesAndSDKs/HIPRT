@@ -39,7 +39,25 @@ using Frame = MatrixFrame;
 using Frame = SRTFrame;
 #endif
 
-HIPRT_HOST_DEVICE HIPRT_INLINE static bool
+template <typename Node>
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE hiprtRay transformRay( const hiprtRay& ray, const Node& node )
+{
+	hiprtRay     outRay;
+	const float3 o  = ray.origin;
+	const float3 d  = ray.direction;
+	outRay.origin.x = dot( { node.m_matrix[0][0], node.m_matrix[0][1], node.m_matrix[0][2] }, o );
+	outRay.origin.y = dot( { node.m_matrix[1][0], node.m_matrix[1][1], node.m_matrix[1][2] }, o );
+	outRay.origin.z = dot( { node.m_matrix[2][0], node.m_matrix[2][1], node.m_matrix[2][2] }, o );
+	outRay.origin += { node.m_matrix[0][3], node.m_matrix[1][3], node.m_matrix[2][3] };
+	outRay.direction.x = dot( { node.m_matrix[0][0], node.m_matrix[0][1], node.m_matrix[0][2] }, d );
+	outRay.direction.y = dot( { node.m_matrix[1][0], node.m_matrix[1][1], node.m_matrix[1][2] }, d );
+	outRay.direction.z = dot( { node.m_matrix[2][0], node.m_matrix[2][1], node.m_matrix[2][2] }, d );
+	outRay.minT        = ray.minT;
+	outRay.maxT        = ray.maxT;
+	return outRay;
+}
+
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static bool
 identitySRT( const float3& scale, const float3& shear, const float4& rotation, const float3& translation )
 {
 	if ( scale.x != 1.0f || scale.y != 1.0f || scale.z != 1.0f ) return false;
@@ -49,7 +67,7 @@ identitySRT( const float3& scale, const float3& shear, const float4& rotation, c
 	return true;
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE static bool identityMatrix( const float ( &matrix )[3][4] )
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static bool identityMatrix( const float ( &matrix )[3][4] )
 {
 	if ( matrix[0][0] != 1.0f || matrix[1][1] != 1.0f || matrix[2][2] != 1.0f ) return false;
 	if ( matrix[0][1] != 0.0f || matrix[0][2] != 0.0f || matrix[0][3] != 0.0f ) return false;
@@ -58,7 +76,7 @@ HIPRT_HOST_DEVICE HIPRT_INLINE static bool identityMatrix( const float ( &matrix
 	return true;
 }
 
-HIPRT_HOST_DEVICE static void SRTToInvMatrix(
+HIPRT_HOST_DEVICE HIPRT_INLINE static void SRTToInvMatrix(
 	const float3& scale, const float3& shear, const float4& rotation, const float3& translation, float ( &matrixInv )[3][4] )
 {
 	float Q[3][3];
@@ -75,14 +93,10 @@ HIPRT_HOST_DEVICE static void SRTToInvMatrix(
 	Ri[2][0] = 0.0f;
 	Ri[2][1] = 0.0f;
 
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+	HIPRT_UNROLL
 	for ( uint32_t i = 0; i < 3; ++i )
 	{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+		HIPRT_UNROLL
 		for ( uint32_t j = 0; j < 3; ++j )
 		{
 			matrixInv[i][j] = dot( { Ri[i][0], Ri[i][1], Ri[i][2] }, { Q[j][0], Q[j][1], Q[j][2] } );
@@ -94,12 +108,12 @@ HIPRT_HOST_DEVICE static void SRTToInvMatrix(
 	matrixInv[2][3] = -dot( { matrixInv[2][0], matrixInv[2][1], matrixInv[2][2] }, translation );
 }
 
-HIPRT_HOST_DEVICE static void matrixToInvMatrix( const float ( &matrix )[3][4], float ( &matrixInv )[3][4] )
+HIPRT_HOST_DEVICE HIPRT_INLINE static void matrixToInvMatrix( const float ( &matrix )[3][4], float ( &matrixInv )[3][4] )
 {
 	const auto& m = matrix;
 
 	const float det = m[0][0] * ( m[1][1] * m[2][2] - m[1][2] * m[2][1] ) -
-					  m[0][1] * ( m[1][0] * m[2][2] - m[1][2] * m[2][0] ) + m[0][2] * ( m[1][0] * m[2][1] - m[1][1] * m[2][0] );
+	                  m[0][1] * ( m[1][0] * m[2][2] - m[1][2] * m[2][0] ) + m[0][2] * ( m[1][0] * m[2][1] - m[1][1] * m[2][0] );
 
 	constexpr float Epsilon = 1e-10f;
 	if ( fabs( det ) < Epsilon )
@@ -128,38 +142,34 @@ HIPRT_HOST_DEVICE static void matrixToInvMatrix( const float ( &matrix )[3][4], 
 
 struct alignas( 64 ) SRTFrame
 {
-	SRTFrame() = default;
+	HIPRT_INLINE SRTFrame() = default;
 
-	HIPRT_HOST_DEVICE SRTFrame( const hiprtFrameSRT& frame )
+	HIPRT_HOST_DEVICE HIPRT_INLINE explicit SRTFrame( const hiprtFrameSRT& frame )
 	{
-		m_rotation	  = qtFromAxisAngle( frame.rotation );
-		m_scale		  = frame.scale;
-		m_shear		  = make_float3( 0.0f );
+		m_rotation    = qtFromAxisAngle( frame.rotation );
+		m_scale       = frame.scale;
+		m_shear       = frame.shear;
 		m_translation = frame.translation;
-		m_time		  = frame.time;
+		m_time        = frame.time;
 	}
 
-	HIPRT_HOST_DEVICE SRTFrame( const hiprtFrameMatrix& frame )
+	HIPRT_HOST_DEVICE HIPRT_INLINE explicit SRTFrame( const hiprtFrameMatrix& frame )
 	{
 		const bool identity = identityMatrix( frame.matrix );
 		if ( identity )
 		{
-			m_scale		  = make_float3( 1.0f );
-			m_shear		  = make_float3( 0.0f );
+			m_scale       = make_float3( 1.0f );
+			m_shear       = make_float3( 0.0f );
 			m_translation = make_float3( 0.0f );
-			m_rotation	  = { 0.0f, 0.0f, 0.0f, 1.0f };
+			m_rotation    = { 0.0f, 0.0f, 0.0f, 1.0f };
 		}
 		else
 		{
 			float QR[3][3], Q[3][3], R[3][3];
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+			HIPRT_UNROLL
 			for ( uint32_t i = 0; i < 3; ++i )
 			{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+				HIPRT_UNROLL
 				for ( uint32_t j = 0; j < 3; ++j )
 				{
 					QR[i][j] = frame.matrix[i][j];
@@ -168,24 +178,25 @@ struct alignas( 64 ) SRTFrame
 
 			qr( &QR[0][0], &Q[0][0], &R[0][0] );
 			m_translation = { frame.matrix[0][3], frame.matrix[1][3], frame.matrix[2][3] };
-			m_rotation	  = qtFromRotationMatrix( Q );
-			m_scale		  = { R[0][0], R[1][1], R[2][2] };
-			m_shear		  = { R[0][1], R[0][2], R[1][2] };
+			m_rotation    = qtFromRotationMatrix( Q );
+			m_scale       = { R[0][0], R[1][1], R[2][2] };
+			m_shear       = { R[0][1], R[0][2], R[1][2] };
 		}
 		m_time = frame.time;
 	}
 
-	static HIPRT_HOST_DEVICE SRTFrame interpolate( const SRTFrame& f0, const SRTFrame& f1, const float t )
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static SRTFrame
+	interpolate( const SRTFrame& f0, const SRTFrame& f1, const float t )
 	{
 		SRTFrame f{};
-		f.m_scale		= mix( f0.m_scale, f1.m_scale, t );
-		f.m_shear		= mix( f0.m_shear, f1.m_shear, t );
+		f.m_scale       = mix( f0.m_scale, f1.m_scale, t );
+		f.m_shear       = mix( f0.m_shear, f1.m_shear, t );
 		f.m_translation = mix( f0.m_translation, f1.m_translation, t );
-		f.m_rotation	= qtMix( f0.m_rotation, f1.m_rotation, t );
+		f.m_rotation    = qtMix( f0.m_rotation, f1.m_rotation, t );
 		return f;
 	}
 
-	HIPRT_HOST_DEVICE float3 transform( const float3& p ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 transform( const float3& p ) const
 	{
 		if ( identity() ) return p;
 		float3 result = p;
@@ -196,7 +207,7 @@ struct alignas( 64 ) SRTFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE float3 transformVector( const float3& v ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 transformVector( const float3& v ) const
 	{
 		if ( identity() ) return v;
 		float3 result = v;
@@ -207,7 +218,7 @@ struct alignas( 64 ) SRTFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE float3 invTransform( const float3& p ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 invTransform( const float3& p ) const
 	{
 		if ( identity() ) return p;
 		float3 result = p;
@@ -219,17 +230,20 @@ struct alignas( 64 ) SRTFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE float3 invTransformVector( const float3& v ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 invTransformVector( const float3& v ) const
 	{
 		if ( identity() ) return v;
 		float3 result = v;
-		result		  = qtInvRotate( m_rotation, result );
+		result        = qtInvRotate( m_rotation, result );
 		result *= m_scale;
 		result += float3{ 0.0f, v.x * m_shear.x, v.x * m_shear.y + v.y * m_shear.z };
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE bool identity() const { return identitySRT( m_scale, m_shear, m_rotation, m_translation ); }
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE bool identity() const
+	{
+		return identitySRT( m_scale, m_shear, m_rotation, m_translation );
+	}
 
 	float4 m_rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
 	float3 m_scale{ 1.0f, 1.0f, 1.0f };
@@ -241,22 +255,18 @@ HIPRT_STATIC_ASSERT( sizeof( SRTFrame ) == 64 );
 
 struct alignas( 64 ) MatrixFrame
 {
-	MatrixFrame() = default;
+	HIPRT_INLINE MatrixFrame() = default;
 
-	HIPRT_HOST_DEVICE MatrixFrame( const hiprtFrameSRT& frame )
+	HIPRT_HOST_DEVICE HIPRT_INLINE explicit MatrixFrame( const hiprtFrameSRT& frame )
 	{
 		const float4 rotation = qtFromAxisAngle( frame.rotation );
-		const bool	 identity = identitySRT( frame.scale, make_float3( 0.0f ), rotation, frame.translation );
+		const bool   identity = identitySRT( frame.scale, frame.shear, rotation, frame.translation );
 		if ( identity )
 		{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+			HIPRT_UNROLL
 			for ( uint32_t i = 0; i < 3; ++i )
 			{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+				HIPRT_UNROLL
 				for ( uint32_t j = 0; j < 4; ++j )
 				{
 					if ( i == j )
@@ -271,14 +281,12 @@ struct alignas( 64 ) MatrixFrame
 			float Q[3][3];
 			qtToRotationMatrix( rotation, Q );
 
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+			HIPRT_UNROLL
 			for ( uint32_t i = 0; i < 3; ++i )
 			{
 				m_matrix[i][0] = Q[i][0] * frame.scale.x;
-				m_matrix[i][1] = Q[i][1] * frame.scale.y;
-				m_matrix[i][2] = Q[i][2] * frame.scale.z;
+				m_matrix[i][1] = Q[i][1] * frame.scale.y + Q[i][0] * frame.shear.x;
+				m_matrix[i][2] = Q[i][2] * frame.scale.z + Q[i][1] * frame.shear.z + Q[i][0] * frame.shear.y;
 			}
 
 			m_matrix[0][3] = frame.translation.x;
@@ -288,23 +296,20 @@ struct alignas( 64 ) MatrixFrame
 		m_time = frame.time;
 	}
 
-	HIPRT_HOST_DEVICE MatrixFrame( const hiprtFrameMatrix& frame )
+	HIPRT_HOST_DEVICE HIPRT_INLINE explicit MatrixFrame( const hiprtFrameMatrix& frame )
 	{
 		m_time = frame.time;
 		memcpy( &m_matrix[0][0], &frame.matrix[0][0], 12 * sizeof( float ) );
 	}
 
-	HIPRT_HOST_DEVICE static MatrixFrame interpolate( const MatrixFrame& f0, const MatrixFrame& f1, const float t )
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static MatrixFrame
+	interpolate( const MatrixFrame& f0, const MatrixFrame& f1, const float t )
 	{
 		MatrixFrame f{};
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+		HIPRT_UNROLL
 		for ( uint32_t i = 0; i < 3; ++i )
 		{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+			HIPRT_UNROLL
 			for ( uint32_t j = 0; j < 4; ++j )
 			{
 				f.m_matrix[i][j] = mix( f0.m_matrix[i][j], f1.m_matrix[i][j], t );
@@ -313,7 +318,32 @@ struct alignas( 64 ) MatrixFrame
 		return f;
 	}
 
-	HIPRT_HOST_DEVICE float3 transform( const float3& p ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static MatrixFrame multiply( const MatrixFrame& f0, const MatrixFrame& f1 )
+	{
+		MatrixFrame f{};
+
+		HIPRT_UNROLL
+		for ( uint32_t i = 0; i < 3; ++i )
+		{
+			// rotation
+			f.m_matrix[i][0] = f0.m_matrix[i][0] * f1.m_matrix[0][0] + f0.m_matrix[i][1] * f1.m_matrix[1][0] +
+			                   f0.m_matrix[i][2] * f1.m_matrix[2][0];
+
+			f.m_matrix[i][1] = f0.m_matrix[i][0] * f1.m_matrix[0][1] + f0.m_matrix[i][1] * f1.m_matrix[1][1] +
+			                   f0.m_matrix[i][2] * f1.m_matrix[2][1];
+
+			f.m_matrix[i][2] = f0.m_matrix[i][0] * f1.m_matrix[0][2] + f0.m_matrix[i][1] * f1.m_matrix[1][2] +
+			                   f0.m_matrix[i][2] * f1.m_matrix[2][2];
+
+			// translation
+			f.m_matrix[i][3] = f0.m_matrix[i][0] * f1.m_matrix[0][3] + f0.m_matrix[i][1] * f1.m_matrix[1][3] +
+			                   f0.m_matrix[i][2] * f1.m_matrix[2][3] + f0.m_matrix[i][3];
+		}
+
+		return f;
+	}
+
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 transform( const float3& p ) const
 	{
 		if ( identity() ) return p;
 		float3 result{};
@@ -324,7 +354,7 @@ struct alignas( 64 ) MatrixFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE float3 transformVector( const float3& v ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 transformVector( const float3& v ) const
 	{
 		if ( identity() ) return v;
 		float matrixInv[3][4];
@@ -336,7 +366,7 @@ struct alignas( 64 ) MatrixFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE float3 invTransform( const float3& p ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 invTransform( const float3& p ) const
 	{
 		if ( identity() ) return p;
 		float matrixInv[3][4];
@@ -349,7 +379,7 @@ struct alignas( 64 ) MatrixFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE float3 invTransformVector( const float3& v ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 invTransformVector( const float3& v ) const
 	{
 		if ( identity() ) return v;
 		float3 result{};
@@ -359,25 +389,21 @@ struct alignas( 64 ) MatrixFrame
 		return result;
 	}
 
-	HIPRT_HOST_DEVICE bool identity() const { return identityMatrix( m_matrix ); }
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE bool identity() const { return identityMatrix( m_matrix ); }
 
 	float m_matrix[3][4] = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
 	float m_time{};
 };
 HIPRT_STATIC_ASSERT( sizeof( MatrixFrame ) == 64 );
 
-HIPRT_HOST_DEVICE static bool computeInvTransformMatrix( const SRTFrame& frame, float ( &matrixInv )[3][4] )
+HIPRT_HOST_DEVICE HIPRT_INLINE static bool computeInvTransformMatrix( const SRTFrame& frame, float ( &matrixInv )[3][4] )
 {
 	if ( identitySRT( frame.m_scale, frame.m_shear, frame.m_rotation, frame.m_translation ) )
 	{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+		HIPRT_UNROLL
 		for ( uint32_t i = 0; i < 3; ++i )
 		{
-#ifdef __KERNECC__
-#pragma unroll
-#endif
+			HIPRT_UNROLL
 			for ( uint32_t j = 0; j < 4; ++j )
 			{
 				if ( i == j )
@@ -394,7 +420,7 @@ HIPRT_HOST_DEVICE static bool computeInvTransformMatrix( const SRTFrame& frame, 
 	return false;
 }
 
-HIPRT_HOST_DEVICE static bool computeInvTransformMatrix( const MatrixFrame& frame, float ( &matrixInv )[3][4] )
+HIPRT_HOST_DEVICE HIPRT_INLINE static bool computeInvTransformMatrix( const MatrixFrame& frame, float ( &matrixInv )[3][4] )
 {
 	if ( identityMatrix( frame.m_matrix ) )
 	{
@@ -410,13 +436,13 @@ HIPRT_HOST_DEVICE static bool computeInvTransformMatrix( const MatrixFrame& fram
 class Transform
 {
   public:
-	HIPRT_HOST_DEVICE Transform( const Frame* frameData, uint32_t frameIndex, uint32_t frameCount )
+	HIPRT_HOST_DEVICE HIPRT_INLINE Transform( const Frame* frameData, const uint32_t frameIndex, const uint32_t frameCount )
 		: m_frameCount( frameCount ), m_frames( nullptr )
 	{
 		if ( frameData != nullptr ) m_frames = frameData + frameIndex;
 	}
 
-	HIPRT_HOST_DEVICE Frame interpolateFrames( float time ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Frame interpolateFrames( const float time ) const
 	{
 		if ( m_frameCount == 0 || m_frames == nullptr ) return Frame();
 
@@ -438,26 +464,26 @@ class Transform
 		return Frame::interpolate( f0, f1, t );
 	}
 
-	HIPRT_HOST_DEVICE hiprtRay transformRay( const hiprtRay& ray, float time ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE hiprtRay transformRay( const hiprtRay& ray, const float time ) const
 	{
-		hiprtRay	outRay;
+		hiprtRay    outRay;
 		const Frame frame = interpolateFrames( time );
 		if ( frame.identity() ) return ray;
-		outRay.origin	 = frame.invTransform( ray.origin );
+		outRay.origin    = frame.invTransform( ray.origin );
 		outRay.direction = frame.invTransform( ray.origin + ray.direction );
 		outRay.direction = outRay.direction - outRay.origin;
-		outRay.minT		 = ray.minT;
-		outRay.maxT		 = ray.maxT;
+		outRay.minT      = ray.minT;
+		outRay.maxT      = ray.maxT;
 		return outRay;
 	}
 
-	HIPRT_HOST_DEVICE float3 transformNormal( const float3& normal, float time ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 transformNormal( const float3& normal, const float time ) const
 	{
 		const Frame frame = interpolateFrames( time );
 		return frame.transformVector( normal );
 	}
 
-	HIPRT_HOST_DEVICE Aabb boundPointMotion( const float3& p ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Aabb boundPointMotion( const float3& p ) const
 	{
 		Aabb outAabb;
 
@@ -473,14 +499,15 @@ class Transform
 		if ( m_frameCount == 1 ) return outAabb;
 
 		constexpr uint32_t Steps = 3;
-		constexpr float	   Delta = 1.0f / float( Steps + 1 );
+		constexpr float    Delta = 1.0f / float( Steps + 1 );
 
 		Frame f1;
 		for ( uint32_t i = 1; i < m_frameCount; ++i )
 		{
-			f1		= m_frames[i];
+			f1      = m_frames[i];
 			float t = Delta;
-			for ( uint32_t j = 1; j <= Steps; ++j )
+			HIPRT_UNROLL
+			for ( uint32_t j = 0; j < Steps; ++j )
 			{
 				Frame f = Frame::interpolate( f0, f1, t );
 				outAabb.grow( f.transform( p ) );
@@ -493,7 +520,7 @@ class Transform
 		return outAabb;
 	}
 
-	HIPRT_HOST_DEVICE Aabb motionBounds( const Aabb& aabb ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Aabb motionBounds( const Aabb& aabb ) const
 	{
 		const float3 p0 = aabb.m_min;
 		const float3 p1 = { aabb.m_min.x, aabb.m_min.y, aabb.m_max.z };
@@ -517,7 +544,7 @@ class Transform
 	}
 
   private:
-	uint32_t	 m_frameCount;
-	const Frame* m_frames;
+	uint32_t     m_frameCount{};
+	const Frame* m_frames = nullptr;
 };
 } // namespace hiprt

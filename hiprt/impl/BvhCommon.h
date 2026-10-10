@@ -30,71 +30,120 @@
 
 namespace hiprt
 {
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getMaxTrianglePacketNodeCount( const size_t count )
+template <typename PrimitiveNode>
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr bool isTrianglePairNode()
 {
-	return 2 * DivideRoundUp( count, MinTrianglePairsPerPacket + 1 );
-}
-
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t
-getMaxBoxNodeCount( const size_t count, const uint32_t branchingFactor, const uint32_t maxFatLeafSize )
-{
-	const size_t maxLeafNodes	  = DivideRoundUp( count, maxFatLeafSize + 1 );
-	const size_t maxInternalNodes = 1 + DivideRoundUp( maxLeafNodes, branchingFactor - 1 );
-	return maxLeafNodes + maxInternalNodes;
+	return is_same_v<PrimitiveNode, rtip11::TrianglePairNode>;
 }
 
 template <typename PrimitiveNode>
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getMaxPrimNodeCount( const size_t count )
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr bool isTrianglePacketNode()
+{
+	return is_same_v<PrimitiveNode, rtip31::TrianglePacketNode>;
+}
+
+template <typename PrimitiveNode>
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr bool isTriangleNode()
+{
+	return isTrianglePacketNode<PrimitiveNode>() || isTrianglePairNode<PrimitiveNode>();
+}
+
+template <typename PrimitiveNode>
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr bool isInstanceNode()
+{
+	return is_same_v<PrimitiveNode, rtip11::InstanceNode> || is_same_v<PrimitiveNode, rtip31::InstanceNode>;
+}
+
+HIPRT_INLINE HIPRT_HOST_DEVICE uint32_t getBranchingFactor( const uint32_t rtip )
+{
+	if ( rtip >= 31 )
+		return rtip31::BoxNode::BranchingFactor;
+	else
+		return rtip11::BoxNode::BranchingFactor;
+}
+
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr uint32_t getMaxBoxNodeSize()
+{
+	return sizeof( rtip31::BoxNode ) > sizeof( rtip11::BoxNode ) ? sizeof( rtip31::BoxNode ) : sizeof( rtip11::BoxNode );
+}
+
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr uint32_t getMaxBoxNodeAlignment()
+{
+	return alignof( rtip31::BoxNode ) > alignof( rtip11::BoxNode ) ? alignof( rtip31::BoxNode ) : alignof( rtip11::BoxNode );
+}
+
+HIPRT_INLINE HIPRT_HOST_DEVICE constexpr uint32_t getMaxFatLeafSize( const uint32_t rtip )
+{
+	if ( rtip >= 31 ) return rtip31::TrianglePacketNode::MaxFatLeafSize;
+	return 1;
+}
+
+HIPRT_INLINE HIPRT_HOST_DEVICE Aabb getBoxNodeAabb( const uint32_t rtip, const void* boxNode )
+{
+	if ( rtip >= 31 )
+		return reinterpret_cast<const rtip31::BoxNode*>( boxNode )->aabb();
+	else
+		return reinterpret_cast<const rtip11::BoxNode*>( boxNode )->aabb();
+}
+
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t getMaxTrianglePacketNodeCount( const uint32_t rtip, const size_t count )
+{
+	if ( rtip >= 31 ) return 2 * DivideRoundUp( count, rtip31::TrianglePacketNode::MinTrianglePairs + 1 );
+	return count;
+}
+
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t
+getMaxBoxNodeCount( const size_t count, const uint32_t branchingFactor, const uint32_t maxFatLeafSize )
+{
+	const size_t maxLeafNodes     = DivideRoundUp( count, maxFatLeafSize + 1 );
+	const size_t maxInternalNodes = 1 + DivideRoundUp( maxLeafNodes, branchingFactor - 1 );
+	// We add 1 to compensate for the fact that the root node can have a limited branching factor for instances than other
+	// nodes.
+	return maxLeafNodes + maxInternalNodes + 1;
+}
+
+template <typename PrimitiveNode>
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t getMaxPrimNodeCount( const uint32_t rtip, const size_t count )
 {
 	size_t primNodeCount = count;
-	if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value ) primNodeCount = getMaxTrianglePacketNodeCount( count );
+	if constexpr ( is_same_v<PrimitiveNode, rtip31::TrianglePacketNode> )
+		primNodeCount = getMaxTrianglePacketNodeCount( rtip, count );
 	return primNodeCount;
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t
 getMaxPrimNodeCount( const hiprtGeometryBuildInput& buildInput, const uint32_t rtip, const size_t count )
 {
 	size_t primNodeCount = count;
 	if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh && rtip >= 31 )
-		primNodeCount = getMaxTrianglePacketNodeCount( count );
+		primNodeCount = getMaxTrianglePacketNodeCount( rtip, count );
 	return primNodeCount;
 }
 
 template <typename BoxNode, typename PrimitiveNode>
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getMaxBoxNodeCount( const size_t count )
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t getMaxBoxNodeCount( const size_t count )
 {
-	const uint32_t branchingFactor = BoxNode::BranchingFactor;
-	if ( count <= branchingFactor ) return 1;
-
-	uint32_t maxFatLeafSize = 1;
-	if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value ) maxFatLeafSize = MaxFatLeafSize;
-
-	return getMaxBoxNodeCount( count, branchingFactor, maxFatLeafSize );
+	const uint32_t maxFatLeafSize = is_same_v<PrimitiveNode, rtip31::TrianglePacketNode> ? PrimitiveNode::MaxFatLeafSize : 1;
+	return getMaxBoxNodeCount( count, BoxNode::BranchingFactor, maxFatLeafSize );
 }
 
 template <typename BuildInput>
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t
-getMaxBoxNodeCount( const BuildInput& buildInput, const uint32_t rtip, const size_t count )
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t
+getMaxBoxNodeCount( const BuildInput& buildInput, const uint32_t rtip, const uint32_t branchingFactor, const size_t count )
 {
-	const uint32_t branchingFactor = rtip >= 31 ? 8 : 4;
-	if ( count <= branchingFactor ) return 1;
-
 	uint32_t maxFatLeafSize = 1;
-	if constexpr ( is_same<BuildInput, hiprtGeometryBuildInput>::value )
-		if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh && rtip >= 31 ) maxFatLeafSize = MaxFatLeafSize;
-
+	if constexpr ( is_same_v<BuildInput, hiprtGeometryBuildInput> )
+		if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh && rtip >= 31 ) maxFatLeafSize = getMaxFatLeafSize( rtip );
 	return getMaxBoxNodeCount( count, branchingFactor, maxFatLeafSize );
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getPrimCount( const hiprtGeometryBuildInput& buildInput )
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t getPrimCount( const hiprtGeometryBuildInput& buildInput )
 {
 	size_t primCount{};
 	switch ( buildInput.type )
 	{
 	case hiprtPrimitiveTypeTriangleMesh: {
 		primCount = buildInput.primitive.triangleMesh.triangleCount;
-		if ( buildInput.primitive.triangleMesh.trianglePairCount > 0 )
-			primCount = buildInput.primitive.triangleMesh.trianglePairCount;
 		break;
 	}
 	case hiprtPrimitiveTypeAABBList: {
@@ -109,7 +158,7 @@ HIPRT_INLINE HIPRT_HOST_DEVICE size_t getPrimCount( const hiprtGeometryBuildInpu
 	return primCount;
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t
 getPrimNodeSize( const hiprtGeometryBuildInput& buildInput, const size_t triangleNodeSize )
 {
 	size_t nodeSize{};
@@ -131,14 +180,14 @@ getPrimNodeSize( const hiprtGeometryBuildInput& buildInput, const size_t triangl
 	return nodeSize;
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getGeometryStorageBufferSize(
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t getGeometryStorageBufferSize(
 	const size_t primNodeCount, const size_t boxNodeCount, const size_t primNodeSize, const size_t boxNodeSize )
 {
 	return RoundUp( sizeof( GeomHeader ), DefaultAlignment ) + RoundUp( primNodeCount * primNodeSize, DefaultAlignment ) +
-		   RoundUp( boxNodeCount * boxNodeSize, DefaultAlignment );
+	       RoundUp( boxNodeCount * boxNodeSize, DefaultAlignment );
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE size_t getSceneStorageBufferSize(
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE size_t getSceneStorageBufferSize(
 	const size_t primCount,
 	const size_t primNodeCount,
 	const size_t boxNodeCount,
@@ -147,21 +196,22 @@ HIPRT_INLINE HIPRT_HOST_DEVICE size_t getSceneStorageBufferSize(
 	const size_t frameCount )
 {
 	return RoundUp( sizeof( SceneHeader ), DefaultAlignment ) + RoundUp( boxNodeCount * boxNodeSize, DefaultAlignment ) +
-		   RoundUp( primNodeCount * primNodeSize, DefaultAlignment ) +
-		   RoundUp( primCount * sizeof( Instance ), DefaultAlignment ) +
-		   RoundUp( frameCount * sizeof( Frame ), DefaultAlignment );
+	       RoundUp( primNodeCount * primNodeSize, DefaultAlignment ) +
+	       RoundUp( primCount * sizeof( Instance ), DefaultAlignment ) +
+	       RoundUp( frameCount * sizeof( Frame ), DefaultAlignment );
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE bool
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE bool
 batchBuild( const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	return getPrimCount( buildInput ) <= buildOptions.batchBuildMaxPrimCount &&
-		   ( buildOptions.buildFlags & 7 ) != hiprtBuildFlagBitCustomBvhImport;
+	       ( buildOptions.buildFlags & 7 ) != hiprtBuildFlagBitCustomBvhImport;
 }
 
-HIPRT_INLINE HIPRT_HOST_DEVICE bool batchBuild( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE bool
+batchBuild( const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions )
 {
 	return buildInput.instanceCount <= buildOptions.batchBuildMaxPrimCount &&
-		   ( buildOptions.buildFlags & 7 ) != hiprtBuildFlagBitCustomBvhImport;
+	       ( buildOptions.buildFlags & 7 ) != hiprtBuildFlagBitCustomBvhImport;
 }
 } // namespace hiprt

@@ -31,21 +31,21 @@ namespace hiprt
 class NodeList
 {
   public:
-	HIPRT_HOST_DEVICE NodeList( const hiprtBvhNodeList& list ) : m_referenceCount( list.nodeCount )
+	HIPRT_HOST_DEVICE explicit NodeList( const hiprtBvhNodeList& list ) : m_referenceCount( list.nodeCount )
 	{
-		m_apiNodes		 = reinterpret_cast<ApiNode*>( list.internalNodes );
+		m_apiNodes       = reinterpret_cast<ApiNode*>( list.internalNodes );
 		m_referenceNodes = reinterpret_cast<ReferenceNode*>( list.leafNodes );
 	}
 
-	HIPRT_HOST_DEVICE const ApiNode* getApiNodes() const { return m_apiNodes; }
+	[[nodiscard]] HIPRT_HOST_DEVICE const ApiNode* getApiNodes() const { return m_apiNodes; }
 
-	HIPRT_HOST_DEVICE const ReferenceNode* getReferenceNodes() const { return m_referenceNodes; }
+	[[nodiscard]] HIPRT_HOST_DEVICE const ReferenceNode* getReferenceNodes() const { return m_referenceNodes; }
 
-	HIPRT_HOST_DEVICE uint32_t getReferenceCount() const { return m_referenceCount; }
+	[[nodiscard]] HIPRT_HOST_DEVICE uint32_t getReferenceCount() const { return m_referenceCount; }
 
   private:
-	const ApiNode*		 m_apiNodes;
-	const ReferenceNode* m_referenceNodes;
-	uint32_t			 m_referenceCount;
+	const ApiNode*       m_apiNodes       = nullptr;
+	const ReferenceNode* m_referenceNodes = nullptr;
+	const uint32_t       m_referenceCount{};
 };
 } // namespace hiprt

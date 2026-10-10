@@ -35,96 +35,97 @@ namespace hiprt
 class Context
 {
   public:
-	Context( const hiprtContextCreationInput& input );
+	explicit Context( const hiprtContextCreationInput& input );
 	~Context();
 
-	std::vector<hiprtGeometry>
+	[[nodiscard]] std::vector<hiprtGeometry>
 	createGeometries( const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
 
 	void destroyGeometries( const std::vector<hiprtGeometry>& geometries );
 
 	void buildGeometries(
 		const std::vector<hiprtGeometryBuildInput>& buildInputs,
-		const hiprtBuildOptions						buildOptions,
-		hiprtDevicePtr								temporaryBuffer,
-		oroStream									stream,
-		std::vector<hiprtDevicePtr>&				buffers );
+		const hiprtBuildOptions                     buildOptions,
+		hiprtDevicePtr                              temporaryBuffer,
+		const oroStream                             stream,
+		std::vector<hiprtDevicePtr>&                buffers );
 
 	void updateGeometries(
 		const std::vector<hiprtGeometryBuildInput>& buildInputs,
-		const hiprtBuildOptions						buildOptions,
-		hiprtDevicePtr								temporaryBuffer,
-		oroStream									stream,
-		std::vector<hiprtDevicePtr>&				buffers );
+		const hiprtBuildOptions                     buildOptions,
+		hiprtDevicePtr                              temporaryBuffer,
+		const oroStream                             stream,
+		std::vector<hiprtDevicePtr>&                buffers );
 
-	size_t getGeometriesBuildTempBufferSize(
+	[[nodiscard]] size_t getGeometriesBuildTempBufferSize(
 		const std::vector<hiprtGeometryBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
 
-	std::vector<hiprtGeometry> compactGeometries( const std::vector<hiprtGeometry>& geometries, oroStream stream );
+	[[nodiscard]] std::vector<hiprtGeometry>
+	compactGeometries( const std::vector<hiprtGeometry>& geometries, const oroStream stream );
 
-	std::vector<hiprtScene>
+	[[nodiscard]] std::vector<hiprtScene>
 	createScenes( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
 
 	void destroyScenes( const std::vector<hiprtScene>& scenes );
 
 	void buildScenes(
 		const std::vector<hiprtSceneBuildInput>& buildInputs,
-		const hiprtBuildOptions					 buildOptions,
-		hiprtDevicePtr							 temporaryBuffer,
-		oroStream								 stream,
-		std::vector<hiprtDevicePtr>&			 buffers );
+		const hiprtBuildOptions                  buildOptions,
+		hiprtDevicePtr                           temporaryBuffer,
+		const oroStream                          stream,
+		std::vector<hiprtDevicePtr>&             buffers );
 
 	void updateScenes(
 		const std::vector<hiprtSceneBuildInput>& buildInputs,
-		const hiprtBuildOptions					 buildOptions,
-		hiprtDevicePtr							 temporaryBuffer,
-		oroStream								 stream,
-		std::vector<hiprtDevicePtr>&			 buffers );
+		const hiprtBuildOptions                  buildOptions,
+		hiprtDevicePtr                           temporaryBuffer,
+		const oroStream                          stream,
+		std::vector<hiprtDevicePtr>&             buffers );
 
-	size_t
+	[[nodiscard]] size_t
 	getScenesBuildTempBufferSize( const std::vector<hiprtSceneBuildInput>& buildInputs, const hiprtBuildOptions buildOptions );
 
-	std::vector<hiprtScene> compactScenes( const std::vector<hiprtScene>& scenes, oroStream stream );
+	[[nodiscard]] std::vector<hiprtScene> compactScenes( const std::vector<hiprtScene>& scenes, const oroStream stream );
 
-	hiprtFuncTable createFuncTable( uint32_t numGeomTypes, uint32_t numRayTypes );
-	void		   setFuncTable( hiprtFuncTable funcTable, uint32_t geomType, uint32_t rayType, hiprtFuncDataSet set );
-	void		   destroyFuncTable( hiprtFuncTable funcTable );
+	[[nodiscard]] hiprtFuncTable createFuncTable( const uint32_t numGeomTypes, const uint32_t numRayTypes );
+	void setFuncTable( hiprtFuncTable funcTable, const uint32_t geomType, const uint32_t rayType, const hiprtFuncDataSet set );
+	void destroyFuncTable( hiprtFuncTable funcTable );
 
 	void createGlobalStackBuffer( const hiprtGlobalStackBufferInput& input, hiprtGlobalStackBuffer& stackBufferOut );
 	void destroyGlobalStackBuffer( hiprtGlobalStackBuffer stackBuffer );
 
-	void		  saveGeometry( hiprtGeometry inGeometry, const std::string& filename );
-	hiprtGeometry loadGeometry( const std::string& filename );
+	void                        saveGeometry( const hiprtGeometry inGeometry, const std::string& filename );
+	[[nodiscard]] hiprtGeometry loadGeometry( const std::string& filename );
 
-	void	   saveScene( hiprtScene inScene, const std::string& filename );
-	hiprtScene loadScene( const std::string& filename );
+	void                     saveScene( const hiprtScene inScene, const std::string& filename );
+	[[nodiscard]] hiprtScene loadScene( const std::string& filename );
 
-	void exportGeometryAabb( hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax );
-	void exportSceneAabb( hiprtScene inScene, float3& outAabbMin, float3& outAabbMax );
+	void exportGeometryAabb( const hiprtGeometry inGeometry, float3& outAabbMin, float3& outAabbMax );
+	void exportSceneAabb( const hiprtScene inScene, float3& outAabbMin, float3& outAabbMax );
 
 	void buildKernels(
-		const std::vector<const char*>&		 funcNames,
-		const std::string&					 src,
-		const std::filesystem::path&		 moduleName,
-		std::vector<const char*>&			 headers,
-		std::vector<const char*>&			 includeNames,
-		std::vector<const char*>&			 options,
-		uint32_t							 numGeomTypes,
-		uint32_t							 numRayTypes,
+		const std::vector<const char*>&      funcNames,
+		const std::string&                   src,
+		const std::filesystem::path&         moduleName,
+		std::vector<const char*>&            headers,
+		std::vector<const char*>&            includeNames,
+		const std::vector<const char*>&      options,
+		const uint32_t                       numGeomTypes,
+		const uint32_t                       numRayTypes,
 		const std::vector<hiprtFuncNameSet>& funcNameSets,
-		std::vector<oroFunction>&			 functions,
-		oroModule&							 module,
-		bool								 cache );
+		std::vector<oroFunction>&            functions,
+		oroModule&                           module,
+		const bool                           cache );
 
 	void buildKernelsFromBitcode(
-		const std::vector<const char*>&		 funcNames,
-		const std::filesystem::path&		 moduleName,
-		const std::string_view				 bitcodeBinary,
-		uint32_t							 numGeomTypes,
-		uint32_t							 numRayTypes,
+		const std::vector<const char*>&      funcNames,
+		const std::filesystem::path&         moduleName,
+		const std::string_view               bitcodeBinary,
+		const uint32_t                       numGeomTypes,
+		const uint32_t                       numRayTypes,
 		const std::vector<hiprtFuncNameSet>& funcNameSets,
-		std::vector<oroFunction>&			 functions,
-		bool								 cache );
+		std::vector<oroFunction>&            functions,
+		const bool                           cache );
 
 	void setCacheDir( const std::filesystem::path& path );
 
@@ -148,32 +149,33 @@ class Context
 		m_logger.print( hiprtLogLevelError, args... );
 	}
 
-	uint32_t	getSMCount() const;
-	uint32_t	getMaxBlockSize() const;
-	uint32_t	getMaxGridSize() const;
-	std::string getDeviceName() const;
-	std::string getGcnArchName() const;
-	std::string getDriverVersion() const;
+	[[nodiscard]] uint32_t    getSMCount() const;
+	[[nodiscard]] uint32_t    getMaxBlockSize() const;
+	[[nodiscard]] uint32_t    getMaxGridSize() const;
+	[[nodiscard]] std::string getDeviceName() const;
+	[[nodiscard]] std::string getGcnArchName() const;
+	[[nodiscard]] std::string getDriverVersion() const;
 
-	oroDevice	 getDevice() const noexcept { return m_device; }
-	OrochiUtils& getOrochiUtils() { return m_oroutils; }
-	Compiler&	 getCompiler() { return m_compiler; }
+	[[nodiscard]] oroDevice    getDevice() const noexcept { return m_device; }
+	[[nodiscard]] OrochiUtils& getOrochiUtils() { return m_oroutils; }
+	[[nodiscard]] Compiler&    getCompiler() { return m_compiler; }
 
-	uint32_t getRtip() const;
-	uint32_t getBranchingFactor() const;
-	uint32_t getWarpSize() const;
-	size_t	 getTriangleNodeSize() const;
-	size_t	 getBoxNodeSize() const;
-	size_t	 getInstanceNodeSize() const;
+	[[nodiscard]] uint32_t getRtip() const;
+	[[nodiscard]] uint32_t getBranchingFactor() const;
+	[[nodiscard]] uint32_t getWarpSize() const;
+	[[nodiscard]] uint32_t getLanesPerLeafPacketTask() const;
+	[[nodiscard]] size_t   getTriangleNodeSize() const;
+	[[nodiscard]] size_t   getBoxNodeSize() const;
+	[[nodiscard]] size_t   getInstanceNodeSize() const;
 
   private:
-	oroDevice	m_device;
-	oroCtx		m_ctxt;
+	oroDevice   m_device;
+	oroCtx      m_ctxt;
 	OrochiUtils m_oroutils;
-	Compiler	m_compiler;
-	Logger		m_logger;
+	Compiler    m_compiler;
+	Logger      m_logger;
 
-	std::mutex											m_poolMutex;
+	std::mutex                                          m_poolMutex;
 	std::map<std::pair<oroDeviceptr, size_t>, uint32_t> m_poolHeads;
 };
 } // namespace hiprt

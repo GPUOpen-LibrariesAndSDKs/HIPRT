@@ -66,7 +66,7 @@ TEST_F( hiprtewTest, HiprtEwTest )
 	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
 	hiprtTriangleMeshPrimitive mesh;
-	mesh.triangleCount	= CornellBoxTriangleCount;
+	mesh.triangleCount  = CornellBoxTriangleCount;
 	mesh.triangleStride = sizeof( uint3 );
 	malloc( reinterpret_cast<uint3*&>( mesh.triangleIndices ), mesh.triangleCount );
 	std::array<uint32_t, 3 * CornellBoxTriangleCount> idx;
@@ -79,11 +79,11 @@ TEST_F( hiprtewTest, HiprtEwTest )
 	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), const_cast<float3*>( cornellBoxVertices.data() ), mesh.vertexCount );
 
 	hiprtGeometryBuildInput geomInput;
-	geomInput.type					 = hiprtPrimitiveTypeTriangleMesh;
+	geomInput.type                   = hiprtPrimitiveTypeTriangleMesh;
 	geomInput.primitive.triangleMesh = mesh;
 
-	size_t			  geomTempSize;
-	hiprtDevicePtr	  geomTemp;
+	size_t            geomTempSize;
+	hiprtDevicePtr    geomTemp;
 	hiprtBuildOptions options;
 	options.buildFlags = hiprtBuildFlagBitPreferFastBuild;
 	checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, options, geomTempSize ) );

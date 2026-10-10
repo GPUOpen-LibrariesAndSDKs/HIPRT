@@ -29,6 +29,6 @@
 
 namespace hiprt
 {
-void checkOro( oroError res, const source_location& location = source_location::current() );
-void checkOrortc( orortcResult res, const source_location& location = source_location::current() );
+void checkOro( const oroError res, const source_location& location = source_location::current() );
+void checkOrortc( const orortcResult res, const source_location& location = source_location::current() );
 } // namespace hiprt

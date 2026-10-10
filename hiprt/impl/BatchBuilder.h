@@ -51,47 +51,47 @@ class BatchBuilder
 		BatchBuildTime
 	};
 
-	BatchBuilder()								   = delete;
+	BatchBuilder()                                 = delete;
 	BatchBuilder& operator=( const BatchBuilder& ) = delete;
 
 	template <typename BuildInput>
-	static size_t getTemporaryBufferSize(
+	[[nodiscard]] static size_t getTemporaryBufferSize(
 		[[maybe_unused]] Context& context, const std::vector<BuildInput>& buildInputs, const hiprtBuildOptions buildOptions )
 	{
 		return RoundUp( sizeof( BuildInput ) * buildInputs.size(), DefaultAlignment ) +
-			   RoundUp( sizeof( hiprtDevicePtr ) * buildInputs.size(), DefaultAlignment );
+		       RoundUp( sizeof( hiprtDevicePtr ) * buildInputs.size(), DefaultAlignment );
 	}
 
-	static size_t
+	[[nodiscard]] static size_t
 	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
 
-	static size_t
+	[[nodiscard]] static size_t
 	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInputs, const hiprtBuildOptions buildOptions );
 
 	template <typename BuildInput>
 	static void build(
-		Context&					   context,
+		Context&                       context,
 		const std::vector<BuildInput>& buildInputs,
-		const hiprtBuildOptions		   buildOptions,
-		hiprtDevicePtr				   temporaryBuffer,
-		oroStream					   stream,
+		const hiprtBuildOptions        buildOptions,
+		hiprtDevicePtr                 temporaryBuffer,
+		const oroStream                stream,
 		std::vector<hiprtDevicePtr>&   buffers );
 };
 
 template <typename BuildInput>
 void BatchBuilder::build(
-	Context&					   context,
+	Context&                       context,
 	const std::vector<BuildInput>& buildInputs,
-	const hiprtBuildOptions		   buildOptions,
-	hiprtDevicePtr				   temporaryBuffer,
-	oroStream					   stream,
+	const hiprtBuildOptions        buildOptions,
+	hiprtDevicePtr                 temporaryBuffer,
+	const oroStream                stream,
 	std::vector<hiprtDevicePtr>&   buffers )
 {
-	const auto	tempSize = getTemporaryBufferSize( context, buildInputs, buildOptions );
+	const auto  tempSize = getTemporaryBufferSize( context, buildInputs, buildOptions );
 	MemoryArena temporaryMemoryArena( temporaryBuffer, tempSize, DefaultAlignment );
 
-	BuildInput*		buildInputsDev = temporaryMemoryArena.allocate<BuildInput>( buildInputs.size() );
-	hiprtDevicePtr* buffersDev	   = temporaryMemoryArena.allocate<hiprtDevicePtr>( buildInputs.size() );
+	BuildInput*     buildInputsDev = temporaryMemoryArena.allocate<BuildInput>( buildInputs.size() );
+	hiprtDevicePtr* buffersDev     = temporaryMemoryArena.allocate<hiprtDevicePtr>( buildInputs.size() );
 
 	checkOro( oroMemcpyHtoDAsync(
 		(oroDeviceptr)buildInputsDev,
@@ -104,7 +104,7 @@ void BatchBuilder::build(
 
 	Timer timer;
 
-	Compiler&				 compiler = context.getCompiler();
+	Compiler&                compiler = context.getCompiler();
 	std::vector<const char*> opts;
 	// opts.push_back("-G");
 

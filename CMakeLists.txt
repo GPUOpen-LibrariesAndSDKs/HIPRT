@@ -18,11 +18,11 @@ option(COMPILED_COMPRESSION "enable compression of compiled kernels" ON) # this 
 option(FORCE_DISABLE_CUDA "By default Cuda support is automatically added if a Cuda install is detected. Turn this flag to ON to force Cuda to be disabled." OFF)
 
 
-find_program(PYTHON_EXECUTABLE
-	NAMES python
-	PATHS /usr/bin /usr/local/bin /opt/local/bin
-)
-message(STATUS "Python path = ${PYTHON_EXECUTABLE}")
+# Python is only needed by the kernel compilation/baking scripts.
+if(PRECOMPILE OR BAKE_COMPILED_KERNEL)
+	find_package(Python3 COMPONENTS Interpreter REQUIRED)
+	message(STATUS "Python path = ${Python3_EXECUTABLE}")
+endif()
 
 
 
@@ -380,9 +380,23 @@ if(WIN32)
 else()
 	set(KERNEL_OS_POSTFIX "linux")
 endif()
-set(KERNEL_HIPRT_COMP    "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/hiprt${version_str_}_${HIP_VERSION_STR}_amd.hipfb")                                        # example:  hiprt02005_6.2_amd.hipfb
-set(KERNEL_UNITTEST_COMP "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/hiprt${version_str_}_${HIP_VERSION_STR}_precompiled_bitcode_${KERNEL_OS_POSTFIX}.hipfb")   # example:  hiprt02005_6.2_precompiled_bitcode_win.hipfb
-set(KERNEL_OROCHI_COMP "${BASE_OUTPUT_DIR}/${CMAKE_BUILD_TYPE}/oro_compiled_kernels.hipfb")
+# Both scripts always export the same files to dist/bin/Debug and dist/bin/Release.
+# Not ${CMAKE_BUILD_TYPE} here: it is empty on multi-config generators, and may name a config
+# the scripts never write to, so the paths below would point at files that never appear.
+set(KERNEL_OUTPUT_DIR       "${BASE_OUTPUT_DIR}/Release")
+set(KERNEL_OUTPUT_DIR_DEBUG "${BASE_OUTPUT_DIR}/Debug")
+
+set(KERNEL_HIPRT_COMP    "${KERNEL_OUTPUT_DIR}/hiprt${version_str_}_${HIP_VERSION_STR}_amd.hipfb")                                        # example:  hiprt02005_6.2_amd.hipfb
+set(KERNEL_UNITTEST_COMP "${KERNEL_OUTPUT_DIR}/hiprt${version_str_}_${HIP_VERSION_STR}_precompiled_bitcode_${KERNEL_OS_POSTFIX}.hipfb")   # example:  hiprt02005_6.2_precompiled_bitcode_win.hipfb
+set(KERNEL_OROCHI_COMP   "${KERNEL_OUTPUT_DIR}/oro_compiled_kernels.hipfb")
+set(KERNEL_HIPRT_BC      "${KERNEL_OUTPUT_DIR}/hiprt${version_str_}_${HIP_VERSION_STR}_amd_lib_${KERNEL_OS_POSTFIX}.bc")                  # example:  hiprt02005_6.2_amd_lib_win.bc
+
+# Debug copies of the exact same files. They must be declared as outputs too, otherwise a
+# missing Debug copy is never regenerated while the Release one is up to date.
+set(KERNEL_HIPRT_COMP_DEBUG    "${KERNEL_OUTPUT_DIR_DEBUG}/hiprt${version_str_}_${HIP_VERSION_STR}_amd.hipfb")
+set(KERNEL_UNITTEST_COMP_DEBUG "${KERNEL_OUTPUT_DIR_DEBUG}/hiprt${version_str_}_${HIP_VERSION_STR}_precompiled_bitcode_${KERNEL_OS_POSTFIX}.hipfb")
+set(KERNEL_OROCHI_COMP_DEBUG   "${KERNEL_OUTPUT_DIR_DEBUG}/oro_compiled_kernels.hipfb")
+set(KERNEL_HIPRT_BC_DEBUG      "${KERNEL_OUTPUT_DIR_DEBUG}/hiprt${version_str_}_${HIP_VERSION_STR}_amd_lib_${KERNEL_OS_POSTFIX}.bc")
 
 # temp files: compiled kernel, compressed.
 set(KERNEL_HIPRT_COMP_COMPRESSED  "${CMAKE_BINARY_DIR}/hiprt${version_str_}_${HIP_VERSION_STR}_amd.zstd" )
@@ -396,6 +410,17 @@ if(PRECOMPILE)
 		set(CUDA_OPTION "")
 	else()
 		set(CUDA_OPTION "--nvidia")
+	endif()
+
+	# with --nvidia, compile.py also exports those fatbins to Debug and Release.
+	set(KERNEL_NV_COMP "")
+	if(NOT FORCE_DISABLE_CUDA)
+		foreach(dir ${KERNEL_OUTPUT_DIR} ${KERNEL_OUTPUT_DIR_DEBUG})
+			list(APPEND KERNEL_NV_COMP
+				"${dir}/hiprt${version_str_}_nv_lib.fatbin"
+				"${dir}/hiprt${version_str_}_nv.fatbin"
+				"${dir}/oro_compiled_kernels.fatbin")
+		endforeach()
 	endif()
 
 
@@ -425,10 +450,13 @@ if(PRECOMPILE)
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_common.h
 	)
 
-	message(">> add_custom_command: ${PYTHON_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
+	message(">> add_custom_command: ${Python3_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
 	add_custom_command(
-			OUTPUT ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP}
-			COMMAND ${PYTHON_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
+			# every file compile.py exports, so that any missing one triggers a rebuild.
+			OUTPUT  ${KERNEL_HIPRT_COMP}       ${KERNEL_OROCHI_COMP}       ${KERNEL_HIPRT_BC}
+					${KERNEL_HIPRT_COMP_DEBUG} ${KERNEL_OROCHI_COMP_DEBUG} ${KERNEL_HIPRT_BC_DEBUG}
+					${KERNEL_NV_COMP}
+			COMMAND ${Python3_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			COMMENT "Precompiling kernels via compile.py"
 			VERBATIM
@@ -447,10 +475,10 @@ if(PRECOMPILE)
 		${CMAKE_SOURCE_DIR}/test/bitcodes/unit_test.cpp
 		)
 		
-		message(">> add_custom_command: ${PYTHON_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
+		message(">> add_custom_command: ${Python3_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
 		add_custom_command(
-			OUTPUT ${KERNEL_UNITTEST_COMP}
-			COMMAND ${PYTHON_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
+			OUTPUT ${KERNEL_UNITTEST_COMP} ${KERNEL_UNITTEST_COMP_DEBUG}
+			COMMAND ${Python3_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath ${HIP_FINAL_PATH}
 			DEPENDS ${KERNEL_HIPRT_COMP}  # Ensure compile.py has already run.
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/scripts/bitcodes
 			COMMENT "Precompiling unit tests kernels via precompile_bitcode.py"
@@ -488,7 +516,7 @@ if ( BAKE_COMPILED_KERNEL )
 		# 1) Create the Zstd archive
 		COMMAND	${CMAKE_COMMAND}  -DINPUT_FILE=${KERNEL_HIPRT_COMP} -DOUTPUT_FILE=${KERNEL_HIPRT_COMP_COMPRESSED} -DDO_COMPRESS=${COMPILED_COMPRESSION}  -P ${ARCHIVE_SCRIPT}
 		# 2) Run the Python converter on that archive
-		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_COMP_COMPRESSED} ${KERNEL_HIPRT_H} ${COMPILED_COMPRESSION}
+		COMMAND ${Python3_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_HIPRT_COMP} ${KERNEL_HIPRT_COMP_COMPRESSED} ${KERNEL_HIPRT_H} ${COMPILED_COMPRESSION}
 		DEPENDS ${KERNEL_HIPRT_COMP}  # Ensure compile.py has already run.
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMENT "Converting HIPRT compiled kernel to header"
@@ -502,7 +530,7 @@ if ( BAKE_COMPILED_KERNEL )
 		# 1) Create the Zstd archive
 		COMMAND	${CMAKE_COMMAND}  -DINPUT_FILE=${KERNEL_OROCHI_COMP} -DOUTPUT_FILE=${KERNEL_OROCHI_COMP_COMPRESSED} -DDO_COMPRESS=${COMPILED_COMPRESSION}  -P ${ARCHIVE_SCRIPT}
 		# 2) Run the Python converter on that archive
-		COMMAND ${PYTHON_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_COMP_COMPRESSED} ${KERNEL_OROCHI_H} ${COMPILED_COMPRESSION}
+		COMMAND ${Python3_EXECUTABLE} ${PYTHON_FILE} ${KERNEL_OROCHI_COMP} ${KERNEL_OROCHI_COMP_COMPRESSED} ${KERNEL_OROCHI_H} ${COMPILED_COMPRESSION}
 		DEPENDS ${KERNEL_OROCHI_COMP}  # Ensure compile.py has already run.
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMENT "Converting Orochi compiled kernel to header"
@@ -628,7 +656,8 @@ install(FILES ${HIPRT_ORO_HEADERS}
 
 # add hipfb files
 if(PRECOMPILE AND NOT BAKE_COMPILED_KERNEL)
-	install(FILES ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP}
+	# KERNEL_OUTPUT_DIR does not depend on the config, so one unconditional rule fits all generators.
+	install(FILES ${KERNEL_HIPRT_COMP} ${KERNEL_OROCHI_COMP} ${KERNEL_HIPRT_BC}
 			DESTINATION bin)
 endif()
 

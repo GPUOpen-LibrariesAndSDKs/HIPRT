@@ -19,6 +19,14 @@ errorMessageHeader = 'Bitcodes Compile Error:'
 
 hipSdkPathFromArgument = ''
 
+# Optional vswhere version range selecting which Visual Studio to build against
+# (e.g. "[17.0,18.0)" for VS2022). None => use the latest installed VS.
+vsVersionRange = None
+
+# Optional MSVC toolset version/prefix to pin (e.g. "14.44", "14.51"). None =>
+# use the resolved VS install's default toolset.
+vcToolsetVersion = None
+
 def getVersion():
     f = open(root + 'version.txt', 'r')
     HIPRT_MAJOR_VERSION = int(f.readline())
@@ -94,10 +102,12 @@ def compileAmd():
     hip_sdk_version = result.decode('utf-8')
     hip_sdk_version_major = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(1) 
     hip_sdk_version_minor = re.match(r'HIP version: (\d+).(\d+)', hip_sdk_version).group(2)
-    hip_sdk_version_num = 10 * int(hip_sdk_version_major) + int(hip_sdk_version_minor)
     hip_version = hip_sdk_version_major +"."+ hip_sdk_version_minor
     
-    gpu_archs = common_tools.getAMDGPUArchs(hip_sdk_version_num)
+    # hip_sdk_version is the raw 'hipcc --version' output: it contains clang's
+    # InstalledDir, which is how the SDK's clang is located to query the list of
+    # GPU targets it really supports.
+    gpu_archs = common_tools.getAMDGPUArchs(hipSdkPathFromArgument, hip_sdk_version)
 
     targets = ''
     for i in gpu_archs:
@@ -110,6 +120,17 @@ def compileAmd():
         osDef = "-DHIPCC_OS_LINUX"
     else:
         osDef = "-DHIPCC_OS_WINDOWS"
+
+    # On Windows, clang auto-detects the newest installed MSVC toolset. When a
+    # specific VS/toolset version is requested, pin clang to that toolset. The
+    # gnu-style clang driver used by 'hipcc -x hip' does not accept -vctoolsdir
+    # (a clang-cl-only flag), so select the toolset via the environment
+    # (VCToolsInstallDir + PATH), which clang honors above vswhere auto-detection.
+    if not isLinux() and ( vsVersionRange is not None or vcToolsetVersion is not None ):
+        vcpath = common_tools.getVCPath(vsVersionRange, vcToolsetVersion)
+        os.environ["VCToolsInstallDir"] = vcpath + os.sep
+        os.environ["PATH"] = os.path.join(vcpath, "bin", "Hostx64", "x64") + os.pathsep + os.environ.get("PATH", "")
+        print("Pinned MSVC toolset: " + vcpath)
 
     # compile custom function table
     hiprt_custom_func = 'hiprt' + hiprt_ver + '_' + hip_version + '_custom_func_table.bc'
@@ -156,7 +177,7 @@ def compileAmd():
 def compileNv():
     ccbin = ''
     if not isLinux():
-        ccbin = common_tools.getVCPath() + '\\bin\\Hostx64\\x64'
+        ccbin = common_tools.getVCPath(vsVersionRange, vcToolsetVersion) + '\\bin\\Hostx64\\x64'
         ccbin = '"{}"'.format(ccbin)
         ccbin = '-ccbin=' + ccbin
 
@@ -191,7 +212,42 @@ parser.add_option(
     metavar="PATH"
     )
 
+# Add the optional Visual Studio *installation* selector (Windows only). This
+# always maps to a vswhere version: a friendly year ("2022", "2026"), an exact
+# version ("17.10"), or a raw range ("[17.0,18.0)"). It never selects an MSVC
+# toolset -- use --vcToolsVersion for that.
+parser.add_option(
+    "--vsVersion",
+    dest="vsVersion",
+    default=None,
+    help="Visual Studio installation to build against: a year (2022/2026), an exact version (17.10), or a vswhere range. Windows only. Defaults to the latest installed.",
+    metavar="VERSION"
+    )
+
+# Explicit MSVC toolset selector; can be combined with a VS installation.
+parser.add_option(
+    "--vcToolsVersion",
+    dest="vcToolsVersion",
+    default=None,
+    help="MSVC toolset version/prefix to pin, e.g. 14.44 or 14.51 (Windows only).",
+    metavar="VERSION"
+    )
+
 (options, args) = parser.parse_args()
+
+
+# Resolve the requested Visual Studio installation / MSVC toolset (CLI args, else
+# env vars). --vsVersion is always a VS *install* selector; --vcToolsVersion is
+# always the MSVC *toolset*, so ambiguous "X.Y" values are never misclassified.
+vsVersionSelector = options.vsVersion or os.environ.get("HIPRT_VS_VERSION")
+vcToolsetVersion = options.vcToolsVersion or os.environ.get("HIPRT_VC_TOOLS_VERSION")
+
+if vsVersionSelector:
+    vsVersionRange = common_tools.resolveVsVersionRange(vsVersionSelector)
+    print('Building against Visual Studio version: ' + vsVersionSelector + ' (vswhere version ' + vsVersionRange + ')')
+
+if vcToolsetVersion:
+    print('Pinning MSVC toolset version: ' + vcToolsetVersion)
 
 
 if options.hipSdkPath:

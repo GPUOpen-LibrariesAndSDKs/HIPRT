@@ -26,7 +26,7 @@
 #include <hiprt/hiprt_common.h>
 using namespace hiprt;
 
-HIPRT_DEVICE Aabb shflAabb( const Aabb& box, uint32_t srcLane )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE Aabb shflAabb( const Aabb& box, const uint32_t srcLane )
 {
 	Aabb b;
 	b.m_min.x = shfl( box.m_min.x, srcLane );
@@ -39,51 +39,51 @@ HIPRT_DEVICE Aabb shflAabb( const Aabb& box, uint32_t srcLane )
 }
 
 template <typename T>
-HIPRT_DEVICE T warpMin( T warpVal )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T warpMin( T warpVal )
 {
 	T warpValue = shfl_xor( warpVal, 1 );
-	warpVal		= hiprt::min( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 2 );
-	warpVal		= hiprt::min( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 4 );
-	warpVal		= hiprt::min( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 8 );
-	warpVal		= hiprt::min( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 16 );
-	warpVal		= hiprt::min( warpVal, warpValue );
+	warpVal     = hiprt::min( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 2 );
+	warpVal     = hiprt::min( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 4 );
+	warpVal     = hiprt::min( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 8 );
+	warpVal     = hiprt::min( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 16 );
+	warpVal     = hiprt::min( warpVal, warpValue );
 	if constexpr ( WarpSize == 64 )
 	{
 		warpValue = shfl_xor( warpVal, 32 );
-		warpVal	  = hiprt::min( warpVal, warpValue );
+		warpVal   = hiprt::min( warpVal, warpValue );
 	}
 	warpVal = shfl( warpVal, WarpSize - 1 );
 	return warpVal;
 }
 
 template <typename T>
-HIPRT_DEVICE T warpMax( T warpVal )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T warpMax( T warpVal )
 {
 	T warpValue = shfl_xor( warpVal, 1 );
-	warpVal		= hiprt::max( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 2 );
-	warpVal		= hiprt::max( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 4 );
-	warpVal		= hiprt::max( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 8 );
-	warpVal		= hiprt::max( warpVal, warpValue );
-	warpValue	= shfl_xor( warpVal, 16 );
-	warpVal		= hiprt::max( warpVal, warpValue );
+	warpVal     = hiprt::max( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 2 );
+	warpVal     = hiprt::max( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 4 );
+	warpVal     = hiprt::max( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 8 );
+	warpVal     = hiprt::max( warpVal, warpValue );
+	warpValue   = shfl_xor( warpVal, 16 );
+	warpVal     = hiprt::max( warpVal, warpValue );
 	if constexpr ( WarpSize == 64 )
 	{
 		warpValue = shfl_xor( warpVal, 32 );
-		warpVal	  = hiprt::max( warpVal, warpValue );
+		warpVal   = hiprt::max( warpVal, warpValue );
 	}
 	warpVal = shfl( warpVal, WarpSize - 1 );
 	return warpVal;
 }
 
 template <typename T>
-HIPRT_DEVICE T warpSum( T warpVal )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T warpSum( T warpVal )
 {
 	T warpValue = shfl_xor( warpVal, 1 );
 	warpVal += warpValue;
@@ -104,10 +104,10 @@ HIPRT_DEVICE T warpSum( T warpVal )
 	return warpVal;
 }
 
-HIPRT_DEVICE Aabb warpUnion( Aabb warpVal )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE Aabb warpUnion( Aabb warpVal )
 {
 	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
-	Aabb		   warpValue = shflAabb( warpVal, laneIndex ^ 1 );
+	Aabb           warpValue = shflAabb( warpVal, laneIndex ^ 1 );
 	warpVal.grow( warpValue );
 	warpValue = shflAabb( warpVal, laneIndex ^ 2 );
 	warpVal.grow( warpValue );
@@ -127,10 +127,10 @@ HIPRT_DEVICE Aabb warpUnion( Aabb warpVal )
 }
 
 template <typename T>
-HIPRT_DEVICE T warpScan( T warpVal )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T warpScan( T warpVal )
 {
 	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
-	T			   warpValue = shfl_up( warpVal, 1 );
+	T              warpValue = shfl_up( warpVal, 1 );
 	if ( laneIndex >= 1 ) warpVal += warpValue;
 	warpValue = shfl_up( warpVal, 2 );
 	if ( laneIndex >= 2 ) warpVal += warpValue;
@@ -149,11 +149,11 @@ HIPRT_DEVICE T warpScan( T warpVal )
 }
 
 template <typename T>
-HIPRT_DEVICE T warpOffset( T warpVal, T* counter )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T warpOffset( const T warpVal, T* counter )
 {
 	const uint32_t laneIndex  = threadIdx.x & ( WarpSize - 1 );
-	T			   warpSum	  = warpScan( warpVal );
-	T			   warpOffset = static_cast<T>( 0 );
+	T              warpSum    = warpScan( warpVal );
+	T              warpOffset = static_cast<T>( 0 );
 	if ( laneIndex == WarpSize - 1 ) warpOffset = atomicAdd( counter, warpSum );
 	warpSum -= warpVal;
 	warpOffset = shfl( warpOffset, WarpSize - 1 );
@@ -161,24 +161,24 @@ HIPRT_DEVICE T warpOffset( T warpVal, T* counter )
 }
 
 template <typename T>
-HIPRT_DEVICE T warpOffset( bool warpVal, T* counter )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T warpOffset( const bool warpVal, T* counter )
 {
 	const uint32_t laneIndex  = threadIdx.x & ( WarpSize - 1 );
 	const uint64_t warpBallot = hiprt::ballot( warpVal );
-	const T		   warpCount  = __popcll( warpBallot );
-	const T		   warpSum	  = __popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
-	T			   warpOffset;
-	if ( laneIndex == __ffsll( static_cast<unsigned long long>( warpBallot ) ) - 1 )
-		warpOffset = atomicAdd( counter, warpCount );
-	warpOffset = shfl( warpOffset, __ffsll( static_cast<unsigned long long>( warpBallot ) ) - 1 );
+	const T        warpCount  = hiprt::popcll( warpBallot );
+	if ( warpBallot == 0 ) return static_cast<T>( 0 );
+	const T warpSum    = hiprt::popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
+	T       warpOffset = static_cast<T>( 0 );
+	if ( laneIndex == hiprt::ffsll( warpBallot ) - 1 ) warpOffset = atomicAdd( counter, warpCount );
+	warpOffset = shfl( warpOffset, hiprt::ffsll( warpBallot ) - 1 );
 	return warpOffset + warpSum;
 }
 
 template <typename T>
-HIPRT_DEVICE T blockMin( T blockVal, T* blockCache )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T blockMin( T blockVal, T* blockCache )
 {
-	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
-	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
+	const uint32_t laneIndex     = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex     = threadIdx.x >> Log2( WarpSize );
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpMin( blockVal );
@@ -195,10 +195,10 @@ HIPRT_DEVICE T blockMin( T blockVal, T* blockCache )
 }
 
 template <typename T>
-HIPRT_DEVICE T blockMax( T blockVal, T* blockCache )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T blockMax( T blockVal, T* blockCache )
 {
-	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
-	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
+	const uint32_t laneIndex     = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex     = threadIdx.x >> Log2( WarpSize );
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpMax( blockVal );
@@ -215,10 +215,10 @@ HIPRT_DEVICE T blockMax( T blockVal, T* blockCache )
 }
 
 template <typename T>
-HIPRT_DEVICE T blockSum( T blockVal, T* blockCache )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T blockSum( T blockVal, T* blockCache )
 {
-	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
-	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
+	const uint32_t laneIndex     = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex     = threadIdx.x >> Log2( WarpSize );
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpSum( blockVal );
@@ -233,10 +233,10 @@ HIPRT_DEVICE T blockSum( T blockVal, T* blockCache )
 	return blockCache[0];
 }
 
-HIPRT_DEVICE Aabb blockUnion( Aabb blockVal, Aabb* blockCache )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE Aabb blockUnion( Aabb blockVal, Aabb* blockCache )
 {
-	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
-	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
+	const uint32_t laneIndex     = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex     = threadIdx.x >> Log2( WarpSize );
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	blockVal = warpUnion( blockVal );
@@ -252,14 +252,14 @@ HIPRT_DEVICE Aabb blockUnion( Aabb blockVal, Aabb* blockCache )
 }
 
 template <typename T>
-HIPRT_DEVICE T blockScan( T blockVal, T* blockCache )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T blockScan( const T blockVal, T* blockCache )
 {
-	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
-	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
+	const uint32_t laneIndex     = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex     = threadIdx.x >> Log2( WarpSize );
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
 	T blockValue = blockVal;
-	T warpSum	 = warpScan( blockValue );
+	T warpSum    = warpScan( blockValue );
 
 	if ( laneIndex == WarpSize - 1 ) blockCache[warpIndex] = warpSum;
 
@@ -282,16 +282,16 @@ HIPRT_DEVICE T blockScan( T blockVal, T* blockCache )
 }
 
 template <typename T>
-HIPRT_DEVICE T blockScan( bool blockVal, T* blockCache )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE T blockScan( const bool blockVal, T* blockCache )
 {
-	const uint32_t laneIndex	 = threadIdx.x & ( WarpSize - 1 );
-	const uint32_t warpIndex	 = threadIdx.x >> Log2( WarpSize );
+	const uint32_t laneIndex     = threadIdx.x & ( WarpSize - 1 );
+	const uint32_t warpIndex     = threadIdx.x >> Log2( WarpSize );
 	const uint32_t warpsPerBlock = DivideRoundUp( static_cast<uint32_t>( blockDim.x ), WarpSize );
 
-	T			   blockValue = blockVal;
+	T              blockValue = blockVal;
 	const uint64_t warpBallot = hiprt::ballot( blockVal );
-	const T		   warpCount  = __popcll( warpBallot );
-	const T		   warpSum	  = __popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
+	const T        warpCount  = hiprt::popcll( warpBallot );
+	const T        warpSum    = hiprt::popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
 
 	if ( laneIndex == 0 ) blockCache[warpIndex] = warpCount;
 

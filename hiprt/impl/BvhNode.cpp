@@ -27,11 +27,13 @@
 namespace hiprt
 {
 #if !defined( __KERNELCC__ )
-DECLARE_TYPE_TRAITS( hiprt::TrianglePairNode );
-DECLARE_TYPE_TRAITS( hiprt::TrianglePacketNode );
+DECLARE_TYPE_TRAITS( hiprt::rtip11::BoxNode );
+DECLARE_TYPE_TRAITS( hiprt::rtip31::BoxNode );
+DECLARE_TYPE_TRAITS( hiprt::rtip11::TrianglePairNode );
+DECLARE_TYPE_TRAITS( hiprt::rtip31::TrianglePacketNode );
 DECLARE_TYPE_TRAITS( hiprt::CustomNode );
-DECLARE_TYPE_TRAITS( hiprt::UserInstanceNode );
-DECLARE_TYPE_TRAITS( hiprt::HwInstanceNode );
+DECLARE_TYPE_TRAITS( hiprt::rtip11::InstanceNode );
+DECLARE_TYPE_TRAITS( hiprt::rtip31::InstanceNode );
 DECLARE_TYPE_TRAITS( hiprt::ReferenceNode );
 DECLARE_TYPE_TRAITS( hiprt::ScratchNode );
 DECLARE_TYPE_TRAITS( hiprt::ApiNode );

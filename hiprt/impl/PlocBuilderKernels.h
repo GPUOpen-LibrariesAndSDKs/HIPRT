@@ -41,106 +41,110 @@
 #include <hiprt/impl/BvhConfig.h>
 using namespace hiprt;
 
-HIPRT_DEVICE uint32_t findParent( uint32_t i, uint32_t j, uint32_t n, const uint32_t* sortedMortonCodeKeys )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE uint32_t
+findParent( const uint32_t i, const uint32_t j, const uint32_t n, const uint32_t* sortedMortonCodeKeys )
 {
 	if ( i == 0 && j == n ) return InvalidValue;
 	if ( i == 0 || ( j != n && findHighestDifferentBit( j - 1, j, n, sortedMortonCodeKeys ) <
-								   findHighestDifferentBit( i - 1, i, n, sortedMortonCodeKeys ) ) )
+	                               findHighestDifferentBit( i - 1, i, n, sortedMortonCodeKeys ) ) )
 		return j - 1;
 	else
 		return i - 1;
 }
 
-__device__ __forceinline__ uint32_t encodeOffset( const int32_t threadIndex, const int32_t neighbourIndex )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE uint32_t encodeOffset( const int32_t threadIndex, const int32_t neighbourIndex )
 {
 	const int32_t  sOffset = neighbourIndex - threadIndex;
 	const uint32_t uOffset = abs( sOffset ) - 1;
 	return ( uOffset << 1 ) | ( sOffset < 0 ? ( threadIndex & 1 ) ^ 1 : threadIndex & 1 );
 }
 
-__device__ __forceinline__ int32_t decodeOffset( const int32_t threadIndex, const uint32_t offset )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE int32_t decodeOffset( const int32_t threadIndex, const uint32_t offset )
 {
 	const uint32_t off = ( offset >> 1 ) + 1;
 	return threadIndex + ( ( offset ^ threadIndex ) & 1 ? -static_cast<int32_t>( off ) : static_cast<int32_t>( off ) );
 }
 
 template <typename PrimitiveContainer>
-__device__ void SetupClusters(
-	PrimitiveContainer& primitives, ReferenceNode* references, const uint32_t* sortedMortonCodeValues, uint32_t* nodeIndices )
+HIPRT_DEVICE HIPRT_INLINE void SetupClusters(
+	const PrimitiveContainer& primitives,
+	const uint32_t*           sortedMortonCodeValues,
+	ReferenceNode*            references,
+	uint32_t*                 nodeIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	if ( index >= primitives.getCount() ) return;
 
 	const uint32_t leafType = []() {
-		if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
+		if constexpr ( is_same_v<PrimitiveContainer, TriangleMesh> )
 			return TriangleType;
-		else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+		else if constexpr ( is_same_v<PrimitiveContainer, AabbList> )
 			return CustomType;
 		else if constexpr (
-			is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
-			is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
+			is_same_v<PrimitiveContainer, InstanceList<hiprtFrameSRT>> ||
+			is_same_v<PrimitiveContainer, InstanceList<hiprtFrameMatrix>> )
 			return InstanceType;
 	}();
 
 	const uint32_t primIndex = sortedMortonCodeValues[index];
-	references[index]		 = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
-	nodeIndices[index]		 = encodeNodeIndex( index, leafType );
+	references[index]        = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
+	nodeIndices[index]       = encodeNodeIndex( index, leafType );
 }
 
-extern "C" __global__ void SetupClusters_TriangleMesh(
-	TriangleMesh primitives, ReferenceNode* references, const uint32_t* sortedMortonCodeValues, uint32_t* nodeIndices )
+HIPRT_KERNEL void SetupClusters_TriangleMesh(
+	const TriangleMesh primitives, const uint32_t* sortedMortonCodeValues, ReferenceNode* references, uint32_t* nodeIndices )
 {
-	SetupClusters<TriangleMesh>( primitives, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<TriangleMesh>( primitives, sortedMortonCodeValues, references, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_AabbList(
-	AabbList primitives, ReferenceNode* references, const uint32_t* sortedMortonCodeValues, uint32_t* nodeIndices )
+HIPRT_KERNEL void SetupClusters_AabbList(
+	const AabbList primitives, const uint32_t* sortedMortonCodeValues, ReferenceNode* references, uint32_t* nodeIndices )
 {
-	SetupClusters<AabbList>( primitives, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<AabbList>( primitives, sortedMortonCodeValues, references, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_InstanceList_hiprtFrameSRT(
-	InstanceList<hiprtFrameSRT> primitives,
-	ReferenceNode*				references,
-	const uint32_t*				sortedMortonCodeValues,
-	uint32_t*					nodeIndices )
+HIPRT_KERNEL void SetupClusters_InstanceList_hiprtFrameSRT(
+	const InstanceList<hiprtFrameSRT> primitives,
+	const uint32_t*                   sortedMortonCodeValues,
+	ReferenceNode*                    references,
+	uint32_t*                         nodeIndices )
 {
-	SetupClusters<InstanceList<hiprtFrameSRT>>( primitives, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<InstanceList<hiprtFrameSRT>>( primitives, sortedMortonCodeValues, references, nodeIndices );
 }
 
-extern "C" __global__ void SetupClusters_InstanceList_hiprtFrameMatrix(
-	InstanceList<hiprtFrameMatrix> primitives,
-	ReferenceNode*				   references,
-	const uint32_t*				   sortedMortonCodeValues,
-	uint32_t*					   nodeIndices )
+HIPRT_KERNEL void SetupClusters_InstanceList_hiprtFrameMatrix(
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const uint32_t*                      sortedMortonCodeValues,
+	ReferenceNode*                       references,
+	uint32_t*                            nodeIndices )
 {
-	SetupClusters<InstanceList<hiprtFrameMatrix>>( primitives, references, sortedMortonCodeValues, nodeIndices );
+	SetupClusters<InstanceList<hiprtFrameMatrix>>( primitives, sortedMortonCodeValues, references, nodeIndices );
 }
 
 // H-PLOC: Hierarchical Parallel Locally-Ordered Clustering for Bounding Volume Hierarchy Construction
 // https://gpuopen.com/download/publications/HPLOC.pdf
 // Disclaimer: This implementation is different than the one used in the paper.
-extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
-	uint32_t		primCount,
-	const uint32_t* sortedMortonCodeKeys,
-	uint32_t*		updateCounters,
-	uint32_t*		nodeIndices,
-	ScratchNode*	scratchNodes,
-	ReferenceNode*	references,
-	uint32_t*		nodeCounter )
+HIPRT_KERNEL void __launch_bounds__( PlocMainBlockSize ) HPloc(
+	const uint32_t       primCount,
+	const uint32_t*      sortedMortonCodeKeys,
+	const ReferenceNode* references,
+	uint32_t*            updateCounters,
+	uint32_t*            nodeIndices,
+	ScratchNode*         scratchNodes,
+	uint32_t*            nodeCounter )
 {
-	const uint32_t index	 = blockDim.x * blockIdx.x + threadIdx.x;
+	const uint32_t index     = blockDim.x * blockIdx.x + threadIdx.x;
 	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
 	const uint32_t warpIndex = threadIdx.x >> Log2( WarpSize );
 
 	alignas( alignof( Aabb ) ) __shared__ uint8_t boxesCache[sizeof( Aabb ) * PlocMainBlockSize];
-	__shared__ uint32_t							  distanceOffsetsBlock[PlocMainBlockSize];
-	__shared__ uint32_t							  nodeIndicesBlock[PlocMainBlockSize];
+	__shared__ uint32_t                           distanceOffsetsBlock[PlocMainBlockSize];
+	__shared__ uint32_t                           nodeIndicesBlock[PlocMainBlockSize];
 
-	Aabb*	  boxesBlock		  = reinterpret_cast<Aabb*>( boxesCache );
-	Aabb*	  boxesWarp			  = &boxesBlock[warpIndex * WarpSize];
+	Aabb*     boxesBlock          = reinterpret_cast<Aabb*>( boxesCache );
+	Aabb*     boxesWarp           = &boxesBlock[warpIndex * WarpSize];
 	uint32_t* distanceOffsetsWarp = &distanceOffsetsBlock[warpIndex * WarpSize];
-	uint32_t* nodeIndicesWarp	  = &nodeIndicesBlock[warpIndex * WarpSize];
+	uint32_t* nodeIndicesWarp     = &nodeIndicesBlock[warpIndex * WarpSize];
 
 	uint32_t i = index;
 	uint32_t j = i + 1;
@@ -173,32 +177,32 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 
 		__threadfence();
 
-		const uint32_t size	 = j - i;
-		const bool	   last	 = active && size == primCount;
-		uint64_t	   merge = hiprt::ballot( ( active && size > WarpSize / 2 ) || last );
+		const uint32_t size  = j - i;
+		const bool     last  = active && size == primCount;
+		uint64_t       merge = hiprt::ballot( ( active && size > WarpSize / 2 ) || last );
 
 		while ( merge )
 		{
-			const uint32_t currentLane = __ffsll( static_cast<unsigned long long>( merge ) ) - 1;
+			const uint32_t currentLane = hiprt::ffsll( merge ) - 1;
 			merge &= merge - 1;
 
 			const uint32_t current_i   = shfl( i, currentLane );
 			const uint32_t current_j   = shfl( j, currentLane );
 			const uint32_t current_s   = shfl( s, currentLane );
-			const bool	   currentLast = shfl( last, currentLane );
+			const bool     currentLast = shfl( last, currentLane );
 
 			uint32_t numLeft  = min( current_s - current_i, WarpSize / 2 );
 			uint32_t numRight = min( current_j - current_s, WarpSize / 2 );
 
 			uint32_t leftIndex = InvalidValue;
 			if ( laneIndex < numLeft ) leftIndex = nodeIndices[current_i + laneIndex];
-			uint32_t numValidLeft = __popcll( hiprt::ballot( leftIndex != InvalidValue ) );
-			numLeft				  = min( numLeft, numValidLeft );
+			uint32_t numValidLeft = hiprt::popcll( hiprt::ballot( leftIndex != InvalidValue ) );
+			numLeft               = min( numLeft, numValidLeft );
 
 			uint32_t rightIndex = InvalidValue;
 			if ( laneIndex < numRight ) rightIndex = nodeIndices[current_s + laneIndex];
-			uint32_t numValidRight = __popcll( hiprt::ballot( rightIndex != InvalidValue ) );
-			numRight			   = min( numRight, numValidRight );
+			uint32_t numValidRight = hiprt::popcll( hiprt::ballot( rightIndex != InvalidValue ) );
+			numRight               = min( numRight, numValidRight );
 
 			if ( laneIndex < numLeft ) nodeIndicesWarp[laneIndex] = leftIndex;
 			if ( laneIndex < numRight ) nodeIndicesWarp[laneIndex + numLeft] = rightIndex;
@@ -206,13 +210,13 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 			__threadfence_block();
 			sync_warp();
 
-			uint32_t	   numberOfClusters = numLeft + numRight;
-			const uint32_t threshold		= currentLast ? 1 : WarpSize / 2;
+			uint32_t       numberOfClusters = numLeft + numRight;
+			const uint32_t threshold        = currentLast ? 1 : WarpSize / 2;
 			if ( numberOfClusters > threshold )
 			{
-				uint32_t nodeIndex	 = nodeIndicesWarp[min( laneIndex, numberOfClusters - 1 )];
-				Aabb	 box		 = isLeafNode( nodeIndex ) ? references[getNodeAddr( nodeIndex )].aabb()
-															   : scratchNodes[getNodeAddr( nodeIndex )].aabb();
+				uint32_t nodeIndex   = nodeIndicesWarp[min( laneIndex, numberOfClusters - 1 )];
+				Aabb     box         = isLeafNode( nodeIndex ) ? references[getNodeAddr( nodeIndex )].aabb()
+				                                               : scratchNodes[getNodeAddr( nodeIndex )].aabb();
 				boxesWarp[laneIndex] = box;
 			}
 
@@ -224,21 +228,21 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 				sync_warp();
 
 				uint32_t minDistanceOffset = InvalidValue;
-				Aabb	 box			   = boxesWarp[laneIndex];
+				Aabb     box               = boxesWarp[laneIndex];
 
 				for ( uint32_t neighbourIndex = laneIndex + 1;
-					  neighbourIndex <= laneIndex + PlocRadius && neighbourIndex < numberOfClusters;
-					  ++neighbourIndex )
+				      neighbourIndex <= laneIndex + PlocRadius && neighbourIndex < numberOfClusters;
+				      ++neighbourIndex )
 				{
 					Aabb neighbourBox = boxesWarp[neighbourIndex];
 					neighbourBox.grow( box );
 					uint32_t distance = ( ( __float_as_uint( neighbourBox.area() ) << 1 ) & ~OffsetMask );
 
-					const uint32_t offset0		   = encodeOffset( laneIndex, neighbourIndex );
+					const uint32_t offset0         = encodeOffset( laneIndex, neighbourIndex );
 					const uint32_t distanceOffset0 = distance | offset0;
-					minDistanceOffset			   = min( minDistanceOffset, distanceOffset0 );
+					minDistanceOffset              = min( minDistanceOffset, distanceOffset0 );
 
-					const uint32_t offset1		   = encodeOffset( neighbourIndex, laneIndex );
+					const uint32_t offset1         = encodeOffset( neighbourIndex, laneIndex );
 					const uint32_t distanceOffset1 = distance | offset1;
 					atomicMin( &distanceOffsetsWarp[neighbourIndex], distanceOffset1 );
 				}
@@ -253,7 +257,7 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 					int32_t neighbourNeighbourIndex =
 						decodeOffset( neighbourIndex, distanceOffsetsWarp[neighbourIndex] & OffsetMask );
 
-					uint32_t leftChildIndex	 = nodeIndicesWarp[laneIndex];
+					uint32_t leftChildIndex  = nodeIndicesWarp[laneIndex];
 					uint32_t rightChildIndex = nodeIndicesWarp[neighbourIndex];
 
 					bool merging = false;
@@ -271,21 +275,21 @@ extern "C" __global__ void __launch_bounds__( PlocMainBlockSize ) HPloc(
 					{
 						box.grow( boxesWarp[neighbourIndex] );
 
-						scratchNodes[nodeAddr].m_childIndex0 = leftChildIndex;
-						scratchNodes[nodeAddr].m_childIndex1 = rightChildIndex;
-						scratchNodes[nodeAddr].m_box		 = box;
+						scratchNodes[nodeAddr].m_childIndices[0] = leftChildIndex;
+						scratchNodes[nodeAddr].m_childIndices[1] = rightChildIndex;
+						scratchNodes[nodeAddr].m_box             = box;
 
 						nodeIndex = encodeNodeIndex( nodeAddr, BoxType );
 					}
 				}
 
 				const uint64_t warpBallot = hiprt::ballot( nodeIndex != InvalidValue ); // warp sync'd here
-				const uint32_t newIndex	  = __popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
-				numberOfClusters		  = __popcll( warpBallot );
+				const uint32_t newIndex   = hiprt::popcll( warpBallot & ( ( 1ull << laneIndex ) - 1ull ) );
+				numberOfClusters          = hiprt::popcll( warpBallot );
 
 				if ( nodeIndex != InvalidValue )
 				{
-					boxesWarp[newIndex]		  = box;
+					boxesWarp[newIndex]       = box;
 					nodeIndicesWarp[newIndex] = nodeIndex;
 				}
 

@@ -33,20 +33,28 @@
 #endif
 
 template <uint32_t Option>
-__device__ uint3
-getColor( hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
+HIPRT_DEVICE HIPRT_INLINE uint3 getColor(
+	[[maybe_unused]] hiprtScene      scene,
+	[[maybe_unused]] const hiprtHit& hit,
+	[[maybe_unused]] const uint32_t* matIndices,
+	[[maybe_unused]] const Material* materials,
+	[[maybe_unused]] const uint32_t* matOffsetPerInstance )
 {
 	return uint3{};
 }
 
 template <>
-__device__ uint3 getColor<VisualizeColor>(
-	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
+HIPRT_DEVICE HIPRT_INLINE uint3 getColor<VisualizeColor>(
+	hiprtScene      scene,
+	const hiprtHit& hit,
+	const uint32_t* matIndices,
+	const Material* materials,
+	const uint32_t* matOffsetPerInstance )
 {
-	const uint32_t matOffset	= matOffsetPerInstance[hit.instanceID] + hit.primID;
-	const uint32_t matIndex		= matIndices[matOffset];
-	float3		   diffuseColor = materials[matIndex].m_diffuse;
-	uint3		   color;
+	const uint32_t matOffset    = matOffsetPerInstance[hit.instanceID] + hit.primID;
+	const uint32_t matIndex     = matIndices[matOffset];
+	float3         diffuseColor = materials[matIndex].m_diffuse;
+	uint3          color;
 	color.x = diffuseColor.x * 255;
 	color.y = diffuseColor.y * 255;
 	color.z = diffuseColor.z * 255;
@@ -54,8 +62,12 @@ __device__ uint3 getColor<VisualizeColor>(
 }
 
 template <>
-__device__ uint3 getColor<VisualizeUv>(
-	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
+HIPRT_DEVICE HIPRT_INLINE uint3 getColor<VisualizeUv>(
+	hiprtScene                       scene,
+	const hiprtHit&                  hit,
+	[[maybe_unused]] const uint32_t* matIndices,
+	[[maybe_unused]] const Material* materials,
+	[[maybe_unused]] const uint32_t* matOffsetPerInstance )
 {
 	uint3 color;
 	color.x = hiprt::clamp( static_cast<uint32_t>( hit.uv.x * 255 ), 0, 255 );
@@ -65,8 +77,12 @@ __device__ uint3 getColor<VisualizeUv>(
 }
 
 template <>
-__device__ uint3 getColor<VisualizeId>(
-	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
+HIPRT_DEVICE HIPRT_INLINE uint3 getColor<VisualizeId>(
+	hiprtScene                       scene,
+	const hiprtHit&                  hit,
+	[[maybe_unused]] const uint32_t* matIndices,
+	[[maybe_unused]] const Material* materials,
+	[[maybe_unused]] const uint32_t* matOffsetPerInstance )
 {
 	uint3 color;
 	color.x = tea<16>( hit.primID, 0 ).x % 255;
@@ -76,11 +92,15 @@ __device__ uint3 getColor<VisualizeId>(
 }
 
 template <>
-__device__ uint3 getColor<VisualizeHitDist>(
-	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
+HIPRT_DEVICE HIPRT_INLINE uint3 getColor<VisualizeHitDist>(
+	hiprtScene                       scene,
+	const hiprtHit&                  hit,
+	[[maybe_unused]] const uint32_t* matIndices,
+	[[maybe_unused]] const Material* materials,
+	[[maybe_unused]] const uint32_t* matOffsetPerInstance )
 {
-	float t = hit.t / 50.0f;
-	uint3 color;
+	const float t = hit.t / 50.0f;
+	uint3       color;
 	color.x = hiprt::clamp( static_cast<uint32_t>( t * 255 ), 0, 255 );
 	color.y = hiprt::clamp( static_cast<uint32_t>( t * 255 ), 0, 255 );
 	color.z = hiprt::clamp( static_cast<uint32_t>( t * 255 ), 0, 255 );
@@ -88,11 +108,15 @@ __device__ uint3 getColor<VisualizeHitDist>(
 }
 
 template <>
-__device__ uint3 getColor<VisualizeNormal>(
-	hiprtScene scene, const hiprtHit& hit, uint32_t* matIndices, Material* materials, uint32_t* matOffsetPerInstance )
+HIPRT_DEVICE HIPRT_INLINE uint3 getColor<VisualizeNormal>(
+	hiprtScene                       scene,
+	const hiprtHit&                  hit,
+	[[maybe_unused]] const uint32_t* matIndices,
+	[[maybe_unused]] const Material* materials,
+	[[maybe_unused]] const uint32_t* matOffsetPerInstance )
 {
-	float3 n = hiprt::normalize( hiprtVectorObjectToWorld( hit.normal, scene, hit.instanceID ) );
-	uint3  color;
+	const float3 n = hiprt::normalize( hiprtVectorObjectToWorld( hit.normal, scene, hit.instanceID ) );
+	uint3        color;
 	color.x = ( ( n.x + 1.0f ) * 0.5f ) * 255;
 	color.y = ( ( n.y + 1.0f ) * 0.5f ) * 255;
 	color.z = ( ( n.z + 1.0f ) * 0.5f ) * 255;
@@ -100,40 +124,33 @@ __device__ uint3 getColor<VisualizeNormal>(
 }
 
 template <uint32_t Option>
-__device__ void PrimaryRayKernel(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
+HIPRT_DEVICE HIPRT_INLINE void PrimaryRayKernel(
+	hiprtScene             scene,
+	uint8_t*               image,
+	const uint2            resolution,
 	hiprtGlobalStackBuffer globalStackBuffer,
-	const Camera&		   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+	const Camera&          camera,
+	const uint32_t*        matIndices,
+	const Material*        materials,
+	const uint32_t*        matOffsetPerInstance )
 {
-	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
-	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
+	const uint32_t x     = blockIdx.x * blockDim.x + threadIdx.x;
+	const uint32_t y     = blockIdx.y * blockDim.y + threadIdx.y;
 	const uint32_t index = x + y * resolution.x;
 
 	uint32_t seed = tea<16>( x + y * resolution.x, 0 ).x;
 
-	__shared__ uint32_t	   sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];
+	__shared__ uint32_t    sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];
 	hiprtSharedStackBuffer sharedStackBuffer{ SHARED_STACK_SIZE, sharedStackCache };
 
-	Stack		  stack( globalStackBuffer, sharedStackBuffer );
+	Stack         stack( globalStackBuffer, sharedStackBuffer );
 	InstanceStack instanceStack;
 
-	hiprtRay													ray = generateRay( x, y, resolution, camera, seed, false );
+	hiprtRay                                                    ray = generateRay( x, y, resolution, camera, seed, false );
 	hiprtSceneTraversalClosestCustomStack<Stack, InstanceStack> tr( scene, ray, stack, instanceStack );
 	{
 		hiprtHit hit = tr.getNextHit();
-		uint3	 color{};
+		uint3    color{};
 		if ( hit.hasHit() ) color = getColor<Option>( scene, hit, matIndices, materials, matOffsetPerInstance );
 
 		image[index * 4 + 0] = color.x;
@@ -143,212 +160,134 @@ __device__ void PrimaryRayKernel(
 	}
 }
 
-extern "C" __global__ void PrimaryRayKernel_0(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void PrimaryRayKernel_0(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	[[maybe_unused]] const float     aoRadius,
+	[[maybe_unused]] hiprtFuncTable  table )
 {
 	PrimaryRayKernel<VisualizeColor>(
-		scene,
-		image,
-		resolution,
-		globalStackBuffer,
-		camera,
-		matIndices,
-		materials,
-		matOffsetPerInstance,
-		indices,
-		indxOffsets,
-		normals,
-		normOffset,
-		numOfLights,
-		lights,
-		aoRadius );
+		scene, image, resolution, globalStackBuffer, camera, matIndices, materials, matOffsetPerInstance );
 }
 
-extern "C" __global__ void PrimaryRayKernel_1(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void PrimaryRayKernel_1(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	[[maybe_unused]] const float     aoRadius,
+	[[maybe_unused]] hiprtFuncTable  table )
 {
 	PrimaryRayKernel<VisualizeUv>(
-		scene,
-		image,
-		resolution,
-		globalStackBuffer,
-		camera,
-		matIndices,
-		materials,
-		matOffsetPerInstance,
-		indices,
-		indxOffsets,
-		normals,
-		normOffset,
-		numOfLights,
-		lights,
-		aoRadius );
+		scene, image, resolution, globalStackBuffer, camera, matIndices, materials, matOffsetPerInstance );
 }
 
-extern "C" __global__ void PrimaryRayKernel_2(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void PrimaryRayKernel_2(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	[[maybe_unused]] const float     aoRadius,
+	[[maybe_unused]] hiprtFuncTable  table )
 {
 	PrimaryRayKernel<VisualizeId>(
-		scene,
-		image,
-		resolution,
-		globalStackBuffer,
-		camera,
-		matIndices,
-		materials,
-		matOffsetPerInstance,
-		indices,
-		indxOffsets,
-		normals,
-		normOffset,
-		numOfLights,
-		lights,
-		aoRadius );
+		scene, image, resolution, globalStackBuffer, camera, matIndices, materials, matOffsetPerInstance );
 }
 
-extern "C" __global__ void PrimaryRayKernel_3(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void PrimaryRayKernel_3(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	[[maybe_unused]] const float     aoRadius,
+	[[maybe_unused]] hiprtFuncTable  table )
 {
 	PrimaryRayKernel<VisualizeHitDist>(
-		scene,
-		image,
-		resolution,
-		globalStackBuffer,
-		camera,
-		matIndices,
-		materials,
-		matOffsetPerInstance,
-		indices,
-		indxOffsets,
-		normals,
-		normOffset,
-		numOfLights,
-		lights,
-		aoRadius );
+		scene, image, resolution, globalStackBuffer, camera, matIndices, materials, matOffsetPerInstance );
 }
 
-extern "C" __global__ void PrimaryRayKernel_4(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void PrimaryRayKernel_4(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	[[maybe_unused]] const float     aoRadius,
+	[[maybe_unused]] hiprtFuncTable  table )
 {
 	PrimaryRayKernel<VisualizeNormal>(
-		scene,
-		image,
-		resolution,
-		globalStackBuffer,
-		camera,
-		matIndices,
-		materials,
-		matOffsetPerInstance,
-		indices,
-		indxOffsets,
-		normals,
-		normOffset,
-		numOfLights,
-		lights,
-		aoRadius );
+		scene, image, resolution, globalStackBuffer, camera, matIndices, materials, matOffsetPerInstance );
 }
 
-extern "C" __global__ void PrimaryRayKernel_5(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void PrimaryRayKernel_5(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	[[maybe_unused]] const float     aoRadius,
+	[[maybe_unused]] hiprtFuncTable  table )
 {
 	PrimaryRayKernel<VisualizeAo>(
-		scene,
-		image,
-		resolution,
-		globalStackBuffer,
-		camera,
-		matIndices,
-		materials,
-		matOffsetPerInstance,
-		indices,
-		indxOffsets,
-		normals,
-		normOffset,
-		numOfLights,
-		lights,
-		aoRadius );
+		scene, image, resolution, globalStackBuffer, camera, matIndices, materials, matOffsetPerInstance );
 }

@@ -56,11 +56,11 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 	r[7] = 0.0f;
 	r[8] = 0.0f;
 
-	w	 = hypot( { q[0], q[3], q[6] } );
+	w    = hypot( { q[0], q[3], q[6] } );
 	r[0] = w;
 	if ( w != 0.0f )
 	{
-		w	 = 1.0f / w;
+		w    = 1.0f / w;
 		q[0] = q[0] * w;
 		q[3] = q[3] * w;
 		q[6] = q[6] * w;
@@ -70,18 +70,18 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 		q[0] = 1.0f;
 	}
 
-	w	 = q[0] * q[1] + q[3] * q[4] + q[6] * q[7];
+	w    = q[0] * q[1] + q[3] * q[4] + q[6] * q[7];
 	r[1] = w;
 
 	q[1] = q[1] - w * q[0];
 	q[4] = q[4] - w * q[3];
 	q[7] = q[7] - w * q[6];
 
-	w	 = hypot( { q[1], q[4], q[7] } );
+	w    = hypot( { q[1], q[4], q[7] } );
 	r[4] = w;
 	if ( w != 0.0f )
 	{
-		w	 = 1.0f / w;
+		w    = 1.0f / w;
 		q[1] = q[1] * w;
 		q[4] = q[4] * w;
 		q[7] = q[7] * w;
@@ -91,25 +91,25 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 		q[1] = 1.0f;
 	}
 
-	w	 = q[0] * q[2] + q[3] * q[5] + q[6] * q[8];
+	w    = q[0] * q[2] + q[3] * q[5] + q[6] * q[8];
 	r[2] = w;
 
 	q[2] = q[2] - w * q[0];
 	q[5] = q[5] - w * q[3];
 	q[8] = q[8] - w * q[6];
 
-	w	 = q[1] * q[2] + q[4] * q[5] + q[7] * q[8];
+	w    = q[1] * q[2] + q[4] * q[5] + q[7] * q[8];
 	r[5] = w;
 
 	q[2] = q[2] - w * q[1];
 	q[5] = q[5] - w * q[4];
 	q[8] = q[8] - w * q[7];
 
-	w	 = hypot( { q[2], q[5], q[8] } );
+	w    = hypot( { q[2], q[5], q[8] } );
 	r[8] = w;
 	if ( w != 0.0f )
 	{
-		w	 = 1.0f / w;
+		w    = 1.0f / w;
 		q[2] = q[2] * w;
 		q[5] = q[5] * w;
 		q[8] = q[8] * w;
@@ -120,7 +120,7 @@ HIPRT_HOST_DEVICE static void qr( const float* a, float* q, float* r )
 	}
 
 	float d = q[0] * q[4] * q[8] + q[1] * q[5] * q[6] + q[3] * q[7] * q[2] - q[2] * q[4] * q[6] - q[1] * q[3] * q[8] -
-			  q[5] * q[7] * q[0];
+	          q[5] * q[7] * q[0];
 
 	if ( d < 0.0f )
 	{

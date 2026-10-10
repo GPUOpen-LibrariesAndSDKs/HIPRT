@@ -32,52 +32,52 @@
 #define SHARED_STACK_SIZE 1
 #endif
 
-__device__ bool filter( const hiprtRay& ray, const void* data, void* payload, const hiprtHit& hit )
+HIPRT_DEVICE HIPRT_INLINE bool filter( const hiprtRay& ray, const void* data, void* payload, const hiprtHit& hit )
 {
 	if ( ( hit.primID + hit.instanceID ) & 1 ) return true;
 	return false;
 }
 
-extern "C" __global__ void __launch_bounds__( 64 ) AoRayKernel(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius,
-	hiprtFuncTable		   table )
+HIPRT_KERNEL void __launch_bounds__( 64 ) AoRayKernel(
+	hiprtScene                       scene,
+	uint8_t*                         image,
+	const uint2                      resolution,
+	hiprtGlobalStackBuffer           globalStackBuffer,
+	const Camera                     camera,
+	const uint32_t*                  matIndices,
+	const Material*                  materials,
+	const uint32_t*                  matOffsetPerInstance,
+	[[maybe_unused]] const uint32_t* indices,
+	[[maybe_unused]] const uint32_t* indxOffsets,
+	[[maybe_unused]] const float3*   normals,
+	[[maybe_unused]] const uint32_t* normOffset,
+	[[maybe_unused]] const uint32_t* numOfLights,
+	[[maybe_unused]] const Light*    lights,
+	const float                      aoRadius,
+	hiprtFuncTable                   table )
 {
-	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
-	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
+	const uint32_t x     = blockIdx.x * blockDim.x + threadIdx.x;
+	const uint32_t y     = blockIdx.y * blockDim.y + threadIdx.y;
 	const uint32_t index = x + y * resolution.x;
 
-	constexpr uint32_t Spp		 = 512;
+	constexpr uint32_t Spp       = 512;
 	constexpr uint32_t AoSamples = 32;
 
 	uint3  color{};
 	float3 diffuseColor = hiprt::make_float3( 1.0f );
-	float  ao			= 0.0f;
+	float  ao           = 0.0f;
 
-	__shared__ uint32_t	   sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];
+	__shared__ uint32_t    sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];
 	hiprtSharedStackBuffer sharedStackBuffer{ SHARED_STACK_SIZE, sharedStackCache };
 
-	Stack		  stack( globalStackBuffer, sharedStackBuffer );
+	Stack         stack( globalStackBuffer, sharedStackBuffer );
 	InstanceStack instanceStack;
 
 	for ( uint32_t p = 0; p < Spp; p++ )
 	{
 		uint32_t seed = tea<16>( x + y * resolution.x, p ).x;
 
-		hiprtRay													ray = generateRay( x, y, resolution, camera, seed, true );
+		hiprtRay                                                    ray = generateRay( x, y, resolution, camera, seed, true );
 		hiprtSceneTraversalClosestCustomStack<Stack, InstanceStack> tr( scene, ray, stack, instanceStack );
 		{
 			hiprtHit hit = tr.getNextHit();
@@ -87,7 +87,7 @@ extern "C" __global__ void __launch_bounds__( 64 ) AoRayKernel(
 				const float3 surfacePt = ray.origin + hit.t * ( 1.0f - 1.0e-2f ) * ray.direction;
 
 				const uint32_t matOffset = matOffsetPerInstance[hit.instanceID] + hit.primID;
-				const uint32_t matIndex	 = matIndices[matOffset];
+				const uint32_t matIndex  = matIndices[matOffset];
 
 				float3 Ng = hiprtVectorObjectToWorld( hit.normal, scene, hit.instanceID );
 				if ( hiprt::dot( ray.direction, Ng ) > 0.0f ) Ng = -Ng;
@@ -97,7 +97,7 @@ extern "C" __global__ void __launch_bounds__( 64 ) AoRayKernel(
 				{
 					hiprtRay aoRay;
 					aoRay.origin = surfacePt;
-					aoRay.maxT	 = aoRadius;
+					aoRay.maxT   = aoRadius;
 					hiprtHit aoHit;
 
 					for ( uint32_t i = 0; i < AoSamples; i++ )

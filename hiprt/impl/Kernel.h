@@ -33,16 +33,13 @@ class Kernel
   public:
 	struct Argument
 	{
-		size_t		m_size;
-		size_t		m_align;
-		const void* m_value;
+		const size_t m_size{};
+		const size_t m_align{};
+		const void*  m_value = nullptr;
 
 		template <class T>
-		Argument( const T& value )
+		Argument( const T& value ) : m_size( sizeof( T ) ), m_align( __alignof( T ) ), m_value( &value )
 		{
-			m_size	= sizeof( T );
-			m_align = __alignof( T );
-			m_value = &value;
 		}
 	};
 
@@ -51,24 +48,24 @@ class Kernel
 	void setArgs( const std::vector<Argument> args );
 
 	void launch(
-		const uint32_t gx,
-		const uint32_t gy,
-		const uint32_t gz,
-		const uint32_t bx,
-		const uint32_t by,
-		const uint32_t bz,
-		const uint32_t sharedMemBytes,
-		oroStream	   stream );
+		const uint32_t  gx,
+		const uint32_t  gy,
+		const uint32_t  gz,
+		const uint32_t  bx,
+		const uint32_t  by,
+		const uint32_t  bz,
+		const uint32_t  sharedMemBytes,
+		const oroStream stream );
 
-	void launch( const uint32_t nx, oroStream stream = 0, const uint32_t sharedMemBytes = 0 );
-	void launch( const uint32_t nx, const uint32_t tx, oroStream stream = 0, const uint32_t sharedMemBytes = 0 );
+	void launch( const uint32_t nx, const oroStream stream = 0, const uint32_t sharedMemBytes = 0 );
+	void launch( const uint32_t nx, const uint32_t tx, const oroStream stream = 0, const uint32_t sharedMemBytes = 0 );
 
-	uint32_t getNumSmem() const;
-	uint32_t getNumRegs() const;
+	[[nodiscard]] uint32_t getNumSmem() const;
+	[[nodiscard]] uint32_t getNumRegs() const;
 
   private:
-	oroFunction			 m_function;
+	oroFunction          m_function{};
 	std::vector<uint8_t> m_args;
-	std::vector<void*>	 m_argPtrs;
+	std::vector<void*>   m_argPtrs;
 };
 } // namespace hiprt

@@ -40,15 +40,15 @@ __device__ bool intersectSphere( const hiprtRay& ray, const void* data, void* pa
 __device__ bool cutoutFilter( const hiprtRay& ray, const void* data, void* payload, const hiprtHit& hit );
 
 HIPRT_DEVICE bool intersectFunc(
-	uint32_t					geomType,
-	uint32_t					rayType,
+	uint32_t                    geomType,
+	uint32_t                    rayType,
 	const hiprtFuncTableHeader& tableHeader,
-	const hiprtRay&				ray,
-	void*						payload,
-	hiprtHit&					hit )
+	const hiprtRay&             ray,
+	void*                       payload,
+	hiprtHit&                   hit )
 {
 	const uint32_t index = tableHeader.numGeomTypes * rayType + geomType;
-	const void*	   data	 = tableHeader.funcDataSets[index].intersectFuncData;
+	const void*    data  = tableHeader.funcDataSets[index].intersectFuncData;
 	switch ( index )
 	{
 
@@ -66,15 +66,15 @@ HIPRT_DEVICE bool intersectFunc(
 }
 
 HIPRT_DEVICE bool filterFunc(
-	uint32_t					geomType,
-	uint32_t					rayType,
+	uint32_t                    geomType,
+	uint32_t                    rayType,
 	const hiprtFuncTableHeader& tableHeader,
-	const hiprtRay&				ray,
-	void*						payload,
-	const hiprtHit&				hit )
+	const hiprtRay&             ray,
+	void*                       payload,
+	const hiprtHit&             hit )
 {
 	const uint32_t index = tableHeader.numGeomTypes * rayType + geomType;
-	const void*	   data	 = tableHeader.funcDataSets[index].filterFuncData;
+	const void*    data  = tableHeader.funcDataSets[index].filterFuncData;
 	switch ( index )
 	{
 

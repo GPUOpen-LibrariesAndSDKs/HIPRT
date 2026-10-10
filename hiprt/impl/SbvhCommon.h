@@ -23,33 +23,33 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#include <hiprt/impl/Aabb.h>
+#include <hiprt/impl/BvhNode.h>
 
 namespace hiprt
 {
 struct alignas( 32 ) Bin
 {
-	HIPRT_HOST_DEVICE float cost() const { return m_box.area() * m_counter; }
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float cost() const { return m_box.area() * m_counter; }
 
-	HIPRT_HOST_DEVICE float leftCost() const { return m_box.area() * m_enter; }
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float leftCost() const { return m_box.area() * m_enter; }
 
-	HIPRT_HOST_DEVICE float rightCost() const { return m_box.area() * m_exit; }
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float rightCost() const { return m_box.area() * m_exit; }
 
-	HIPRT_HOST_DEVICE void reset()
+	HIPRT_HOST_DEVICE HIPRT_INLINE void reset()
 	{
 		m_box.reset();
 		m_enter = 0;
-		m_exit	= 0;
+		m_exit  = 0;
 	}
 
-	HIPRT_HOST_DEVICE void include( const Bin& bin )
+	HIPRT_HOST_DEVICE HIPRT_INLINE void include( const Bin& bin )
 	{
 		m_box.grow( bin.m_box );
 		m_enter += bin.m_enter;
 		m_exit += bin.m_exit;
 	}
 
-	Aabb	 m_box;
+	Aabb     m_box;
 	uint32_t m_enter;
 	union
 	{
@@ -61,14 +61,14 @@ HIPRT_STATIC_ASSERT( sizeof( Bin ) == 32 );
 
 struct Split
 {
-	HIPRT_HOST_DEVICE void
-	setSplitInfo( uint8_t splitAxis, uint32_t splitIndex, bool leftLeaf, bool rightLeaf, bool spatialSplit )
+	HIPRT_HOST_DEVICE HIPRT_INLINE void setSplitInfo(
+		const uint8_t splitAxis, const uint32_t splitIndex, const bool leftLeaf, const bool rightLeaf, const bool spatialSplit )
 	{
 		m_splitIndex   = splitIndex;
-		m_splitAxis	   = splitAxis;
+		m_splitAxis    = splitAxis;
 		m_spatialSplit = spatialSplit;
-		m_leftLeaf	   = leftLeaf;
-		m_rightLeaf	   = rightLeaf;
+		m_leftLeaf     = leftLeaf;
+		m_rightLeaf    = rightLeaf;
 	}
 
 	uint32_t m_splitIndex : 27;
@@ -81,9 +81,12 @@ HIPRT_STATIC_ASSERT( sizeof( Split ) == 4 );
 
 struct alignas( 64 ) Task
 {
-	Task() = default;
+	HIPRT_INLINE Task() = default;
 
-	HIPRT_HOST_DEVICE Task( const Aabb& box, uint32_t refOffset = InvalidValue ) : m_box( box ), m_refOffset( refOffset ) {}
+	HIPRT_HOST_DEVICE HIPRT_INLINE Task( const Aabb& box, const uint32_t refOffset = InvalidValue )
+		: m_box( box ), m_refOffset( refOffset )
+	{
+	}
 
 	Aabb m_box;
 	Aabb m_box0;
@@ -104,5 +107,6 @@ struct alignas( 64 ) Task
 	};
 };
 HIPRT_STATIC_ASSERT( sizeof( Task ) == 128 );
+HIPRT_STATIC_ASSERT( sizeof( Task ) >= sizeof( ConversionTask ) );
 
 } // namespace hiprt

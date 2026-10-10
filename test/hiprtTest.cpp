@@ -38,7 +38,7 @@
 
 CmdArguments g_parsedArgs;
 
-void checkOro( oroError res, const source_location& location )
+void checkOro( const oroError res, const source_location& location )
 {
 	if ( res != oroSuccess )
 	{
@@ -50,7 +50,7 @@ void checkOro( oroError res, const source_location& location )
 	}
 }
 
-void checkOrortc( orortcResult res, const source_location& location )
+void checkOrortc( const orortcResult res, const source_location& location )
 {
 	if ( res != ORORTC_SUCCESS )
 	{
@@ -61,7 +61,7 @@ void checkOrortc( orortcResult res, const source_location& location )
 	}
 }
 
-void checkHiprt( hiprtError res, const source_location& location )
+void checkHiprt( const hiprtError res, const source_location& location )
 {
 	if ( res != hiprtSuccess )
 	{
@@ -74,7 +74,7 @@ void checkHiprt( hiprtError res, const source_location& location )
 std::string getEnvVariable( const std::string& key )
 {
 #if defined( __WINDOWS__ )
-	char*  buffer	   = nullptr;
+	char*  buffer      = nullptr;
 	size_t bufferCount = 0;
 	_dupenv_s( &buffer, &bufferCount, key.c_str() );
 	const std::string val = buffer != nullptr ? buffer : "";
@@ -95,28 +95,28 @@ std::filesystem::path getRootDir()
 
 struct EmbreeBuildNode
 {
-	float3	 m_childAabbsMin[2];
-	float3	 m_childAabbsMax[2];
+	float3   m_childAabbsMin[2];
+	float3   m_childAabbsMax[2];
 	uint32_t m_childIndices[2];
 };
 
 struct BuilderContext
 {
 	PoolAllocator<EmbreeBuildNode, 16> m_nodeAllocator;
-	PoolAllocator<uint32_t, 16>		   m_leafAllocator;
-	void*							   m_geomData;
+	PoolAllocator<uint32_t, 16>        m_leafAllocator;
+	void*                              m_geomData;
 };
 
 struct GeometryData
 {
-	const float3*	m_vertices;
+	const float3*   m_vertices;
 	const uint32_t* m_indices;
-	const uint2*	m_pairIndices = nullptr;
+	const uint2*    m_pairIndices = nullptr;
 };
 
 void hiprtTest::SetUp()
 {
-	oroInitialize( (oroApi)( ORO_API_HIP | ORO_API_CUDA ), 0, g_hip_paths, g_hiprtc_paths );
+	oroInitialize( (oroApi)( ORO_API_HIP | ORO_API_CUDA ), 0, hiprtGetHipPaths(), hiprtGetHiprtcPaths() );
 
 	checkOro( oroInit( 0 ) );
 	const oroError deviceGetError = oroDeviceGet( &m_oroDevice, g_parsedArgs.m_deviceIdx );
@@ -154,7 +154,7 @@ void hiprtTest::SetUp()
 void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 {
 	std::vector<hiprtInternalNode> internalNodes;
-	std::vector<Aabb>			   primBoxes;
+	std::vector<Aabb>              primBoxes;
 	if ( buildInput.type == hiprtPrimitiveTypeTriangleMesh )
 	{
 		primBoxes.resize( buildInput.primitive.triangleMesh.triangleCount );
@@ -207,23 +207,23 @@ void hiprtTest::buildBvh( hiprtGeometryBuildInput& buildInput )
 	std::vector<hiprtLeafNode> leafNodes( primBoxes.size() );
 	for ( uint32_t i = 0; i < primBoxes.size(); ++i )
 	{
-		leafNodes[i].primID	 = i;
+		leafNodes[i].primID  = i;
 		leafNodes[i].aabbMin = primBoxes[i].m_min;
 		leafNodes[i].aabbMax = primBoxes[i].m_max;
 	}
 
 	buildInput.nodeList.nodeCount = static_cast<uint32_t>( leafNodes.size() );
 
-	malloc( reinterpret_cast<hiprtLeafNode*&>( buildInput.nodeList.leafNodes ), leafNodes.size() );
+	buildInput.nodeList.leafNodes = malloc<hiprtLeafNode>( leafNodes.size() );
 	copyHtoD( reinterpret_cast<hiprtLeafNode*>( buildInput.nodeList.leafNodes ), leafNodes.data(), leafNodes.size() );
 
-	malloc( reinterpret_cast<hiprtInternalNode*&>( buildInput.nodeList.internalNodes ), internalNodes.size() );
+	buildInput.nodeList.internalNodes = malloc<hiprtInternalNode>( internalNodes.size() );
 	copyHtoD(
 		reinterpret_cast<hiprtInternalNode*>( buildInput.nodeList.internalNodes ), internalNodes.data(), internalNodes.size() );
 }
 
 void hiprtTest::buildEmbreeBvh(
-	RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, void* geomData, hiprtBvhNodeList& nodeList )
+	const RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, void* geomData, hiprtBvhNodeList& nodeList )
 
 {
 	const float Alpha = 1.5f;
@@ -232,38 +232,38 @@ void hiprtTest::buildEmbreeBvh(
 		LeafFlag = 1 << 30
 	};
 
-	size_t primCount	= embreePrims.size();
+	size_t primCount    = embreePrims.size();
 	size_t primCapacity = Alpha * embreePrims.size();
 	embreePrims.resize( primCapacity );
 
 	BuilderContext context;
 	context.m_geomData = geomData;
 
-	RTCBVH			  embreeBvh		  = rtcNewBVH( embreeDevice );
-	RTCBuildArguments embreeArgs	  = rtcDefaultBuildArguments();
-	embreeArgs.byteSize				  = sizeof( embreeArgs );
-	embreeArgs.buildQuality			  = RTC_BUILD_QUALITY_HIGH;
-	embreeArgs.maxBranchingFactor	  = 2;
-	embreeArgs.bvh					  = embreeBvh;
-	embreeArgs.primitives			  = embreePrims.data();
-	embreeArgs.primitiveCount		  = primCount;
+	RTCBVH            embreeBvh       = rtcNewBVH( embreeDevice );
+	RTCBuildArguments embreeArgs      = rtcDefaultBuildArguments();
+	embreeArgs.byteSize               = sizeof( embreeArgs );
+	embreeArgs.buildQuality           = RTC_BUILD_QUALITY_HIGH;
+	embreeArgs.maxBranchingFactor     = 2;
+	embreeArgs.bvh                    = embreeBvh;
+	embreeArgs.primitives             = embreePrims.data();
+	embreeArgs.primitiveCount         = primCount;
 	embreeArgs.primitiveArrayCapacity = primCapacity;
-	embreeArgs.minLeafSize			  = 1;
-	embreeArgs.maxLeafSize			  = 1;
-	embreeArgs.splitPrimitive		  = nullptr;
-	embreeArgs.userPtr				  = &context;
+	embreeArgs.minLeafSize            = 1;
+	embreeArgs.maxLeafSize            = 1;
+	embreeArgs.splitPrimitive         = nullptr;
+	embreeArgs.userPtr                = &context;
 
 	embreeArgs.createNode =
 		[]( [[maybe_unused]] RTCThreadLocalAllocator allocator, [[maybe_unused]] uint32_t childCount, void* userPtr ) -> void* {
-		BuilderContext*	 ctxt = reinterpret_cast<BuilderContext*>( userPtr );
-		uint32_t		 handle;
+		BuilderContext*  ctxt = reinterpret_cast<BuilderContext*>( userPtr );
+		uint32_t         handle;
 		EmbreeBuildNode* ptr;
 		ctxt->m_nodeAllocator.allocate( &handle, &ptr );
 		return reinterpret_cast<void*>( static_cast<uintptr_t>( handle ) );
 	};
 
 	embreeArgs.setNodeChildren = []( void* nodePtr, void** children, uint32_t childCount, void* userPtr ) {
-		BuilderContext*	 ctxt = reinterpret_cast<BuilderContext*>( userPtr );
+		BuilderContext*  ctxt = reinterpret_cast<BuilderContext*>( userPtr );
 		EmbreeBuildNode* node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
 		for ( uint32_t i = 0; i < childCount; i++ )
 		{
@@ -272,7 +272,7 @@ void hiprtTest::buildEmbreeBvh(
 	};
 
 	embreeArgs.setNodeBounds = []( void* nodePtr, const struct RTCBounds** bounds, uint32_t childCount, void* userPtr ) {
-		BuilderContext*	 ctxt = reinterpret_cast<BuilderContext*>( userPtr );
+		BuilderContext*  ctxt = reinterpret_cast<BuilderContext*>( userPtr );
 		EmbreeBuildNode* node = ctxt->m_nodeAllocator.item( static_cast<uint32_t>( reinterpret_cast<uintptr_t>( nodePtr ) ) );
 		for ( uint32_t i = 0; i < childCount; i++ )
 		{
@@ -282,12 +282,12 @@ void hiprtTest::buildEmbreeBvh(
 	};
 
 	embreeArgs.createLeaf = []( [[maybe_unused]] RTCThreadLocalAllocator allocator,
-								const struct RTCBuildPrimitive*			 primitives,
-								[[maybe_unused]] size_t					 primitiveCount,
-								void*									 userPtr ) -> void* {
+	                            const struct RTCBuildPrimitive*          primitives,
+	                            [[maybe_unused]] size_t                  primitiveCount,
+	                            void*                                    userPtr ) -> void* {
 		BuilderContext* ctxt = reinterpret_cast<BuilderContext*>( userPtr );
-		uint32_t		handle;
-		uint32_t*		ptr;
+		uint32_t        handle;
+		uint32_t*       ptr;
 		ctxt->m_leafAllocator.allocate( &handle, &ptr );
 		*ptr = primitives->primID;
 		return reinterpret_cast<void*>( static_cast<uintptr_t>( handle | LeafFlag ) );
@@ -296,31 +296,44 @@ void hiprtTest::buildEmbreeBvh(
 	if ( geomData == nullptr )
 	{
 		embreeArgs.splitPrimitive = []( const struct RTCBuildPrimitive* primitive,
-										uint32_t						dimension,
-										float							position,
-										struct RTCBounds*				leftBounds,
-										struct RTCBounds*				rightBounds,
-										[[maybe_unused]] void*			userPtr ) {
+		                                uint32_t                        dimension,
+		                                float                           position,
+		                                struct RTCBounds*               leftBounds,
+		                                struct RTCBounds*               rightBounds,
+		                                [[maybe_unused]] void*          userPtr ) {
 			leftBounds->lower_x = rightBounds->lower_x = primitive->lower_x;
 			leftBounds->lower_y = rightBounds->lower_y = primitive->lower_y;
 			leftBounds->lower_z = rightBounds->lower_z = primitive->lower_z;
 			leftBounds->upper_x = rightBounds->upper_x = primitive->upper_x;
 			leftBounds->upper_y = rightBounds->upper_y = primitive->upper_y;
 			leftBounds->upper_z = rightBounds->upper_z = primitive->upper_z;
-			( &leftBounds->upper_x )[dimension]		   = position;
-			( &rightBounds->lower_x )[dimension]	   = position;
+			if ( dimension == 0 )
+			{
+				leftBounds->upper_x  = position;
+				rightBounds->lower_x = position;
+			}
+			else if ( dimension == 1 )
+			{
+				leftBounds->upper_y  = position;
+				rightBounds->lower_y = position;
+			}
+			else
+			{
+				leftBounds->upper_z  = position;
+				rightBounds->lower_z = position;
+			}
 		};
 	}
 	else
 	{
 		embreeArgs.splitPrimitive = []( const struct RTCBuildPrimitive* primitive,
-										uint32_t						dimension,
-										float							position,
-										struct RTCBounds*				leftBounds,
-										struct RTCBounds*				rightBounds,
-										void*							userPtr ) {
-			BuilderContext* ctxt	 = reinterpret_cast<BuilderContext*>( userPtr );
-			GeometryData*	geomData = reinterpret_cast<GeometryData*>( ctxt->m_geomData );
+		                                uint32_t                        dimension,
+		                                float                           position,
+		                                struct RTCBounds*               leftBounds,
+		                                struct RTCBounds*               rightBounds,
+		                                void*                           userPtr ) {
+			BuilderContext* ctxt     = reinterpret_cast<BuilderContext*>( userPtr );
+			GeometryData*   geomData = reinterpret_cast<GeometryData*>( ctxt->m_geomData );
 
 			auto splitTriangle =
 				[]( float3( &vertices )[3], uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) {
@@ -328,9 +341,9 @@ void hiprtTest::buildEmbreeBvh(
 					for ( uint32_t i = 0; i < 3; i++ )
 					{
 						const float3* v0 = v1;
-						v1				 = &vertices[i];
-						float v0p		 = ( &v0->x )[axis];
-						float v1p		 = ( &v1->x )[axis];
+						v1               = &vertices[i];
+						float v0p        = hiprt::component( *v0, axis );
+						float v1p        = hiprt::component( *v1, axis );
 
 						if ( v0p <= position ) leftBox.grow( *v0 );
 						if ( v0p >= position ) rightBox.grow( *v0 );
@@ -343,8 +356,8 @@ void hiprtTest::buildEmbreeBvh(
 						}
 					}
 
-					( &leftBox.m_max.x )[axis]	= position;
-					( &rightBox.m_min.x )[axis] = position;
+					hiprt::component( leftBox.m_max, axis )  = position;
+					hiprt::component( rightBox.m_min, axis ) = position;
 					leftBox.intersect( box );
 					rightBox.intersect( box );
 				};
@@ -393,10 +406,10 @@ void hiprtTest::buildEmbreeBvh(
 
 	const uint32_t nodeCount = context.m_nodeAllocator.count();
 	const uint32_t leafCount = context.m_leafAllocator.count();
-	uint32_t	   leafIndex = 0;
+	uint32_t       leafIndex = 0;
 
 	std::vector<hiprtInternalNode> internalNodes( nodeCount );
-	std::vector<hiprtLeafNode>	   leafNodes( leafCount );
+	std::vector<hiprtLeafNode>     leafNodes( leafCount );
 	for ( uint32_t i = 0; i < nodeCount; ++i )
 	{
 		EmbreeBuildNode* embreeNode = context.m_nodeAllocator.item( i );
@@ -410,18 +423,18 @@ void hiprtTest::buildEmbreeBvh(
 			internalNode.aabbMin = min( internalNode.aabbMin, embreeNode->m_childAabbsMin[j] );
 			internalNode.aabbMax = max( internalNode.aabbMax, embreeNode->m_childAabbsMax[j] );
 
-			uint32_t		 childIndex = embreeNode->m_childIndices[j];
-			hiprtBvhNodeType childType	= hiprtBvhNodeTypeInternal;
+			uint32_t         childIndex = embreeNode->m_childIndices[j];
+			hiprtBvhNodeType childType  = hiprtBvhNodeTypeInternal;
 			if ( childIndex & LeafFlag )
 			{
 				uint32_t* primID = context.m_leafAllocator.item( childIndex & ( ~LeafFlag ) );
-				childIndex		 = leafIndex;
-				childType		 = hiprtBvhNodeTypeLeaf;
+				childIndex       = leafIndex;
+				childType        = hiprtBvhNodeTypeLeaf;
 
 				hiprtLeafNode leafNode{};
 				leafNode.aabbMin = embreeNode->m_childAabbsMin[j];
 				leafNode.aabbMax = embreeNode->m_childAabbsMax[j];
-				leafNode.primID	 = *primID;
+				leafNode.primID  = *primID;
 
 				leafNodes[leafIndex++] = leafNode;
 			}
@@ -438,27 +451,27 @@ void hiprtTest::buildEmbreeBvh(
 
 	nodeList.nodeCount = static_cast<uint32_t>( leafNodes.size() );
 
-	malloc( reinterpret_cast<hiprtLeafNode*&>( nodeList.leafNodes ), leafNodes.size() );
+	nodeList.leafNodes = malloc<hiprtLeafNode>( leafNodes.size() );
 	copyHtoD( reinterpret_cast<hiprtLeafNode*>( nodeList.leafNodes ), leafNodes.data(), leafNodes.size() );
 
-	malloc( reinterpret_cast<hiprtInternalNode*&>( nodeList.internalNodes ), internalNodes.size() );
+	nodeList.internalNodes = malloc<hiprtInternalNode>( internalNodes.size() );
 	copyHtoD( reinterpret_cast<hiprtInternalNode*>( nodeList.internalNodes ), internalNodes.data(), internalNodes.size() );
 }
 
 void hiprtTest::buildEmbreeGeometryBvh(
-	RTCDevice embreeDevice, const float3* vertices, const uint32_t* indices, hiprtGeometryBuildInput& buildInput )
+	const RTCDevice embreeDevice, const float3* vertices, const uint32_t* indices, hiprtGeometryBuildInput& buildInput )
 {
 	uint32_t triangleCount = buildInput.primitive.triangleMesh.triangleCount;
 
 	GeometryData geomData;
 	geomData.m_vertices = vertices;
-	geomData.m_indices	= indices;
+	geomData.m_indices  = indices;
 
 	std::vector<RTCBuildPrimitive> embreePrims;
 
 	if ( triangleCount > 2 )
 	{
-		auto tryPairTriangles = [&]( const uint3& a, const uint3& b ) {
+		constexpr auto tryPairTriangles = []( const uint3& a, const uint3& b ) {
 			uint3 lb = hiprt::make_uint3( 3 );
 
 			lb.x = ( b.x == a.x ) ? 0 : lb.x;
@@ -478,10 +491,10 @@ void hiprtTest::buildEmbreeGeometryBvh(
 		};
 
 		std::vector<uint2> pairIndices;
-		uint32_t		   groups = hiprt::DivideRoundUp( triangleCount, 32 );
+		uint32_t           groups = hiprt::DivideRoundUp( triangleCount, 32 );
 		for ( uint32_t i = 0; i < groups; ++i )
 		{
-			const uint32_t	  offset = i * 32;
+			const uint32_t    offset = i * 32;
 			std::vector<bool> active( 32 );
 			for ( uint32_t j = 0; j < 32; ++j )
 				active[j] = offset + j < triangleCount;
@@ -489,16 +502,19 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			for ( uint32_t j = 0; j < 32; ++j )
 			{
 				if ( !active[j] ) continue;
-				uint2 pair		 = hiprt::make_uint2( offset + j );
+				uint2 pair       = hiprt::make_uint2( offset + j );
 				uint3 triIndices = *reinterpret_cast<const uint3*>( &indices[3 * ( offset + j )] );
 				for ( uint32_t k = j + 1; k < 32; ++k )
 				{
 					if ( !active[k] ) continue;
 					uint3 secondTriIndices = *reinterpret_cast<const uint3*>( &indices[3 * ( offset + k )] );
-					bool  pairable		   = tryPairTriangles( secondTriIndices, triIndices ).x != hiprt::InvalidValue;
+					// Consumers map in both directions and the verdict is order-dependent for degenerate
+					// triangles, so a pair is only usable if it resolves either way round.
+					const bool pairable = tryPairTriangles( secondTriIndices, triIndices ).x != hiprt::InvalidValue &&
+					                      tryPairTriangles( triIndices, secondTriIndices ).x != hiprt::InvalidValue;
 					if ( pairable )
 					{
-						pair.y	  = offset + k;
+						pair.y    = offset + k;
 						active[k] = false;
 						break;
 					}
@@ -508,8 +524,8 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			}
 		}
 
-		buildInput.primitive.triangleMesh.trianglePairCount = static_cast<uint32_t>( pairIndices.size() );
-		malloc( reinterpret_cast<uint2*&>( buildInput.primitive.triangleMesh.trianglePairIndices ), pairIndices.size() );
+		buildInput.primitive.triangleMesh.trianglePairCount   = static_cast<uint32_t>( pairIndices.size() );
+		buildInput.primitive.triangleMesh.trianglePairIndices = malloc<uint2>( pairIndices.size() );
 		copyHtoD(
 			reinterpret_cast<uint2*>( buildInput.primitive.triangleMesh.trianglePairIndices ),
 			pairIndices.data(),
@@ -521,7 +537,7 @@ void hiprtTest::buildEmbreeGeometryBvh(
 			Aabb box;
 			for ( uint32_t j = 0; j < 2; ++j )
 			{
-				uint3 triIndices = *reinterpret_cast<const uint3*>( &indices[3 * ( &pairIndices[i].x )[j]] );
+				uint3 triIndices = *reinterpret_cast<const uint3*>( &indices[3 * hiprt::component( pairIndices[i], j )] );
 				box.grow( vertices[triIndices.x] );
 				box.grow( vertices[triIndices.y] );
 				box.grow( vertices[triIndices.z] );
@@ -567,24 +583,24 @@ void hiprtTest::buildEmbreeGeometryBvh(
 }
 
 void hiprtTest::buildEmbreeSceneBvh(
-	RTCDevice						  embreeDevice,
-	const std::vector<Aabb>&		  geomBoxes,
+	RTCDevice                         embreeDevice,
+	const std::vector<Aabb>&          geomBoxes,
 	const std::vector<hiprtFrameSRT>& frames,
-	hiprtSceneBuildInput&			  buildInput )
+	hiprtSceneBuildInput&             buildInput )
 {
 	uint32_t instanceCount = buildInput.instanceCount;
 
 	struct BuilderContext
 	{
 		PoolAllocator<hiprtInternalNode, 16> nodeAllocator;
-		PoolAllocator<uint32_t, 16>			 leafAllocator;
+		PoolAllocator<uint32_t, 16>          leafAllocator;
 	} context;
 
 	std::vector<RTCBuildPrimitive> embreePrims( instanceCount );
 	for ( uint32_t i = 0; i < instanceCount; ++i )
 	{
 		const Aabb& geomBox = geomBoxes[i];
-		Aabb		box		= geomBox;
+		Aabb        box     = geomBox;
 
 		if ( !frames.empty() )
 		{
@@ -643,8 +659,8 @@ bool hiprtTest::readSourceCode(
 			{
 				if ( line.find( "#include" ) != std::string::npos )
 				{
-					size_t		pa	= line.find( "<" );
-					size_t		pb	= line.find( ">" );
+					size_t      pa  = line.find( "<" );
+					size_t      pb  = line.find( ">" );
 					std::string buf = line.substr( pa + 1, pb - pa - 1 );
 					includes.value().push_back( buf );
 					sourceCode += line + '\n';
@@ -665,18 +681,18 @@ bool hiprtTest::readSourceCode(
 }
 
 hiprtError hiprtTest::buildTraceKernelsFromBitcode(
-	hiprtContext								 ctxt,
-	const std::filesystem::path&				 srcPath,
-	std::vector<const char*>					 functionNames,
-	std::vector<hiprtApiFunction>&				 functionsOut,
-	std::optional<std::vector<const char*>>		 opts,
+	const hiprtContext                           ctxt,
+	const std::filesystem::path&                 srcPath,
+	const std::vector<const char*>               functionNames,
+	std::vector<hiprtApiFunction>&               functionsOut,
+	std::optional<std::vector<const char*>>      opts,
 	std::optional<std::vector<hiprtFuncNameSet>> funcNameSets,
-	uint32_t									 numGeomTypes,
-	uint32_t									 numRayTypes )
+	const uint32_t                               numGeomTypes,
+	const uint32_t                               numRayTypes )
 {
-	std::vector<const char*>		   options;
+	std::vector<const char*>           options;
 	std::vector<std::filesystem::path> includeNamesData;
-	std::string						   sourceCode;
+	std::string                        sourceCode;
 
 	if ( !readSourceCode( srcPath, sourceCode, includeNamesData ) )
 	{
@@ -761,7 +777,7 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	}
 
 	std::string bitcodeBinary;
-	size_t		size = 0;
+	size_t      size = 0;
 	if ( isAmd )
 		checkOrortc( orortcGetBitcodeSize( prog, &size ) );
 	else
@@ -772,11 +788,12 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 	else
 		checkOrortc( orortcGetCode( prog, bitcodeBinary.data() ) );
 
+	std::vector<const char*> functionNamesIn = functionNames;
 	functionsOut.resize( functionNames.size() );
 	hiprtError error = hiprtBuildTraceKernelsFromBitcode(
 		ctxt,
 		static_cast<uint32_t>( functionNames.size() ),
-		functionNames.data(),
+		functionNamesIn.data(),
 		srcPath.string().c_str(),
 		bitcodeBinary.data(),
 		size,
@@ -790,18 +807,18 @@ hiprtError hiprtTest::buildTraceKernelsFromBitcode(
 }
 
 hiprtError hiprtTest::buildTraceKernelFromBitcode(
-	hiprtContext								 ctxt,
-	const std::filesystem::path&				 srcPath,
-	const std::string&							 functionName,
-	oroFunction&								 functionOut,
-	std::optional<std::vector<const char*>>		 opts,
+	const hiprtContext                           ctxt,
+	const std::filesystem::path&                 srcPath,
+	const std::string&                           functionName,
+	oroFunction&                                 functionOut,
+	std::optional<std::vector<const char*>>      opts,
 	std::optional<std::vector<hiprtFuncNameSet>> funcNameSets,
-	uint32_t									 numGeomTypes,
-	uint32_t									 numRayTypes )
+	const uint32_t                               numGeomTypes,
+	const uint32_t                               numRayTypes )
 {
-	bool						  usePrecompiledBitcode = g_parsedArgs.m_usePrecompiledBitcodes;
+	bool                          usePrecompiledBitcode = g_parsedArgs.m_usePrecompiledBitcodes;
 	std::vector<hiprtApiFunction> functions;
-	hiprtError					  e = hiprtSuccess;
+	hiprtError                    e = hiprtSuccess;
 
 	std::vector<const char*> options;
 	if ( opts ) options = *opts;
@@ -813,13 +830,13 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 	{
 		e = buildTraceKernelsFromBitcode(
 			ctxt, srcPath, { functionName.c_str() }, functions, options, funcNameSets, numGeomTypes, numRayTypes );
-		ASSERT( functions.size() == 1 );
+		assert( functions.size() == 1 );
 		functionOut = *reinterpret_cast<oroFunction*>( &functions.back() );
 	}
 	else
 	{
 		const bool isAmd = oroGetCurAPI( 0 ) == ORO_API_HIP;
-		HIPRT_ASSERT( isAmd == true ); // precompiled path supported only on AMD
+		hiprtAssert( isAmd == true ); // precompiled path supported only on AMD
 
 		auto loadFile = []( const std::filesystem::path& path, std::vector<uint8_t>& dst ) {
 			std::fstream f( path, std::ios::binary | std::ios::in );
@@ -841,13 +858,13 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 
 		std::filesystem::path path = ( getRootDir() / "dist/bin" /
 #ifdef _DEBUG
-									   "Debug"
+		                               "Debug"
 #else
-									   "Release"
+		                               "Release"
 #endif
-									   / "hiprt" )
-										 .string() +
-									 HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
+		                               / "hiprt" )
+		                                 .string() +
+		                             HIPRT_VERSION_STR + "_" + HIP_VERSION_STR + "_";
 #if !defined( __GNUC__ )
 		path += "precompiled_bitcode_win.hipfb";
 #else
@@ -870,17 +887,17 @@ hiprtError hiprtTest::buildTraceKernelFromBitcode(
 }
 
 hiprtError hiprtTest::buildTraceKernels(
-	hiprtContext								 ctxt,
-	const std::filesystem::path&				 srcPath,
-	std::vector<const char*>					 functionNames,
-	std::vector<hiprtApiFunction>&				 functionsOut,
-	std::optional<std::vector<const char*>>		 opts,
+	const hiprtContext                           ctxt,
+	const std::filesystem::path&                 srcPath,
+	const std::vector<const char*>&              functionNamesIn,
+	std::vector<hiprtApiFunction>&               functionsOut,
+	std::optional<std::vector<const char*>>      opts,
 	std::optional<std::vector<hiprtFuncNameSet>> funcNameSets,
-	uint32_t									 numGeomTypes,
-	uint32_t									 numRayTypes )
+	const uint32_t                               numGeomTypes,
+	const uint32_t                               numRayTypes )
 {
 	std::vector<std::filesystem::path> includeNamesData;
-	std::string						   sourceCode;
+	std::string                        sourceCode;
 	readSourceCode( srcPath, sourceCode, includeNamesData );
 
 	std::vector<const char*> options;
@@ -902,6 +919,7 @@ hiprtError hiprtTest::buildTraceKernels(
 		headers.push_back( headersData[i].c_str() );
 	}
 
+	std::vector<const char*> functionNames = functionNamesIn;
 	functionsOut.resize( functionNames.size() );
 	return hiprtBuildTraceKernels(
 		ctxt,
@@ -923,25 +941,25 @@ hiprtError hiprtTest::buildTraceKernels(
 }
 
 hiprtError hiprtTest::buildTraceKernel(
-	hiprtContext								 ctxt,
-	const std::filesystem::path&				 srcPath,
-	const std::string&							 functionName,
-	oroFunction&								 functionOut,
-	std::optional<std::vector<const char*>>		 opts,
+	const hiprtContext                           ctxt,
+	const std::filesystem::path&                 srcPath,
+	const std::string&                           functionName,
+	oroFunction&                                 functionOut,
+	std::optional<std::vector<const char*>>      opts,
 	std::optional<std::vector<hiprtFuncNameSet>> funcNameSets,
-	uint32_t									 numGeomTypes,
-	uint32_t									 numRayTypes )
+	const uint32_t                               numGeomTypes,
+	const uint32_t                               numRayTypes )
 {
 	std::vector<hiprtApiFunction> functions;
-	hiprtError					  e =
+	hiprtError                    e =
 		buildTraceKernels( ctxt, srcPath, { functionName.c_str() }, functions, opts, funcNameSets, numGeomTypes, numRayTypes );
-	ASSERT( functions.size() == 1 );
+	assert( functions.size() == 1 );
 	functionOut = *reinterpret_cast<oroFunction*>( &functions.back() );
 	return e;
 }
 
 void hiprtTest::validateAndWriteImage(
-	const std::filesystem::path& imgPath, uint8_t* data, std::optional<std::filesystem::path> refFilename )
+	const std::filesystem::path& imgPath, const uint8_t* data, std::optional<std::filesystem::path> refFilename )
 {
 	std::vector<uint8_t> image( g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	copyDtoH( image.data(), data, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
@@ -954,7 +972,7 @@ void hiprtTest::validateAndWriteImage(
 		int refB;
 
 		std::filesystem::path fullRefFilename = g_parsedArgs.m_referencePath / refFilename.value();
-		uint8_t*			  ref			  = stbi_load( fullRefFilename.string().c_str(), &refW, &refH, &refB, 0 );
+		uint8_t*              ref             = stbi_load( fullRefFilename.string().c_str(), &refW, &refH, &refB, 0 );
 		if ( ref == 0 )
 		{
 			std::cerr << "Unable to open reference image '" << fullRefFilename << "'!" << std::endl;
@@ -970,8 +988,8 @@ void hiprtTest::validateAndWriteImage(
 		}
 
 		uint32_t pixelThreshold = 10;
-		uint32_t maxDiff		= 0;
-		uint32_t nDiffPixels	= 0;
+		uint32_t maxDiff        = 0;
+		uint32_t nDiffPixels    = 0;
 
 		for ( uint32_t i = 0; i < g_parsedArgs.m_ww * g_parsedArgs.m_wh; i++ )
 		{
@@ -1001,22 +1019,30 @@ void hiprtTest::validateAndWriteImage(
 	}
 }
 
-void hiprtTest::writeImage( const std::filesystem::path& imgPath, uint32_t width, uint32_t height, uint8_t* data )
+void hiprtTest::writeImage(
+	const std::filesystem::path& imgPath, const uint32_t width, const uint32_t height, const uint8_t* data )
 {
 	stbi_write_png( imgPath.string().c_str(), width, height, 4, data, width * 4 );
 }
 
-void hiprtTest::launchKernel( oroFunction func, uint32_t nx, uint32_t ny, void** args, uint32_t sharedMemoryBytes )
+void hiprtTest::launchKernel(
+	oroFunction func, const uint32_t nx, const uint32_t ny, const void** args, const uint32_t sharedMemoryBytes )
 {
 	constexpr uint32_t tx  = 16u;
 	constexpr uint32_t ty  = 16u;
-	uint32_t		   nbx = hiprt::DivideRoundUp( nx, tx );
-	uint32_t		   nby = hiprt::DivideRoundUp( ny, ty );
+	uint32_t           nbx = hiprt::DivideRoundUp( nx, tx );
+	uint32_t           nby = hiprt::DivideRoundUp( ny, ty );
 	checkOro( oroModuleLaunchKernel( func, nbx, nby, 1, tx, ty, 1, sharedMemoryBytes, 0, args, 0 ) );
 }
 
 void hiprtTest::launchKernel(
-	oroFunction func, uint32_t nx, uint32_t ny, uint32_t tx, uint32_t ty, void** args, uint32_t sharedMemoryBytes )
+	oroFunction    func,
+	const uint32_t nx,
+	const uint32_t ny,
+	const uint32_t tx,
+	const uint32_t ty,
+	const void**   args,
+	const uint32_t sharedMemoryBytes )
 {
 	uint32_t nbx = hiprt::DivideRoundUp( nx, tx );
 	uint32_t nby = hiprt::DivideRoundUp( ny, ty );
@@ -1024,21 +1050,21 @@ void hiprtTest::launchKernel(
 }
 
 void ObjTestCases::createScene(
-	SceneData&					 scene,
+	SceneData&                   scene,
 	const std::filesystem::path& filename,
-	bool						 enableRayMask,
+	const bool                   enableRayMask,
 	std::optional<hiprtFrameSRT> frame,
-	hiprtBuildFlags				 bvhBuildFlag,
-	bool						 time )
+	const hiprtBuildFlags        bvhBuildFlag,
+	const bool                   time )
 {
 	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, scene.m_ctx ) );
 	checkHiprt( hiprtSetLogLevel( scene.m_ctx, hiprtLogLevelError | hiprtLogLevelWarn ) );
 
-	tinyobj::attrib_t				 attrib;
-	std::vector<tinyobj::shape_t>	 shapes;
+	tinyobj::attrib_t                attrib;
+	std::vector<tinyobj::shape_t>    shapes;
 	std::vector<tinyobj::material_t> materials;
-	std::string						 err;
-	std::string						 warning;
+	std::string                      err;
+	std::string                      warning;
 
 	bool ret = tinyobj::LoadObj(
 		&attrib, &shapes, &materials, &warning, &err, filename.string().c_str(), filename.parent_path().string().c_str() );
@@ -1067,25 +1093,25 @@ void ObjTestCases::createScene(
 	}
 
 	std::vector<Material> shapeMaterials; // materials for all instances
-	std::vector<Light>	  lights;
+	std::vector<Light>    lights;
 	std::vector<uint32_t> materialIndices; // material ids for all instances
 	std::vector<uint32_t> instanceMask;
-	std::vector<float3>	  allVertices;
-	std::vector<float3>	  allNormals;
+	std::vector<float3>   allVertices;
+	std::vector<float3>   allNormals;
 	std::vector<uint32_t> allIndices;
-	std::vector<Aabb>	  geomBoxes;
+	std::vector<Aabb>     geomBoxes;
 
 	uint32_t numOfLights = 0;
 
 	// Prefix sum to calculate the offsets in to global vert,index and material buffer
-	uint32_t				 vertexPrefixSum = 0u;
-	uint32_t				 normalPrefixSum = 0u;
-	uint32_t				 indexPrefixSum	 = 0u;
-	uint32_t				 matIdxPrefixSum = 0u;
-	std::vector<uint32_t>	 indicesOffsets;
-	std::vector<uint32_t>	 verticesOffsets;
-	std::vector<uint32_t>	 normalsOffsets;
-	std::vector<uint32_t>	 matIdxOffset;
+	uint32_t                 vertexPrefixSum = 0u;
+	uint32_t                 normalPrefixSum = 0u;
+	uint32_t                 indexPrefixSum  = 0u;
+	uint32_t                 matIdxPrefixSum = 0u;
+	std::vector<uint32_t>    indicesOffsets;
+	std::vector<uint32_t>    verticesOffsets;
+	std::vector<uint32_t>    normalsOffsets;
+	std::vector<uint32_t>    matIdxOffset;
 	std::chrono::nanoseconds bvhBuildTime{};
 
 	indicesOffsets.resize( shapes.size() );
@@ -1098,7 +1124,7 @@ void ObjTestCases::createScene(
 	for ( const auto& mat : materials )
 	{
 		Material m;
-		m.m_diffuse	 = convert( mat.diffuse );
+		m.m_diffuse  = convert( mat.diffuse );
 		m.m_emission = convert( mat.emission );
 		shapeMaterials.push_back( m );
 	}
@@ -1130,12 +1156,12 @@ void ObjTestCases::createScene(
 
 	for ( size_t i = 0; i < shapes.size(); ++i )
 	{
-		std::vector<float3>										  vertices;
-		std::vector<float3>										  normals;
-		std::vector<uint32_t>									  indices;
-		float3*													  v = reinterpret_cast<float3*>( attrib.vertices.data() );
+		std::vector<float3>                                       vertices;
+		std::vector<float3>                                       normals;
+		std::vector<uint32_t>                                     indices;
+		float3*                                                   v = reinterpret_cast<float3*>( attrib.vertices.data() );
 		std::map<tinyobj::index_t, uint32_t, decltype( compare )> knownIndex( compare );
-		Aabb													  geomBox;
+		Aabb                                                      geomBox;
 
 		for ( size_t face = 0; face < shapes[i].mesh.num_face_vertices.size(); face++ )
 		{
@@ -1191,9 +1217,9 @@ void ObjTestCases::createScene(
 					shapeMaterials[shapes[i].mesh.material_ids[face]].m_emission.z + 40.f };
 
 				size_t idx = indices.size() - 1;
-				l.m_lv0	   = vertices[indices[idx - 2]];
-				l.m_lv1	   = vertices[indices[idx - 1]];
-				l.m_lv2	   = vertices[indices[idx - 0]];
+				l.m_lv0    = vertices[indices[idx - 2]];
+				l.m_lv1    = vertices[indices[idx - 1]];
+				l.m_lv2    = vertices[indices[idx - 0]];
 
 				lights.push_back( l );
 				numOfLights++;
@@ -1225,9 +1251,9 @@ void ObjTestCases::createScene(
 
 	uint32_t threadCount = std::min( std::thread::hardware_concurrency(), 16u );
 	if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport ) threadCount = 1;
-	std::vector<std::thread>			  threads( threadCount );
+	std::vector<std::thread>              threads( threadCount );
 	std::vector<std::chrono::nanoseconds> bvhBuildTimes( threadCount );
-	std::vector<oroStream>				  streams( threadCount );
+	std::vector<oroStream>                streams( threadCount );
 	for ( size_t threadIndex = 0; threadIndex < threadCount; ++threadIndex )
 	{
 		checkOro( oroStreamCreate( &streams[threadIndex] ) );
@@ -1244,16 +1270,16 @@ void ObjTestCases::createScene(
 			[&]( uint32_t threadIndex ) {
 				checkOro( oroCtxSetCurrent( ctx ) );
 
-				std::vector<hiprtGeometry*>			 geomAddrs;
+				std::vector<hiprtGeometry*>          geomAddrs;
 				std::vector<hiprtGeometryBuildInput> geomInputs;
 				for ( size_t i = threadIndex; i < shapes.size(); i += threadCount )
 				{
 					hiprtTriangleMeshPrimitive mesh;
 
-					uint32_t* indices	= &allIndices[indicesOffsets[i]];
-					mesh.triangleCount	= static_cast<uint32_t>( shapes[i].mesh.num_face_vertices.size() );
-					mesh.triangleStride = sizeof( uint32_t ) * 3;
-					malloc( reinterpret_cast<uint8_t*&>( mesh.triangleIndices ), 3 * mesh.triangleCount * sizeof( uint32_t ) );
+					uint32_t* indices    = &allIndices[indicesOffsets[i]];
+					mesh.triangleCount   = static_cast<uint32_t>( shapes[i].mesh.num_face_vertices.size() );
+					mesh.triangleStride  = sizeof( uint32_t ) * 3;
+					mesh.triangleIndices = malloc<uint8_t>( 3 * mesh.triangleCount * sizeof( uint32_t ) );
 					copyHtoDAsync(
 						reinterpret_cast<uint32_t*>( mesh.triangleIndices ),
 						indices,
@@ -1262,16 +1288,16 @@ void ObjTestCases::createScene(
 
 					float3* vertices  = &allVertices[verticesOffsets[i]];
 					mesh.vertexCount  = ( i + 1 == shapes.size() ) ? vertexPrefixSum - verticesOffsets[i]
-																   : verticesOffsets[i + 1] - verticesOffsets[i];
+				                                                   : verticesOffsets[i + 1] - verticesOffsets[i];
 					mesh.vertexStride = sizeof( float3 );
-					malloc( reinterpret_cast<uint8_t*&>( mesh.vertices ), mesh.vertexCount * sizeof( float3 ) );
+					mesh.vertices     = malloc<uint8_t>( mesh.vertexCount * sizeof( float3 ) );
 					copyHtoDAsync(
 						reinterpret_cast<float3*>( mesh.vertices ), vertices, mesh.vertexCount, streams[threadIndex] );
 
 					hiprtGeometryBuildInput geomInput;
-					geomInput.type					 = hiprtPrimitiveTypeTriangleMesh;
+					geomInput.type                   = hiprtPrimitiveTypeTriangleMesh;
 					geomInput.primitive.triangleMesh = mesh;
-					geomInput.geomType				 = 0;
+					geomInput.geomType               = 0;
 
 					if ( ( bvhBuildFlag & 3 ) == hiprtBuildFlagBitCustomBvhImport )
 						buildEmbreeGeometryBvh( embreeDevice, vertices, indices, geomInput );
@@ -1290,7 +1316,7 @@ void ObjTestCases::createScene(
 						scene.m_ctx, static_cast<uint32_t>( geomInputs.size() ), geomInputs.data(), options, geomTempSize ) );
 
 					hiprtDevicePtr tempGeomBuffer = nullptr;
-					if ( geomTempSize > 0 ) malloc( reinterpret_cast<uint8_t*&>( tempGeomBuffer ), geomTempSize );
+					if ( geomTempSize > 0 ) tempGeomBuffer = malloc<uint8_t>( geomTempSize );
 
 					checkHiprt( hiprtCreateGeometries(
 						scene.m_ctx,
@@ -1319,8 +1345,8 @@ void ObjTestCases::createScene(
 					size_t j = 0;
 					for ( size_t i = threadIndex; i < shapes.size(); i += threadCount )
 					{
-						m_scene.m_geometries[i]			= geoms[j++];
-						m_scene.m_instances[i].type		= hiprtInstanceTypeGeometry;
+						m_scene.m_geometries[i]         = geoms[j++];
+						m_scene.m_instances[i].type     = hiprtInstanceTypeGeometry;
 						m_scene.m_instances[i].geometry = m_scene.m_geometries[i];
 					}
 
@@ -1352,37 +1378,37 @@ void ObjTestCases::createScene(
 	}
 
 	// copy vertex offset
-	malloc( scene.m_vertexOffsets, verticesOffsets.size() );
+	scene.m_vertexOffsets = malloc<uint32_t>( verticesOffsets.size() );
 	copyHtoD( scene.m_vertexOffsets, verticesOffsets.data(), verticesOffsets.size() );
 	scene.m_garbageCollector.push_back( scene.m_vertexOffsets );
 
 	// copy normals
-	malloc( scene.m_normals, allNormals.size() );
+	scene.m_normals = malloc<float3>( allNormals.size() );
 	copyHtoD( scene.m_normals, allNormals.data(), allNormals.size() );
 	scene.m_garbageCollector.push_back( scene.m_normals );
 
 	// copy normal offsets
-	malloc( scene.m_normalOffsets, normalsOffsets.size() );
+	scene.m_normalOffsets = malloc<uint32_t>( normalsOffsets.size() );
 	copyHtoD( scene.m_normalOffsets, normalsOffsets.data(), normalsOffsets.size() );
 	scene.m_garbageCollector.push_back( scene.m_normalOffsets );
 
 	// copy indices
-	malloc( scene.m_indices, allIndices.size() );
+	scene.m_indices = malloc<uint32_t>( allIndices.size() );
 	copyHtoD( scene.m_indices, allIndices.data(), allIndices.size() );
 	scene.m_garbageCollector.push_back( scene.m_indices );
 
 	// copy index offsets
-	malloc( scene.m_indexOffsets, indicesOffsets.size() );
+	scene.m_indexOffsets = malloc<uint32_t>( indicesOffsets.size() );
 	copyHtoD( scene.m_indexOffsets, indicesOffsets.data(), indicesOffsets.size() );
 	scene.m_garbageCollector.push_back( scene.m_indexOffsets );
 
 	// copy material indices
-	malloc( scene.m_bufMaterialIndices, materialIndices.size() );
+	scene.m_bufMaterialIndices = malloc<uint32_t>( materialIndices.size() );
 	copyHtoD( scene.m_bufMaterialIndices, materialIndices.data(), materialIndices.size() );
 	scene.m_garbageCollector.push_back( scene.m_bufMaterialIndices );
 
 	// copy material offset
-	malloc( scene.m_bufMatIdsPerInstance, matIdxOffset.size() );
+	scene.m_bufMatIdsPerInstance = malloc<uint32_t>( matIdxOffset.size() );
 	copyHtoD( scene.m_bufMatIdsPerInstance, matIdxOffset.data(), matIdxOffset.size() );
 	scene.m_garbageCollector.push_back( scene.m_bufMatIdsPerInstance );
 
@@ -1394,34 +1420,34 @@ void ObjTestCases::createScene(
 		mat.m_emission = hiprt::make_float3( 0.0f );
 		shapeMaterials.push_back( mat );
 	}
-	malloc( scene.m_bufMaterials, shapeMaterials.size() );
+	scene.m_bufMaterials = malloc<Material>( shapeMaterials.size() );
 	copyHtoD( scene.m_bufMaterials, shapeMaterials.data(), shapeMaterials.size() );
 	scene.m_garbageCollector.push_back( scene.m_bufMaterials );
 
 	// copy light
 	if ( !lights.empty() )
 	{
-		malloc( scene.m_lights, lights.size() );
+		scene.m_lights = malloc<Light>( lights.size() );
 		copyHtoD( scene.m_lights, lights.data(), lights.size() );
 		scene.m_garbageCollector.push_back( scene.m_lights );
 	}
 
 	// copy light num
-	malloc( scene.m_numOfLights, 1 );
+	scene.m_numOfLights = malloc<uint32_t>( 1 );
 	copyHtoD( scene.m_numOfLights, &numOfLights, 1 );
 	scene.m_garbageCollector.push_back( scene.m_numOfLights );
 
 	// prepare scene
-	hiprtScene			 sceneLocal;
-	hiprtDevicePtr		 sceneTemp = nullptr;
+	hiprtScene           sceneLocal;
+	hiprtDevicePtr       sceneTemp = nullptr;
 	hiprtSceneBuildInput sceneInput{};
 	{
 		sceneInput.instanceCount = static_cast<uint32_t>( shapes.size() );
-		malloc( reinterpret_cast<uint32_t*&>( sceneInput.instanceMasks ), sceneInput.instanceCount );
+		sceneInput.instanceMasks = malloc<uint32_t>( sceneInput.instanceCount );
 		copyHtoD( reinterpret_cast<uint32_t*>( sceneInput.instanceMasks ), instanceMask.data(), sceneInput.instanceCount );
 		scene.m_garbageCollector.push_back( sceneInput.instanceMasks );
 
-		malloc( reinterpret_cast<hiprtInstance*&>( sceneInput.instances ), sceneInput.instanceCount );
+		sceneInput.instances = malloc<hiprtInstance>( sceneInput.instanceCount );
 		copyHtoD(
 			reinterpret_cast<hiprtInstance*>( sceneInput.instances ), m_scene.m_instances.data(), sceneInput.instanceCount );
 		scene.m_garbageCollector.push_back( sceneInput.instances );
@@ -1429,13 +1455,13 @@ void ObjTestCases::createScene(
 		std::vector<hiprtFrameSRT> frames;
 		if ( frame )
 		{
-			sceneInput.frameCount				= sceneInput.instanceCount;
+			sceneInput.frameCount               = sceneInput.instanceCount;
 			sceneInput.instanceTransformHeaders = nullptr;
 
 			for ( uint32_t i = 0; i < sceneInput.instanceCount; i++ )
 				frames.push_back( frame.value() );
 
-			malloc( reinterpret_cast<hiprtFrameSRT*&>( sceneInput.instanceFrames ), frames.size() );
+			sceneInput.instanceFrames = malloc<hiprtFrameSRT>( frames.size() );
 			copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), frames.size() );
 			scene.m_garbageCollector.push_back( sceneInput.instanceFrames );
 		}
@@ -1447,13 +1473,13 @@ void ObjTestCases::createScene(
 			scene.m_garbageCollector.push_back( sceneInput.nodeList.internalNodes );
 		}
 
-		size_t			  sceneTempSize;
+		size_t            sceneTempSize;
 		hiprtBuildOptions options;
 		options.buildFlags = bvhBuildFlag;
 		checkHiprt( hiprtGetSceneBuildTemporaryBufferSize( scene.m_ctx, sceneInput, options, sceneTempSize ) );
 		if ( sceneTempSize > 0 )
 		{
-			malloc( reinterpret_cast<uint8_t*&>( sceneTemp ), sceneTempSize );
+			sceneTemp = malloc<uint8_t>( sceneTempSize );
 			scene.m_garbageCollector.push_back( sceneTemp );
 		}
 
@@ -1474,12 +1500,12 @@ void ObjTestCases::createScene(
 }
 
 void ObjTestCases::setupScene(
-	Camera&						 camera,
+	Camera&                      camera,
 	const std::filesystem::path& filename,
-	bool						 enableRayMask,
+	const bool                   enableRayMask,
 	std::optional<hiprtFrameSRT> frame,
-	hiprtBuildFlags				 bvhBuildFlag,
-	bool						 time )
+	const hiprtBuildFlags        bvhBuildFlag,
+	bool                         time )
 {
 	m_camera = camera;
 	createScene( m_scene, filename, enableRayMask, frame, bvhBuildFlag, time );
@@ -1496,24 +1522,23 @@ void ObjTestCases::deleteScene( SceneData& scene )
 
 void ObjTestCases::render(
 	std::optional<std::filesystem::path> imgPath,
-	const std::filesystem::path&		 kernelPath,
-	const std::string&					 funcName,
+	const std::filesystem::path&         kernelPath,
+	const std::string&                   funcName,
 	std::optional<std::filesystem::path> refFilename,
-	bool								 time,
-	float								 aoRadius )
+	const bool                           time,
+	const float                          aoRadius )
 {
-	uint8_t* dst;
-	malloc( dst, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
+	uint8_t* dst = malloc<uint8_t>( g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	memset( dst, 0, g_parsedArgs.m_ww * g_parsedArgs.m_wh * 4 );
 	m_scene.m_garbageCollector.push_back( dst );
 
-	uint32_t	   stackSize		  = 64u;
-	const uint32_t sharedStackSize	  = 16u;
-	const uint32_t blockWidth		  = 8u;
-	const uint32_t blockHeight		  = 8u;
-	const uint32_t blockSize		  = blockWidth * blockHeight;
-	std::string	   blockSizeDef		  = "-DBLOCK_SIZE=" + std::to_string( blockSize );
-	std::string	   sharedStackSizeDef = "-DSHARED_STACK_SIZE=" + std::to_string( sharedStackSize );
+	uint32_t       stackSize          = 64u;
+	const uint32_t sharedStackSize    = 16u;
+	const uint32_t blockWidth         = 8u;
+	const uint32_t blockHeight        = 8u;
+	const uint32_t blockSize          = blockWidth * blockHeight;
+	std::string    blockSizeDef       = "-DBLOCK_SIZE=" + std::to_string( blockSize );
+	std::string    sharedStackSizeDef = "-DSHARED_STACK_SIZE=" + std::to_string( sharedStackSize );
 
 	std::vector<const char*> opts;
 	opts.push_back( blockSizeDef.c_str() );
@@ -1529,13 +1554,13 @@ void ObjTestCases::render(
 	hiprtGlobalStackBuffer stackBuffer;
 	checkHiprt( hiprtCreateGlobalStackBuffer( m_scene.m_ctx, stackBufferInput, stackBuffer ) );
 
-	oroFunction	   func;
+	oroFunction    func;
 	hiprtFuncTable funcTable = nullptr;
 
 	if constexpr ( UseFilter )
 	{
 		hiprtFuncNameSet funcNameSet;
-		funcNameSet.filterFuncName				   = "filter";
+		funcNameSet.filterFuncName                 = "filter";
 		std::vector<hiprtFuncNameSet> funcNameSets = { funcNameSet };
 
 		hiprtFuncDataSet funcDataSet;
@@ -1555,8 +1580,8 @@ void ObjTestCases::render(
 			buildTraceKernel( m_scene.m_ctx, kernelPath, funcName, func, opts );
 	}
 
-	uint2 res	 = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
-	void* args[] = {
+	uint2       res    = { g_parsedArgs.m_ww, g_parsedArgs.m_wh };
+	const void* args[] = {
 		&m_scene.m_scene,
 		&dst,
 		&res,
