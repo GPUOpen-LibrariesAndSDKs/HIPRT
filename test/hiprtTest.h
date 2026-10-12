@@ -29,33 +29,16 @@
 #include <embree4/rtcore.h>
 #include <optional>
 #include <filesystem>
+#include <cassert>
 #include <contrib/cpp20/source_location.h>
 #include <gtest/gtest.h>
-
-#if defined( _MSC_VER )
-#define ASSERT( cond )  \
-	if ( !( cond ) )    \
-	{                   \
-		__debugbreak(); \
-	}
-#elif defined( __GNUC__ )
-#include <signal.h>
-#define ASSERT( cond )    \
-	if ( !( cond ) )      \
-	{                     \
-		raise( SIGTRAP ); \
-	}
-#else
-#define ASSERT( cond )
-#endif
-
 #include <test/shared.h>
 
-void checkOro( oroError res, const source_location& location = source_location::current() );
-void checkOrortc( orortcResult res, const source_location& location = source_location::current() );
-void checkHiprt( hiprtError res, const source_location& location = source_location::current() );
+void checkOro( const oroError res, const source_location& location = source_location::current() );
+void checkOrortc( const orortcResult res, const source_location& location = source_location::current() );
+void checkHiprt( const hiprtError res, const source_location& location = source_location::current() );
 
-std::string			  getEnvVariable( const std::string& key );
+std::string           getEnvVariable( const std::string& key );
 std::filesystem::path getRootDir();
 
 namespace
@@ -69,11 +52,11 @@ constexpr bool UseBitcode = false;
 
 struct CmdArguments
 {
-	uint32_t			  m_ww					   = 512u;
-	uint32_t			  m_wh					   = 512u;
-	std::filesystem::path m_referencePath		   = getRootDir() / "test/references/";
-	uint32_t			  m_deviceIdx			   = 0u;
-	bool				  m_usePrecompiledBitcodes = false;
+	uint32_t              m_ww                     = 512u;
+	uint32_t              m_wh                     = 512u;
+	std::filesystem::path m_referencePath          = getRootDir() / "test/references/";
+	uint32_t              m_deviceIdx              = 0u;
+	bool                  m_usePrecompiledBitcodes = false;
 };
 
 extern CmdArguments g_parsedArgs;
@@ -96,125 +79,143 @@ class hiprtTest : public ::testing::Test
 	void buildBvh( hiprtGeometryBuildInput& buildInput );
 
 	void buildEmbreeBvh(
-		RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, void* geomData, hiprtBvhNodeList& nodeList );
+		const RTCDevice embreeDevice, std::vector<RTCBuildPrimitive>& embreePrims, void* geomData, hiprtBvhNodeList& nodeList );
 
 	void buildEmbreeGeometryBvh(
-		RTCDevice embreeDevice, const float3* vertices, const uint32_t* indices, hiprtGeometryBuildInput& buildInput );
+		const RTCDevice embreeDevice, const float3* vertices, const uint32_t* indices, hiprtGeometryBuildInput& buildInput );
 
 	void buildEmbreeSceneBvh(
-		RTCDevice						  embreeDevice,
-		const std::vector<Aabb>&		  geomBoxes,
+		const RTCDevice                   embreeDevice,
+		const std::vector<Aabb>&          geomBoxes,
 		const std::vector<hiprtFrameSRT>& frames,
-		hiprtSceneBuildInput&			  buildInput );
+		hiprtSceneBuildInput&             buildInput );
 
 	bool readSourceCode(
-		const std::filesystem::path&					  srcPath,
-		std::string&									  src,
+		const std::filesystem::path&                      srcPath,
+		std::string&                                      src,
 		std::optional<std::vector<std::filesystem::path>> includes = std::nullopt );
 
 	void validateAndWriteImage(
-		const std::filesystem::path& imgPath, uint8_t* data, std::optional<std::filesystem::path> refFilename = std::nullopt );
+		const std::filesystem::path&         imgPath,
+		const uint8_t*                       data,
+		std::optional<std::filesystem::path> refFilename = std::nullopt );
 
-	void writeImage( const std::filesystem::path& imgPath, uint32_t width, uint32_t height, uint8_t* data );
+	void writeImage( const std::filesystem::path& imgPath, const uint32_t width, const uint32_t height, const uint8_t* data );
 
-	void waitForCompletion( oroStream stream = 0 ) { checkOro( oroStreamSynchronize( stream ) ); }
-
-	hiprtError buildTraceKernels(
-		hiprtContext								 ctxt,
-		const std::filesystem::path&				 srcPath,
-		std::vector<const char*>					 functionNames,
-		std::vector<hiprtApiFunction>&				 functionsOut,
-		std::optional<std::vector<const char*>>		 opts		  = std::nullopt,
-		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
-		uint32_t									 numGeomTypes = 0u,
-		uint32_t									 numRayTypes  = 1u );
-
-	hiprtError buildTraceKernel(
-		hiprtContext								 ctxt,
-		const std::filesystem::path&				 srcPath,
-		const std::string&							 functionName,
-		oroFunction&								 functionOut,
-		std::optional<std::vector<const char*>>		 opts		  = std::nullopt,
-		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
-		uint32_t									 numGeomTypes = 0u,
-		uint32_t									 numRayTypes  = 1u );
+	void waitForCompletion( const oroStream stream = 0 ) { checkOro( oroStreamSynchronize( stream ) ); }
 
 	hiprtError buildTraceKernelsFromBitcode(
-		hiprtContext								 ctxt,
-		const std::filesystem::path&				 srcPath,
-		std::vector<const char*>					 functionNames,
-		std::vector<hiprtApiFunction>&				 functionsOut,
-		std::optional<std::vector<const char*>>		 opts		  = std::nullopt,
+		const hiprtContext                           ctxt,
+		const std::filesystem::path&                 srcPath,
+		const std::vector<const char*>               functionNames,
+		std::vector<hiprtApiFunction>&               functionsOut,
+		std::optional<std::vector<const char*>>      opts         = std::nullopt,
 		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
-		uint32_t									 numGeomTypes = 0u,
-		uint32_t									 numRayTypes  = 1u );
+		const uint32_t                               numGeomTypes = 0u,
+		const uint32_t                               numRayTypes  = 1u );
 
 	hiprtError buildTraceKernelFromBitcode(
-		hiprtContext								 ctxt,
-		const std::filesystem::path&				 srcPath,
-		const std::string&							 functionName,
-		oroFunction&								 functionOut,
-		std::optional<std::vector<const char*>>		 opts		  = std::nullopt,
+		const hiprtContext                           ctxt,
+		const std::filesystem::path&                 srcPath,
+		const std::string&                           functionName,
+		oroFunction&                                 functionOut,
+		std::optional<std::vector<const char*>>      opts         = std::nullopt,
 		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
-		uint32_t									 numGeomTypes = 0u,
-		uint32_t									 numRayTypes  = 1u );
+		const uint32_t                               numGeomTypes = 0u,
+		const uint32_t                               numRayTypes  = 1u );
 
-	void launchKernel( oroFunction func, uint32_t nx, uint32_t ny, void** args, uint32_t sharedMemoryBytes = 0 );
+	hiprtError buildTraceKernels(
+		const hiprtContext                           ctxt,
+		const std::filesystem::path&                 srcPath,
+		const std::vector<const char*>&              functionNames,
+		std::vector<hiprtApiFunction>&               functionsOut,
+		std::optional<std::vector<const char*>>      opts         = std::nullopt,
+		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
+		const uint32_t                               numGeomTypes = 0u,
+		const uint32_t                               numRayTypes  = 1u );
+
+	hiprtError buildTraceKernel(
+		const hiprtContext                           ctxt,
+		const std::filesystem::path&                 srcPath,
+		const std::string&                           functionName,
+		oroFunction&                                 functionOut,
+		std::optional<std::vector<const char*>>      opts         = std::nullopt,
+		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
+		const uint32_t                               numGeomTypes = 0u,
+		const uint32_t                               numRayTypes  = 1u );
+
 	void launchKernel(
-		oroFunction func, uint32_t nx, uint32_t ny, uint32_t tx, uint32_t ty, void** args, uint32_t sharedMemoryBytes = 0 );
+		oroFunction func, const uint32_t nx, const uint32_t ny, const void** args, const uint32_t sharedMemoryBytes = 0 );
+
+	void launchKernel(
+		oroFunction    func,
+		const uint32_t nx,
+		const uint32_t ny,
+		const uint32_t tx,
+		const uint32_t ty,
+		const void**   args,
+		const uint32_t sharedMemoryBytes = 0 );
 
 	template <typename T>
-	void malloc( T*& ptr, size_t n )
+	T* malloc( const size_t n )
 	{
+		T* ptr;
 		checkOro( oroMalloc( reinterpret_cast<oroDeviceptr*>( &ptr ), sizeof( T ) * n ) );
+		return ptr;
 	}
 
 	void free( void* ptr ) { checkOro( oroFree( reinterpret_cast<oroDeviceptr>( ptr ) ) ); }
 
-	void memset( void* ptr, int val, size_t n ) { checkOro( oroMemsetD8( reinterpret_cast<oroDeviceptr>( ptr ), val, n ) ); }
+	void memset( void* ptr, const uint8_t val, const size_t n )
+	{
+		checkOro( oroMemsetD8( reinterpret_cast<oroDeviceptr>( ptr ), val, n ) );
+	}
 
 	template <typename T>
-	void copyHtoD( T* dst, const T* src, size_t n )
+	void copyHtoD( T* dst, const T* src, const size_t n )
 	{
 		checkOro( oroMemcpyHtoD( reinterpret_cast<oroDeviceptr>( dst ), const_cast<T*>( src ), sizeof( T ) * n ) );
 	}
 
 	template <typename T>
-	void copyDtoH( T* dst, T* src, size_t n )
+	void copyDtoH( T* dst, const T* src, const size_t n )
 	{
-		checkOro( oroMemcpyDtoH( dst, reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n ) );
+		checkOro( oroMemcpyDtoH( dst, reinterpret_cast<oroDeviceptr>( const_cast<T*>( src ) ), sizeof( T ) * n ) );
 	}
 
 	template <typename T>
-	void copyDtoD( T* dst, T* src, size_t n )
+	void copyDtoD( T* dst, const T* src, const size_t n )
 	{
-		checkOro(
-			oroMemcpyDtoD( reinterpret_cast<oroDeviceptr>( dst ), reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n ) );
+		checkOro( oroMemcpyDtoD(
+			reinterpret_cast<oroDeviceptr>( dst ), reinterpret_cast<oroDeviceptr>( const_cast<T*>( src ) ), sizeof( T ) * n ) );
 	}
 
 	template <typename T>
-	void copyHtoDAsync( T* dst, const T* src, size_t n, oroStream stream )
+	void copyHtoDAsync( T* dst, const T* src, const size_t n, const oroStream stream )
 	{
 		checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( dst ), const_cast<T*>( src ), sizeof( T ) * n, stream ) );
 	}
 
 	template <typename T>
-	void copyDtoHAsync( T* dst, T* src, size_t n, oroStream stream )
+	void copyDtoHAsync( T* dst, const T* src, const size_t n, const oroStream stream )
 	{
-		checkOro( oroMemcpyDtoHAsync( dst, reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n, stream ) );
+		checkOro( oroMemcpyDtoHAsync( dst, reinterpret_cast<oroDeviceptr>( const_cast<T*>( src ) ), sizeof( T ) * n, stream ) );
 	}
 
 	template <typename T>
-	void copyDtoDAsync( T* dst, T* src, size_t n, oroStream stream )
+	void copyDtoDAsync( T* dst, const T* src, const size_t n, const oroStream stream )
 	{
 		checkOro( oroMemcpyDtoDAsync(
-			reinterpret_cast<oroDeviceptr>( dst ), reinterpret_cast<oroDeviceptr>( src ), sizeof( T ) * n, stream ) );
+			reinterpret_cast<oroDeviceptr>( dst ),
+			reinterpret_cast<oroDeviceptr>( const_cast<T*>( src ) ),
+			sizeof( T ) * n,
+			stream ) );
 	}
 
   protected:
 	hiprtContextCreationInput m_ctxtInput;
-	oroCtx					  m_oroCtx;
-	oroDevice				  m_oroDevice;
+	oroCtx                    m_oroCtx;
+	oroDevice                 m_oroDevice;
 };
 
 enum class TestCasesType
@@ -231,21 +232,21 @@ class ObjTestCases : public hiprtTest
 	{
 		uint32_t* m_bufMaterialIndices;
 		uint32_t* m_bufMatIdsPerInstance; // count of material ids per instance use to calculate offset in material Idx buffer
-										  // for instance
-		Material*				   m_bufMaterials;
-		float3*					   m_vertices;
-		uint32_t*				   m_vertexOffsets;
-		float3*					   m_normals;
-		uint32_t*				   m_normalOffsets;
-		uint32_t*				   m_indices;
-		uint32_t*				   m_indexOffsets;
-		Light*					   m_lights;
-		uint32_t*				   m_numOfLights;
-		hiprtScene				   m_scene;
+		                                  // for instance
+		Material*                  m_bufMaterials;
+		float3*                    m_vertices;
+		uint32_t*                  m_vertexOffsets;
+		float3*                    m_normals;
+		uint32_t*                  m_normalOffsets;
+		uint32_t*                  m_indices;
+		uint32_t*                  m_indexOffsets;
+		Light*                     m_lights;
+		uint32_t*                  m_numOfLights;
+		hiprtScene                 m_scene;
 		std::vector<hiprtGeometry> m_geometries;
 		std::vector<hiprtInstance> m_instances;
-		std::vector<void*>		   m_garbageCollector;
-		hiprtContext			   m_ctx;
+		std::vector<void*>         m_garbageCollector;
+		hiprtContext               m_ctx;
 	};
 
 	template <TestCasesType T>
@@ -256,44 +257,44 @@ class ObjTestCases : public hiprtTest
 		if constexpr ( T == TestCasesType::TestCornellBox )
 		{
 			camera.m_translation = { 0.0f, 2.5f, 5.8f };
-			camera.m_rotation	 = { 0.0f, 0.0f, 1.0f, 0.0f };
-			camera.m_fov		 = 45.0f * hiprt::Pi / 180.f;
+			camera.m_rotation    = { 0.0f, 0.0f, 1.0f, 0.0f };
+			camera.m_fov         = 45.0f * hiprt::Pi / 180.f;
 		}
 		else if constexpr ( T == TestCasesType::TestBistro )
 		{
 			camera.m_translation = { -1200.0f, 254.0f, -260.0f };
-			camera.m_rotation	 = { 0.0f, 1.0f, 0.0f, -1.4f };
-			camera.m_fov		 = 60.0f * hiprt::Pi / 180.f;
+			camera.m_rotation    = { 0.0f, 1.0f, 0.0f, -1.4f };
+			camera.m_fov         = 60.0f * hiprt::Pi / 180.f;
 		}
 		else if constexpr ( T == TestCasesType::TestHairball )
 		{
 			camera.m_translation = { 0.0f, 0.0f, 15.0f };
-			camera.m_rotation	 = { 0.0f, 0.0f, 1.0f, 0.0f };
-			camera.m_fov		 = 45.0f * hiprt::Pi / 180.f;
+			camera.m_rotation    = { 0.0f, 0.0f, 1.0f, 0.0f };
+			camera.m_fov         = 45.0f * hiprt::Pi / 180.f;
 		}
 		else
 		{
-			ASSERT( 0 );
+			assert( false );
 		}
 
 		return camera;
 	}
 
 	void createScene(
-		SceneData&					 scene,
+		SceneData&                   scene,
 		const std::filesystem::path& filename,
-		bool						 enableRayMask = false,
-		std::optional<hiprtFrameSRT> frame		   = std::nullopt,
-		hiprtBuildFlags				 bvhBuildFlag  = hiprtBuildFlagBitPreferFastBuild,
-		bool						 time		   = false );
+		const bool                   enableRayMask = false,
+		std::optional<hiprtFrameSRT> frame         = std::nullopt,
+		const hiprtBuildFlags        bvhBuildFlag  = hiprtBuildFlagBitPreferFastBuild,
+		const bool                   time          = false );
 
 	void setupScene(
-		Camera&						 camera,
+		Camera&                      camera,
 		const std::filesystem::path& filename,
-		bool						 enableRayMask = false,
-		std::optional<hiprtFrameSRT> frame		   = std::nullopt,
-		hiprtBuildFlags				 bvhBuildFlag  = hiprtBuildFlagBitPreferFastBuild,
-		bool						 time		   = false );
+		const bool                   enableRayMask = false,
+		std::optional<hiprtFrameSRT> frame         = std::nullopt,
+		const hiprtBuildFlags        bvhBuildFlag  = hiprtBuildFlagBitPreferFastBuild,
+		const bool                   time          = false );
 
 	void deleteScene( SceneData& scene );
 
@@ -306,15 +307,15 @@ class ObjTestCases : public hiprtTest
 
 	void render(
 		std::optional<std::filesystem::path> imgPath,
-		const std::filesystem::path&		 kernelPath,
-		const std::string&					 funcName	 = "PrimaryRayKernel",
+		const std::filesystem::path&         kernelPath,
+		const std::string&                   funcName    = "PrimaryRayKernel",
 		std::optional<std::filesystem::path> refFilename = std::nullopt,
-		bool								 time		 = false,
-		float								 aoRadius	 = 0.0f );
+		const bool                           time        = false,
+		const float                          aoRadius    = 0.0f );
 
   public:
 	SceneData m_scene;
-	Camera	  m_camera;
+	Camera    m_camera;
 };
 
 class PerformanceTestCases : public ObjTestCases

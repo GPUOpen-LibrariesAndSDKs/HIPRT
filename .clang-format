@@ -1,7 +1,7 @@
 BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
-UseTab: Always
+UseTab: AlignWithSpaces
 ColumnLimit: 128
 AllowShortBlocksOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: true

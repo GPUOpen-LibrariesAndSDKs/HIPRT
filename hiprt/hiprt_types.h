@@ -32,16 +32,16 @@ struct _hiprtContext;
 struct _hiprtFuncTable;
 
 using hiprtDevicePtr  = void*;
-using hiprtGeometry	  = _hiprtGeometry*;
-using hiprtScene	  = _hiprtScene*;
-using hiprtContext	  = _hiprtContext*;
+using hiprtGeometry   = _hiprtGeometry*;
+using hiprtScene      = _hiprtScene*;
+using hiprtContext    = _hiprtContext*;
 using hiprtFuncTable  = _hiprtFuncTable*;
-using hiprtLogLevel	  = uint32_t;
+using hiprtLogLevel   = uint32_t;
 using hiprtBuildFlags = uint32_t;
-using hiprtRayMask	  = uint32_t;
+using hiprtRayMask    = uint32_t;
 
-using hiprtApiDevice   = int;	// hipDevice, cuDevice
-using hiprtApiCtx	   = void*; // hipCtx, cuCtx
+using hiprtApiDevice   = int;   // hipDevice, cuDevice
+using hiprtApiCtx      = void*; // hipCtx, cuCtx
 using hiprtApiStream   = void*; // hipStream, cuStream
 using hiprtApiFunction = void*; // hipFunction, cuFunction
 using hiprtApiModule   = void*; // hipModule, cuModule
@@ -77,8 +77,8 @@ enum hiprtTraversalState
  */
 enum hiprtTraversalHint
 {
-	hiprtTraversalHintDefault		 = 0,
-	hiprtTraversalHintShadowRays	 = 1,
+	hiprtTraversalHintDefault        = 0,
+	hiprtTraversalHintShadowRays     = 1,
 	hiprtTraversalHintReflectionRays = 2
 };
 
@@ -87,10 +87,10 @@ enum hiprtTraversalHint
  */
 enum : uint32_t
 {
-	hiprtInvalidValue			   = hiprt::InvalidValue,
-	hiprtFullRayMask			   = hiprt::FullRayMask,
+	hiprtInvalidValue              = hiprt::InvalidValue,
+	hiprtFullRayMask               = hiprt::FullRayMask,
 	hiprtMaxBatchBuildMaxPrimCount = hiprt::MaxBatchBuildMaxPrimCount,
-	hiprtMaxInstanceLevels		   = hiprt::MaxInstanceLevels,
+	hiprtMaxInstanceLevels         = hiprt::MaxInstanceLevels,
 };
 
 /** \brief Error codes.
@@ -98,13 +98,13 @@ enum : uint32_t
  */
 enum hiprtError
 {
-	hiprtSuccess				= 0,
-	hiprtErrorNotImplemented	= 1,
-	hiprtErrorInternal			= 2,
-	hiprtErrorOutOfHostMemory	= 3,
+	hiprtSuccess                = 0,
+	hiprtErrorNotImplemented    = 1,
+	hiprtErrorInternal          = 2,
+	hiprtErrorOutOfHostMemory   = 3,
 	hiprtErrorOutOfDeviceMemory = 4,
 	hiprtErrorInvalidApiVersion = 5,
-	hiprtErrorInvalidParameter	= 6
+	hiprtErrorInvalidParameter  = 6
 };
 
 /** \brief Log levels.
@@ -136,12 +136,12 @@ enum hiprtBuildOperation
  */
 enum hiprtBuildFlagBits
 {
-	hiprtBuildFlagBitPreferFastBuild			  = 0,
-	hiprtBuildFlagBitPreferBalancedBuild		  = 1,
-	hiprtBuildFlagBitPreferHighQualityBuild		  = 2,
-	hiprtBuildFlagBitCustomBvhImport			  = 3,
-	hiprtBuildFlagBitDisableSpatialSplits		  = 1 << 2,
-	hiprtBuildFlagBitDisableTrianglePairing		  = 1 << 3,
+	hiprtBuildFlagBitPreferFastBuild              = 0,
+	hiprtBuildFlagBitPreferBalancedBuild          = 1,
+	hiprtBuildFlagBitPreferHighQualityBuild       = 2,
+	hiprtBuildFlagBitCustomBvhImport              = 3,
+	hiprtBuildFlagBitDisableSpatialSplits         = 1 << 2,
+	hiprtBuildFlagBitDisableTrianglePairing       = 1 << 3,
 	hiprtBuildFlagBitDisableOrientedBoundingBoxes = 1 << 4
 };
 
@@ -174,7 +174,7 @@ enum hiprtInstanceType
 enum hiprtPrimitiveNodeType
 {
 	hiprtTriangleNode = 0,
-	hiprtCustomNode	  = 1
+	hiprtCustomNode   = 1
 };
 
 /** \brief Transformation frame type.
@@ -263,7 +263,7 @@ HIPRT_STATIC_ASSERT( sizeof( hiprtHit ) == 48 );
 struct hiprtFuncDataSet
 {
 	const void* intersectFuncData = nullptr;
-	const void* filterFuncData	  = nullptr;
+	const void* filterFuncData    = nullptr;
 };
 
 /** \brief A header of the function table.
@@ -271,9 +271,9 @@ struct hiprtFuncDataSet
  */
 struct hiprtFuncTableHeader
 {
-	uint32_t		  numGeomTypes;
-	uint32_t		  numRayTypes;
-	hiprtFuncDataSet* funcDataSets;
+	uint32_t          numGeomTypes = 0u;
+	uint32_t          numRayTypes  = 1u;
+	hiprtFuncDataSet* funcDataSets = nullptr;
 };
 
 /** \brief A header of the global stack buffer.
@@ -283,9 +283,9 @@ struct hiprtFuncTableHeader
  */
 struct hiprtGlobalStackBuffer
 {
-	uint32_t stackSize;
-	uint32_t stackCount;
-	void*	 stackData;
+	uint32_t stackSize  = 0u;
+	uint32_t stackCount = 0u;
+	void*    stackData  = nullptr;
 };
 
 /** \brief A header of the shared stack buffer.
@@ -293,8 +293,8 @@ struct hiprtGlobalStackBuffer
  */
 struct hiprtSharedStackBuffer
 {
-	uint32_t stackSize;
-	void*	 stackData;
+	uint32_t stackSize = 0u;
+	void*    stackData = nullptr;
 };
 
 /** \brief Set of function names.
@@ -303,7 +303,7 @@ struct hiprtSharedStackBuffer
 struct hiprtFuncNameSet
 {
 	const char* intersectFuncName = nullptr;
-	const char* filterFuncName	  = nullptr;
+	const char* filterFuncName    = nullptr;
 };
 
 /** \brief Device type.
@@ -352,11 +352,11 @@ struct hiprtBuildOptions
 struct hiprtTriangleMeshPrimitive
 {
 	/*!< Device pointer to vertex data */
-	hiprtDevicePtr vertices;
+	hiprtDevicePtr vertices = nullptr;
 	/*!< Number of vertices in vertex array */
-	uint32_t vertexCount;
+	uint32_t vertexCount = 0u;
 	/*!< Stride in bytes between two vertices */
-	uint32_t vertexStride;
+	uint32_t vertexStride = 0u;
 
 	/*!< Device pointer to triangle index data (optional) */
 	hiprtDevicePtr triangleIndices = nullptr;
@@ -380,11 +380,11 @@ struct hiprtTriangleMeshPrimitive
 struct hiprtAABBListPrimitive
 {
 	/*!< Device pointer to AABB data */
-	hiprtDevicePtr aabbs;
+	hiprtDevicePtr aabbs = nullptr;
 	/*!< Number of AABBs in the array */
-	uint32_t aabbCount;
+	uint32_t aabbCount = 0u;
 	/*!< Stride in bytes between two AABBs (2 * sizeof(float3) or 2 * sizeof(float4)) */
-	uint32_t aabbStride;
+	uint32_t aabbStride = 0u;
 };
 
 /** \brief Internal Bvh node for custom import Bvh.
@@ -428,11 +428,11 @@ HIPRT_STATIC_ASSERT( sizeof( hiprtLeafNode ) == 32 );
 struct hiprtBvhNodeList
 {
 	/*!< Array of hiprtInternalNode's */
-	hiprtDevicePtr internalNodes;
+	hiprtDevicePtr internalNodes = nullptr;
 	/*!< Array of hiprtLeafNode's */
-	hiprtDevicePtr leafNodes;
+	hiprtDevicePtr leafNodes = nullptr;
 	/*!< The number of leaf nodes */
-	uint32_t nodeCount;
+	uint32_t nodeCount = 0u;
 };
 
 /** \brief Build input for geometry build/update operation.
@@ -497,19 +497,19 @@ HIPRT_STATIC_ASSERT( sizeof( hiprtInstance ) == 16 );
 struct alignas( 16 ) hiprtSceneBuildInput
 {
 	/*!< Array of instanceCount pointers to instances */
-	hiprtDevicePtr instances;
+	hiprtDevicePtr instances = nullptr;
 	/*!< Array of instanceCount transform headers (optional: per object frame assumed if nullptr) */
-	hiprtDevicePtr instanceTransformHeaders;
+	hiprtDevicePtr instanceTransformHeaders = nullptr;
 	/*!< Array of frameCount frames (supposed to be ordered according to time) */
-	hiprtDevicePtr instanceFrames;
+	hiprtDevicePtr instanceFrames = nullptr;
 	/*!< Per object bit masks for instance masking (optional: if nullptr masks treated as hiprtFullRayMask) */
-	hiprtDevicePtr instanceMasks;
+	hiprtDevicePtr instanceMasks = nullptr;
 	/*!< Custom Bvh nodes (optional) */
 	hiprtBvhNodeList nodeList;
 	/*!< Number of instances */
-	uint32_t instanceCount;
+	uint32_t instanceCount = 0u;
 	/*!< Number of frames (such that instanceCount <= frameCount) */
-	uint32_t frameCount;
+	uint32_t frameCount = 0u;
 	/*!< Frame type (SRT or matrix) */
 	hiprtFrameType frameType = hiprtFrameTypeSRT;
 };
@@ -538,26 +538,34 @@ struct hiprtInstanceStackEntry
 	/*!< Ray */
 	hiprtRay ray;
 	/*!< Scene */
-	hiprtScene scene;
+	hiprtScene scene = nullptr;
 };
 
 /** \brief SRT transformation frame.
  *
- * Represented by scale (S), rotation (R), translation (T), and frame time.
+ * Represented by scale/shear (S), rotation (R), translation (T), and frame time.
+ * Scale is the diagonal of the 3x3 matrix S and shear is the upper triangular part of S.
+ * The S matrix is laid out as:
+ *   S = | scale.x  shear.x  shear.y |
+ *       |    0.0f  scale.y  shear.z |
+ *       |    0.0f    0.0f   scale.z |
+ * where shear.x = S01, shear.y = S02, and shear.z = S12.
  * Object to world transformation is composed as (T * R * S) * x = y
  */
-struct alignas( 16 ) hiprtFrameSRT
+struct alignas( 64 ) hiprtFrameSRT
 {
 	/*!< Rotation (axis and angle) */
-	hiprtFloat4 rotation;
-	/*!< Scale */
-	hiprtFloat3 scale;
+	hiprtFloat4 rotation = { 0.0f, 0.0f, 1.0f, 0.0f };
+	/*!< Scale (diagonal of S: S00, S11, S22) */
+	hiprtFloat3 scale = { 1.0f, 1.0f, 1.0f };
+	/*!< Shear (upper-triangular S components: shear.x = S01, shear.y = S02, shear.z = S12) */
+	hiprtFloat3 shear = { 0.0f, 0.0f, 0.0f };
 	/*!< Translation */
-	hiprtFloat3 translation;
+	hiprtFloat3 translation = { 0.0f, 0.0f, 0.0f };
 	/*!< Frame time */
-	float time;
+	float time = 0.0f;
 };
-HIPRT_STATIC_ASSERT( sizeof( hiprtFrameSRT ) == 48 );
+HIPRT_STATIC_ASSERT( sizeof( hiprtFrameSRT ) == 64 );
 
 /** \brief Transformation matrix frame representation.
  *
@@ -566,9 +574,9 @@ HIPRT_STATIC_ASSERT( sizeof( hiprtFrameSRT ) == 48 );
 struct alignas( 64 ) hiprtFrameMatrix
 {
 	/*!< Matrix */
-	float matrix[3][4];
+	float matrix[3][4] = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
 	/*!< Frame time */
-	float time;
+	float time = 0.0f;
 };
 HIPRT_STATIC_ASSERT( sizeof( hiprtFrameMatrix ) == 64 );
 

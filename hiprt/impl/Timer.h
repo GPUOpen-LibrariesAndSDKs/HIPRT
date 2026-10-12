@@ -38,12 +38,12 @@ class Timer final
 	static constexpr bool EnableTimer = false;
 
 	using TokenType = int;
-	using TimeUnit	= float;
+	using TimeUnit  = float;
 
 	Timer() = default;
 
 	Timer( const Timer& ) = default;
-	Timer( Timer&& )	  = default;
+	Timer( Timer&& )      = default;
 
 	Timer& operator=( const Timer& )  = default;
 	Timer& operator=( Timer&& other ) = default;

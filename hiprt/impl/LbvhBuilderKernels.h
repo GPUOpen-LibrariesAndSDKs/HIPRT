@@ -41,62 +41,62 @@
 
 using namespace hiprt;
 
-HIPRT_DEVICE uint32_t findParent(
-	const uint32_t	nodeAddr,
-	const uint32_t	nodeType,
-	const uint32_t	i,
-	const uint32_t	j,
-	const uint32_t	n,
-	ScratchNode*	scratchNodes,
-	const uint32_t* sortedMortonCodeKeys )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE uint32_t findParent(
+	const uint32_t  nodeAddr,
+	const uint32_t  nodeType,
+	const uint32_t  i,
+	const uint32_t  j,
+	const uint32_t  n,
+	const uint32_t* sortedMortonCodeKeys,
+	ScratchNode*    scratchNodes )
 {
 	if ( i == 0 && j == n ) return InvalidValue;
 	if ( i == 0 || ( j != n && findHighestDifferentBit( j - 1, j, n, sortedMortonCodeKeys ) <
-								   findHighestDifferentBit( i - 1, i, n, sortedMortonCodeKeys ) ) )
+	                               findHighestDifferentBit( i - 1, i, n, sortedMortonCodeKeys ) ) )
 	{
-		scratchNodes[j - 1].m_childIndex0 = encodeNodeIndex( nodeAddr, nodeType );
+		scratchNodes[j - 1].m_childIndices[0] = encodeNodeIndex( nodeAddr, nodeType );
 		return j - 1;
 	}
 	else
 	{
-		scratchNodes[i - 1].m_childIndex1 = encodeNodeIndex( nodeAddr, nodeType );
+		scratchNodes[i - 1].m_childIndices[1] = encodeNodeIndex( nodeAddr, nodeType );
 		return i - 1;
 	}
 }
 
 template <typename PrimitiveContainer>
-__device__ void EmitTopologyAndFitBounds(
-	uint32_t			index,
-	const uint32_t*		sortedMortonCodeKeys,
-	const uint32_t*		sortedMortonCodeValues,
-	uint32_t*			updateCounters,
-	PrimitiveContainer& primitives,
-	ScratchNode*		scratchNodes,
-	ReferenceNode*		references )
+HIPRT_DEVICE HIPRT_INLINE void EmitTopologyAndFitBounds(
+	uint32_t                  index,
+	const PrimitiveContainer& primitives,
+	const uint32_t*           sortedMortonCodeKeys,
+	const uint32_t*           sortedMortonCodeValues,
+	uint32_t*                 updateCounters,
+	ScratchNode*              scratchNodes,
+	ReferenceNode*            references )
 {
 	const uint32_t primCount = primitives.getCount();
-	uint32_t	   i		 = index;
-	uint32_t	   j		 = i + 1;
-	uint32_t	   k;
+	uint32_t       i         = index;
+	uint32_t       j         = i + 1;
+	uint32_t       k;
 
 	if ( index >= primCount ) return;
 
 	const uint32_t leafType = []() {
-		if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
+		if constexpr ( is_same_v<PrimitiveContainer, TriangleMesh> )
 			return TriangleType;
-		else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+		else if constexpr ( is_same_v<PrimitiveContainer, AabbList> )
 			return CustomType;
 		else if constexpr (
-			is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
-			is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
+			is_same_v<PrimitiveContainer, InstanceList<hiprtFrameSRT>> ||
+			is_same_v<PrimitiveContainer, InstanceList<hiprtFrameMatrix>> )
 			return InstanceType;
 	}();
 
 	const uint32_t primIndex = sortedMortonCodeValues[index];
-	references[index]		 = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
+	references[index]        = ReferenceNode( primIndex, primitives.fetchAabb( primIndex ) );
 
-	uint32_t parentAddr = findParent( index, leafType, i, j, primCount, scratchNodes, sortedMortonCodeKeys );
-	index				= parentAddr;
+	uint32_t parentAddr = findParent( index, leafType, i, j, primCount, sortedMortonCodeKeys, scratchNodes );
+	index               = parentAddr;
 	while ( ( k = atomicExch( &updateCounters[index], parentAddr == i - 1 ? j : i ) ) != InvalidValue )
 	{
 		__threadfence();
@@ -118,7 +118,7 @@ __device__ void EmitTopologyAndFitBounds(
 		else
 			box.grow( scratchNodes[node.getChildAddr( 1 )].aabb() );
 
-		parentAddr = findParent( index, BoxType, i, j, primCount, scratchNodes, sortedMortonCodeKeys );
+		parentAddr = findParent( index, BoxType, i, j, primCount, sortedMortonCodeKeys, scratchNodes );
 		node.m_box = box;
 
 		if ( parentAddr == InvalidValue )
@@ -133,54 +133,54 @@ __device__ void EmitTopologyAndFitBounds(
 	}
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_TriangleMesh(
-	const uint32_t* sortedMortonCodeKeys,
-	const uint32_t* sortedMortonCodeValues,
-	uint32_t*		updateCounters,
-	TriangleMesh	primitives,
-	ScratchNode*	scratchNodes,
-	ReferenceNode*	references )
+HIPRT_KERNEL void EmitTopologyAndFitBounds_TriangleMesh(
+	const TriangleMesh primitives,
+	const uint32_t*    sortedMortonCodeKeys,
+	const uint32_t*    sortedMortonCodeValues,
+	uint32_t*          updateCounters,
+	ScratchNode*       scratchNodes,
+	ReferenceNode*     references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	EmitTopologyAndFitBounds<TriangleMesh>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
+		index, primitives, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, scratchNodes, references );
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_AabbList(
+HIPRT_KERNEL void EmitTopologyAndFitBounds_AabbList(
+	const AabbList  primitives,
 	const uint32_t* sortedMortonCodeKeys,
 	const uint32_t* sortedMortonCodeValues,
-	uint32_t*		updateCounters,
-	AabbList		primitives,
-	ScratchNode*	scratchNodes,
-	ReferenceNode*	references )
+	uint32_t*       updateCounters,
+	ScratchNode*    scratchNodes,
+	ReferenceNode*  references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	EmitTopologyAndFitBounds<AabbList>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
+		index, primitives, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, scratchNodes, references );
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_InstanceList_hiprtFrameSRT(
-	const uint32_t*				sortedMortonCodeKeys,
-	const uint32_t*				sortedMortonCodeValues,
-	uint32_t*					updateCounters,
-	InstanceList<hiprtFrameSRT> primitives,
-	ScratchNode*				scratchNodes,
-	ReferenceNode*				references )
+HIPRT_KERNEL void EmitTopologyAndFitBounds_InstanceList_hiprtFrameSRT(
+	const InstanceList<hiprtFrameSRT> primitives,
+	const uint32_t*                   sortedMortonCodeKeys,
+	const uint32_t*                   sortedMortonCodeValues,
+	uint32_t*                         updateCounters,
+	ScratchNode*                      scratchNodes,
+	ReferenceNode*                    references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	EmitTopologyAndFitBounds<InstanceList<hiprtFrameSRT>>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
+		index, primitives, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, scratchNodes, references );
 }
 
-extern "C" __global__ void EmitTopologyAndFitBounds_InstanceList_hiprtFrameMatrix(
-	const uint32_t*				   sortedMortonCodeKeys,
-	const uint32_t*				   sortedMortonCodeValues,
-	uint32_t*					   updateCounters,
-	InstanceList<hiprtFrameMatrix> primitives,
-	ScratchNode*				   scratchNodes,
-	ReferenceNode*				   references )
+HIPRT_KERNEL void EmitTopologyAndFitBounds_InstanceList_hiprtFrameMatrix(
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const uint32_t*                      sortedMortonCodeKeys,
+	const uint32_t*                      sortedMortonCodeValues,
+	uint32_t*                            updateCounters,
+	ScratchNode*                         scratchNodes,
+	ReferenceNode*                       references )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	EmitTopologyAndFitBounds<InstanceList<hiprtFrameMatrix>>(
-		index, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, primitives, scratchNodes, references );
+		index, primitives, sortedMortonCodeKeys, sortedMortonCodeValues, updateCounters, scratchNodes, references );
 }

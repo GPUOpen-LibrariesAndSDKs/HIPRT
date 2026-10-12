@@ -34,28 +34,28 @@ class Context;
 class Utility
 {
   public:
-	static std::filesystem::path getCurrentDir();
+	[[nodiscard]] static std::filesystem::path getCurrentDir();
 
-	static uint32_t hashString( const std::string& str );
+	[[nodiscard]] static uint32_t hashString( const std::string& str );
 
 	template <typename... Args>
-	static std::string format( const std::string& format, Args... args )
+	[[nodiscard]] static std::string format( const std::string& format, Args... args )
 	{
 		int sizeS = std::snprintf( nullptr, 0, format.c_str(), args... ) + 1;
 		if ( sizeS <= 0 )
 		{
 			throw std::runtime_error( "Error during formatting." );
 		}
-		auto					size = static_cast<size_t>( sizeS );
+		auto                    size = static_cast<size_t>( sizeS );
 		std::unique_ptr<char[]> buf( new char[size] );
 		std::snprintf( buf.get(), size, format.c_str(), args... );
 		return std::string( buf.get(), buf.get() + size - 1 );
 	}
 
-	static std::string getEnvVariable( const std::string& key )
+	[[nodiscard]] static std::string getEnvVariable( const std::string& key )
 	{
 #if defined( __WINDOWS__ )
-		char*  buffer	   = nullptr;
+		char*  buffer      = nullptr;
 		size_t bufferCount = 0;
 		_dupenv_s( &buffer, &bufferCount, key.c_str() );
 		const std::string val = buffer != nullptr ? buffer : "";
@@ -67,12 +67,12 @@ class Utility
 		return val;
 	}
 
-	static std::filesystem::path getRootDir()
+	[[nodiscard]] static std::filesystem::path getRootDir()
 	{
 #if defined( HIPRT_ROOT_DIRECTORY )
 		std::string val = HIPRT_ROOT_DIRECTORY;
 #else
-		std::string		  val = getEnvVariable( "HIPRT_PATH" );
+		std::string       val = getEnvVariable( "HIPRT_PATH" );
 #endif
 		if ( val.empty() ) val = "..";
 		return std::filesystem::path( val );

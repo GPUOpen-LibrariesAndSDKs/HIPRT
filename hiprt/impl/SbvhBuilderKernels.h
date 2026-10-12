@@ -42,74 +42,74 @@
 using namespace hiprt;
 
 template <typename PrimitiveContainer>
-__device__ void SetupLeavesAndReferences(
-	PrimitiveContainer& primitives,
-	ReferenceNode*		references,
-	Task*				taskQueue,
-	Aabb*				box,
-	uint32_t*			referenceIndices,
-	uint32_t*			taskIndices )
+HIPRT_DEVICE HIPRT_INLINE void SetupLeavesAndReferences(
+	const PrimitiveContainer& primitives,
+	const Aabb&               box,
+	ReferenceNode*            references,
+	uint32_t*                 referenceIndices,
+	Task*                     taskQueue,
+	uint32_t*                 taskIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 
 	if ( index < primitives.getCount() )
 	{
-		references[index]		= ReferenceNode( index, primitives.fetchAabb( index ) );
+		references[index]       = ReferenceNode( index, primitives.fetchAabb( index ) );
 		referenceIndices[index] = index;
-		taskIndices[index]		= 0;
+		taskIndices[index]      = 0;
 	}
 
-	if ( index == 0 ) taskQueue[0] = Task( *box );
+	if ( index == 0 ) taskQueue[0] = Task( box );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_TriangleMesh(
-	TriangleMesh   primitives,
-	ReferenceNode* references,
-	Task*		   taskQueue,
-	Aabb*		   box,
-	uint32_t*	   referenceIndices,
-	uint32_t*	   taskIndices )
+HIPRT_KERNEL void SetupLeavesAndReferences_TriangleMesh(
+	const TriangleMesh primitives,
+	const Aabb*        box,
+	ReferenceNode*     references,
+	uint32_t*          referenceIndices,
+	Task*              taskQueue,
+	uint32_t*          taskIndices )
 {
-	SetupLeavesAndReferences<TriangleMesh>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<TriangleMesh>( primitives, *box, references, referenceIndices, taskQueue, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_AabbList(
-	AabbList	   primitives,
+HIPRT_KERNEL void SetupLeavesAndReferences_AabbList(
+	const AabbList primitives,
+	const Aabb*    box,
 	ReferenceNode* references,
-	Task*		   taskQueue,
-	Aabb*		   box,
-	uint32_t*	   referenceIndices,
-	uint32_t*	   taskIndices )
+	uint32_t*      referenceIndices,
+	Task*          taskQueue,
+	uint32_t*      taskIndices )
 {
-	SetupLeavesAndReferences<AabbList>( primitives, references, taskQueue, box, referenceIndices, taskIndices );
+	SetupLeavesAndReferences<AabbList>( primitives, *box, references, referenceIndices, taskQueue, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_InstanceList_hiprtFrameSRT(
-	InstanceList<hiprtFrameSRT> primitives,
-	ReferenceNode*				references,
-	Task*						taskQueue,
-	Aabb*						box,
-	uint32_t*					referenceIndices,
-	uint32_t*					taskIndices )
+HIPRT_KERNEL void SetupLeavesAndReferences_InstanceList_hiprtFrameSRT(
+	const InstanceList<hiprtFrameSRT> primitives,
+	const Aabb*                       box,
+	ReferenceNode*                    references,
+	uint32_t*                         referenceIndices,
+	Task*                             taskQueue,
+	uint32_t*                         taskIndices )
 {
 	SetupLeavesAndReferences<InstanceList<hiprtFrameSRT>>(
-		primitives, references, taskQueue, box, referenceIndices, taskIndices );
+		primitives, *box, references, referenceIndices, taskQueue, taskIndices );
 }
 
-extern "C" __global__ void SetupLeavesAndReferences_InstanceList_hiprtFrameMatrix(
-	InstanceList<hiprtFrameMatrix> primitives,
-	ReferenceNode*				   references,
-	Task*						   taskQueue,
-	Aabb*						   box,
-	uint32_t*					   referenceIndices,
-	uint32_t*					   taskIndices )
+HIPRT_KERNEL void SetupLeavesAndReferences_InstanceList_hiprtFrameMatrix(
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const Aabb*                          box,
+	ReferenceNode*                       references,
+	uint32_t*                            referenceIndices,
+	Task*                                taskQueue,
+	uint32_t*                            taskIndices )
 {
 	SetupLeavesAndReferences<InstanceList<hiprtFrameMatrix>>(
-		primitives, references, taskQueue, box, referenceIndices, taskIndices );
+		primitives, *box, references, referenceIndices, taskQueue, taskIndices );
 }
 
 template <bool spatialSplits>
-__device__ void ResetBins( uint32_t taskCount, uint32_t binCount, Bin* objectBins, Bin* spatialBins )
+HIPRT_DEVICE HIPRT_INLINE void ResetBins( const uint32_t taskCount, const uint32_t binCount, Bin* objectBins, Bin* spatialBins )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -120,30 +120,30 @@ __device__ void ResetBins( uint32_t taskCount, uint32_t binCount, Bin* objectBin
 	}
 }
 
-extern "C" __global__ void ResetBins_true( uint32_t taskCount, uint32_t binCount, Bin* objectBins, Bin* spatialBins )
+HIPRT_KERNEL void ResetBins_true( const uint32_t taskCount, const uint32_t binCount, Bin* objectBins, Bin* spatialBins )
 {
 	ResetBins<true>( taskCount, binCount, objectBins, spatialBins );
 }
 
-extern "C" __global__ void ResetBins_false( uint32_t taskCount, uint32_t binCount, Bin* objectBins, Bin* spatialBins )
+HIPRT_KERNEL void ResetBins_false( const uint32_t taskCount, const uint32_t binCount, Bin* objectBins, Bin* spatialBins )
 {
 	ResetBins<false>( taskCount, binCount, objectBins, spatialBins );
 }
 
-extern "C" __global__ void BinReferencesObject(
-	uint32_t	   activeRefCount,
-	uint32_t	   binCount,
-	uint32_t	   taskOffset,
-	uint32_t	   taskCount,
-	uint32_t*	   referenceIndices,
-	uint32_t*	   taskIndices,
-	Task*		   taskQueue,
-	ReferenceNode* references,
-	Bin*		   binsGlobal )
+HIPRT_KERNEL void BinReferencesObject(
+	const uint32_t       activeRefCount,
+	const uint32_t       binCount,
+	const uint32_t       taskOffset,
+	const uint32_t       taskCount,
+	const uint32_t*      referenceIndices,
+	const uint32_t*      taskIndices,
+	const Task*          taskQueue,
+	const ReferenceNode* references,
+	Bin*                 binsGlobal )
 {
 	const uint32_t indexStart = blockIdx.x * blockDim.x;
-	const uint32_t index	  = indexStart + threadIdx.x;
-	const uint32_t indexEnd	  = min( indexStart + blockDim.x, activeRefCount );
+	const uint32_t index      = indexStart + threadIdx.x;
+	const uint32_t indexEnd   = min( indexStart + blockDim.x, activeRefCount );
 
 	const uint32_t firstReferenceIndex = referenceIndices[indexStart];
 	const uint32_t lastReferenceIndex  = referenceIndices[indexEnd - 1];
@@ -152,8 +152,8 @@ extern "C" __global__ void BinReferencesObject(
 	const uint32_t lastTaskIndex  = taskIndices[lastReferenceIndex];
 
 	alignas( alignof( Bin ) ) __shared__ uint8_t binBuffer[3 * SbvhMaxBinCount * sizeof( Bin )];
-	Bin*										 binCache = reinterpret_cast<Bin*>( binBuffer );
-	Bin*										 bins	  = binsGlobal;
+	Bin*                                         binCache = reinterpret_cast<Bin*>( binBuffer );
+	Bin*                                         bins     = binsGlobal;
 
 	if ( firstTaskIndex == lastTaskIndex )
 	{
@@ -166,13 +166,13 @@ extern "C" __global__ void BinReferencesObject(
 	if ( index < activeRefCount )
 	{
 		const uint32_t referenceIndex = referenceIndices[index];
-		const uint32_t taskIndex	  = taskIndices[referenceIndex];
+		const uint32_t taskIndex      = taskIndices[referenceIndex];
 
-		const Task			task = taskQueue[taskIndex + taskOffset];
-		const ReferenceNode ref	 = references[referenceIndex];
+		const Task          task = taskQueue[taskIndex + taskOffset];
+		const ReferenceNode ref  = references[referenceIndex];
 
 		const float3 k = ( 1.0f - SbvhEpsilon ) * ( static_cast<float>( binCount ) / ( task.m_box.m_max - task.m_box.m_min ) );
-		const uint3	 binIndex =
+		const uint3  binIndex =
 			clamp( make_uint3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_uint3( 0 ), make_uint3( binCount - 1 ) );
 		uint3 binAddr = binIndex + make_uint3( 0, 1, 2 ) * binCount;
 		if ( firstTaskIndex != lastTaskIndex ) binAddr = taskIndex + taskCount * binAddr;
@@ -192,7 +192,7 @@ extern "C" __global__ void BinReferencesObject(
 		for ( uint32_t binIndex = threadIdx.x; binIndex < binCount; binIndex += blockDim.x )
 		{
 			uint3 binOffset = make_uint3( binIndex ) + make_uint3( 0, 1, 2 ) * binCount;
-			uint3 binAddr	= firstTaskIndex + taskCount * binOffset;
+			uint3 binAddr   = firstTaskIndex + taskCount * binOffset;
 
 			if ( binCache[binOffset.x].m_counter > 0 )
 			{
@@ -216,23 +216,23 @@ extern "C" __global__ void BinReferencesObject(
 }
 
 template <typename PrimitiveContainer>
-__device__ void BinReferencesSpatial(
-	uint32_t			activeRefCount,
-	uint32_t			binCount,
-	uint32_t			taskOffset,
-	uint32_t			taskCount,
-	float				overlapThreshold,
-	float				edgeThreshold,
-	uint32_t*			referenceIndices,
-	uint32_t*			taskIndices,
-	Task*				taskQueue,
-	PrimitiveContainer& primitives,
-	ReferenceNode*		references,
-	Bin*				binsGlobal )
+HIPRT_DEVICE HIPRT_INLINE void BinReferencesSpatial(
+	const uint32_t            activeRefCount,
+	const uint32_t            binCount,
+	const uint32_t            taskOffset,
+	const uint32_t            taskCount,
+	const float               overlapThreshold,
+	const float               edgeThreshold,
+	const uint32_t*           referenceIndices,
+	const uint32_t*           taskIndices,
+	const Task*               taskQueue,
+	const PrimitiveContainer& primitives,
+	const ReferenceNode*      references,
+	Bin*                      binsGlobal )
 {
 	const uint32_t indexStart = blockIdx.x * blockDim.x;
-	const uint32_t index	  = indexStart + threadIdx.x;
-	const uint32_t indexEnd	  = min( indexStart + blockDim.x, activeRefCount );
+	const uint32_t index      = indexStart + threadIdx.x;
+	const uint32_t indexEnd   = min( indexStart + blockDim.x, activeRefCount );
 
 	const uint32_t firstReferenceIndex = referenceIndices[indexStart];
 	const uint32_t lastReferenceIndex  = referenceIndices[indexEnd - 1];
@@ -241,8 +241,8 @@ __device__ void BinReferencesSpatial(
 	const uint32_t lastTaskIndex  = taskIndices[lastReferenceIndex];
 
 	alignas( alignof( Bin ) ) __shared__ uint8_t binBuffer[3 * SbvhMaxBinCount * sizeof( Bin )];
-	Bin*										 binCache = reinterpret_cast<Bin*>( binBuffer );
-	Bin*										 bins	  = binsGlobal;
+	Bin*                                         binCache = reinterpret_cast<Bin*>( binBuffer );
+	Bin*                                         bins     = binsGlobal;
 
 	if ( firstTaskIndex == lastTaskIndex )
 	{
@@ -255,7 +255,7 @@ __device__ void BinReferencesSpatial(
 	if ( index < activeRefCount )
 	{
 		const uint32_t referenceIndex = referenceIndices[index];
-		const uint32_t taskIndex	  = taskIndices[referenceIndex];
+		const uint32_t taskIndex      = taskIndices[referenceIndex];
 
 		const Task task = taskQueue[taskIndex + taskOffset];
 
@@ -268,41 +268,42 @@ __device__ void BinReferencesSpatial(
 
 			for ( uint32_t axisIndex = 0; axisIndex < 3; ++axisIndex )
 			{
-				if ( ptr( task.m_box.m_max )[axisIndex] - ptr( task.m_box.m_min )[axisIndex] < edgeThreshold ) continue;
+				if ( component( task.m_box.m_max, axisIndex ) - component( task.m_box.m_min, axisIndex ) < edgeThreshold )
+					continue;
 
-				uint32_t	firstBin = binCount - 1;
-				uint32_t	lastBin	 = firstBin;
-				const float binSize	 = ( ptr( task.m_box.m_max )[axisIndex] - ptr( task.m_box.m_min )[axisIndex] ) /
-									  static_cast<float>( binCount );
+				uint32_t    firstBin = binCount - 1;
+				uint32_t    lastBin  = firstBin;
+				const float binSize  = ( component( task.m_box.m_max, axisIndex ) - component( task.m_box.m_min, axisIndex ) ) /
+				                      static_cast<float>( binCount );
 				for ( uint32_t i = 0; i < binCount; ++i )
 				{
-					float position = ptr( task.m_box.m_min )[axisIndex] + binSize * static_cast<float>( i + 1 );
-					if ( firstBin == binCount - 1 && ptr( ref.m_box.m_min )[axisIndex] < position ) firstBin = i;
-					if ( lastBin == binCount - 1 && ptr( ref.m_box.m_max )[axisIndex] <= position ) lastBin = i;
+					float position = component( task.m_box.m_min, axisIndex ) + binSize * static_cast<float>( i + 1 );
+					if ( firstBin == binCount - 1 && component( ref.m_box.m_min, axisIndex ) < position ) firstBin = i;
+					if ( lastBin == binCount - 1 && component( ref.m_box.m_max, axisIndex ) <= position ) lastBin = i;
 				}
 				if ( firstBin > lastBin ) firstBin = lastBin;
 
-				uint32_t	  curBinAddr;
+				uint32_t      curBinAddr;
 				ReferenceNode curRef = ref;
 				ReferenceNode leftRef( ref.m_primIndex );
 				ReferenceNode rightRef( ref.m_primIndex );
 
 				for ( uint32_t i = firstBin; i < lastBin; i++ )
 				{
-					const float position = ptr( task.m_box.m_min )[axisIndex] + binSize * static_cast<float>( i + 1 );
-					if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+					const float position = component( task.m_box.m_min, axisIndex ) + binSize * static_cast<float>( i + 1 );
+					if constexpr ( is_same_v<PrimitiveContainer, AabbList> )
 					{
-						leftRef.m_box						   = curRef.m_box;
-						rightRef.m_box						   = curRef.m_box;
-						ptr( leftRef.m_box.m_max )[axisIndex]  = position;
-						ptr( rightRef.m_box.m_min )[axisIndex] = position;
+						leftRef.m_box                                = curRef.m_box;
+						rightRef.m_box                               = curRef.m_box;
+						component( leftRef.m_box.m_max, axisIndex )  = position;
+						component( rightRef.m_box.m_min, axisIndex ) = position;
 					}
 					else
 					{
 						if constexpr (
-							is_same<PrimitiveContainer, TriangleMesh>::value ||
-							is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
-							is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
+							is_same_v<PrimitiveContainer, TriangleMesh> ||
+							is_same_v<PrimitiveContainer, InstanceList<hiprtFrameSRT>> ||
+							is_same_v<PrimitiveContainer, InstanceList<hiprtFrameMatrix>> )
 						{
 							primitives.split(
 								ref.m_primIndex, axisIndex, position, curRef.m_box, leftRef.m_box, rightRef.m_box );
@@ -310,15 +311,15 @@ __device__ void BinReferencesSpatial(
 
 						if ( !leftRef.m_box.valid() )
 						{
-							leftRef.m_box						  = curRef.m_box;
-							ptr( leftRef.m_box.m_max )[axisIndex] = position;
+							leftRef.m_box                               = curRef.m_box;
+							component( leftRef.m_box.m_max, axisIndex ) = position;
 							leftRef.m_box.grow( leftRef.m_box.center() );
 						}
 
 						if ( !rightRef.m_box.valid() )
 						{
-							rightRef.m_box						   = curRef.m_box;
-							ptr( rightRef.m_box.m_min )[axisIndex] = position;
+							rightRef.m_box                               = curRef.m_box;
+							component( rightRef.m_box.m_min, axisIndex ) = position;
 							rightRef.m_box.grow( rightRef.m_box.center() );
 						}
 					}
@@ -348,7 +349,7 @@ __device__ void BinReferencesSpatial(
 		for ( uint32_t binIndex = threadIdx.x; binIndex < binCount; binIndex += blockDim.x )
 		{
 			uint3 binOffset = make_uint3( binIndex ) + make_uint3( 0, 1, 2 ) * binCount;
-			uint3 binAddr	= firstTaskIndex + taskCount * binOffset;
+			uint3 binAddr   = firstTaskIndex + taskCount * binOffset;
 
 			if ( binCache[binOffset.x].m_box.valid() ) binsGlobal[binAddr.x].m_box.atomicGrow( binCache[binOffset.x].m_box );
 			if ( binCache[binOffset.y].m_box.valid() ) binsGlobal[binAddr.y].m_box.atomicGrow( binCache[binOffset.y].m_box );
@@ -365,19 +366,19 @@ __device__ void BinReferencesSpatial(
 	}
 }
 
-extern "C" __global__ void BinReferencesSpatial_TriangleMesh(
-	uint32_t	   activeRefCount,
-	uint32_t	   binCount,
-	uint32_t	   taskOffset,
-	uint32_t	   taskCount,
-	float		   overlapThreshold,
-	float		   edgeThreshold,
-	uint32_t*	   referenceIndices,
-	uint32_t*	   taskIndices,
-	Task*		   taskQueue,
-	TriangleMesh   primitives,
-	ReferenceNode* references,
-	Bin*		   spatialBins )
+HIPRT_KERNEL void BinReferencesSpatial_TriangleMesh(
+	const uint32_t       activeRefCount,
+	const uint32_t       binCount,
+	const uint32_t       taskOffset,
+	const uint32_t       taskCount,
+	const float          overlapThreshold,
+	const float          edgeThreshold,
+	const uint32_t*      referenceIndices,
+	const uint32_t*      taskIndices,
+	const Task*          taskQueue,
+	const TriangleMesh   primitives,
+	const ReferenceNode* references,
+	Bin*                 spatialBins )
 {
 	BinReferencesSpatial<TriangleMesh>(
 		activeRefCount,
@@ -394,19 +395,19 @@ extern "C" __global__ void BinReferencesSpatial_TriangleMesh(
 		spatialBins );
 }
 
-extern "C" __global__ void BinReferencesSpatial_AabbList(
-	uint32_t	   activeRefCount,
-	uint32_t	   binCount,
-	uint32_t	   taskOffset,
-	uint32_t	   taskCount,
-	float		   overlapThreshold,
-	float		   edgeThreshold,
-	uint32_t*	   referenceIndices,
-	uint32_t*	   taskIndices,
-	Task*		   taskQueue,
-	AabbList	   primitives,
-	ReferenceNode* references,
-	Bin*		   spatialBins )
+HIPRT_KERNEL void BinReferencesSpatial_AabbList(
+	const uint32_t       activeRefCount,
+	const uint32_t       binCount,
+	const uint32_t       taskOffset,
+	const uint32_t       taskCount,
+	const float          overlapThreshold,
+	const float          edgeThreshold,
+	const uint32_t*      referenceIndices,
+	const uint32_t*      taskIndices,
+	const Task*          taskQueue,
+	const AabbList       primitives,
+	const ReferenceNode* references,
+	Bin*                 spatialBins )
 {
 	BinReferencesSpatial<AabbList>(
 		activeRefCount,
@@ -423,19 +424,19 @@ extern "C" __global__ void BinReferencesSpatial_AabbList(
 		spatialBins );
 }
 
-extern "C" __global__ void BinReferencesSpatial_InstanceList_hiprtFrameSRT(
-	uint32_t					activeRefCount,
-	uint32_t					binCount,
-	uint32_t					taskOffset,
-	uint32_t					taskCount,
-	float						overlapThreshold,
-	float						edgeThreshold,
-	uint32_t*					referenceIndices,
-	uint32_t*					taskIndices,
-	Task*						taskQueue,
-	InstanceList<hiprtFrameSRT> primitives,
-	ReferenceNode*				references,
-	Bin*						spatialBins )
+HIPRT_KERNEL void BinReferencesSpatial_InstanceList_hiprtFrameSRT(
+	const uint32_t                    activeRefCount,
+	const uint32_t                    binCount,
+	const uint32_t                    taskOffset,
+	const uint32_t                    taskCount,
+	const float                       overlapThreshold,
+	const float                       edgeThreshold,
+	const uint32_t*                   referenceIndices,
+	const uint32_t*                   taskIndices,
+	const Task*                       taskQueue,
+	const InstanceList<hiprtFrameSRT> primitives,
+	const ReferenceNode*              references,
+	Bin*                              spatialBins )
 {
 	BinReferencesSpatial<InstanceList<hiprtFrameSRT>>(
 		activeRefCount,
@@ -452,19 +453,19 @@ extern "C" __global__ void BinReferencesSpatial_InstanceList_hiprtFrameSRT(
 		spatialBins );
 }
 
-extern "C" __global__ void BinReferencesSpatial_InstanceList_hiprtFrameMatrix(
-	uint32_t					   activeRefCount,
-	uint32_t					   binCount,
-	uint32_t					   taskOffset,
-	uint32_t					   taskCount,
-	float						   overlapThreshold,
-	float						   edgeThreshold,
-	uint32_t*					   referenceIndices,
-	uint32_t*					   taskIndices,
-	Task*						   taskQueue,
-	InstanceList<hiprtFrameMatrix> primitives,
-	ReferenceNode*				   references,
-	Bin*						   spatialBins )
+HIPRT_KERNEL void BinReferencesSpatial_InstanceList_hiprtFrameMatrix(
+	const uint32_t                       activeRefCount,
+	const uint32_t                       binCount,
+	const uint32_t                       taskOffset,
+	const uint32_t                       taskCount,
+	const float                          overlapThreshold,
+	const float                          edgeThreshold,
+	const uint32_t*                      referenceIndices,
+	const uint32_t*                      taskIndices,
+	const Task*                          taskQueue,
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const ReferenceNode*                 references,
+	Bin*                                 spatialBins )
 {
 	BinReferencesSpatial<InstanceList<hiprtFrameMatrix>>(
 		activeRefCount,
@@ -481,8 +482,8 @@ extern "C" __global__ void BinReferencesSpatial_InstanceList_hiprtFrameMatrix(
 		spatialBins );
 }
 
-extern "C" __global__ void
-FindObjectSplit( uint32_t taskCount, uint32_t binCount, uint32_t nodeCount, Bin* bins, Task* taskQueue )
+HIPRT_KERNEL void
+FindObjectSplit( const uint32_t taskCount, const uint32_t binCount, const uint32_t nodeCount, const Bin* bins, Task* taskQueue )
 {
 	const uint32_t taskIndex = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -491,27 +492,27 @@ FindObjectSplit( uint32_t taskCount, uint32_t binCount, uint32_t nodeCount, Bin*
 		Bin leftBin, rightBin;
 		Bin rightBins[SbvhMaxBinCount];
 
-		float	 bestCost  = FltMax;
+		float    bestCost  = FltMax;
 		uint32_t bestAxis  = InvalidValue;
 		uint32_t bestIndex = InvalidValue;
 
 		uint32_t nodeAddr = nodeCount - taskCount + taskIndex;
-		Task	 task	  = taskQueue[nodeAddr];
+		Task     task     = taskQueue[nodeAddr];
 
 		uint32_t nodeSize;
 		for ( uint32_t axisIndex = 0; axisIndex < 3; ++axisIndex )
 		{
-			uint32_t binAddr		= taskIndex + taskCount * ( binCount - 1 + axisIndex * binCount );
+			uint32_t binAddr        = taskIndex + taskCount * ( binCount - 1 + axisIndex * binCount );
 			rightBins[binCount - 1] = bins[binAddr];
 			for ( int32_t binIndex = binCount - 2; binIndex >= 0; --binIndex )
 			{
-				binAddr				= taskIndex + taskCount * ( binIndex + axisIndex * binCount );
+				binAddr             = taskIndex + taskCount * ( binIndex + axisIndex * binCount );
 				rightBins[binIndex] = rightBins[binIndex + 1];
 				rightBins[binIndex].include( bins[binAddr] );
 			}
 			nodeSize = rightBins[0].m_counter;
 
-			binAddr		   = taskIndex + taskCount * axisIndex * binCount;
+			binAddr        = taskIndex + taskCount * axisIndex * binCount;
 			Bin curLeftBin = bins[binAddr];
 			for ( uint32_t binIndex = 0; binIndex < binCount - 1; ++binIndex )
 			{
@@ -523,7 +524,7 @@ FindObjectSplit( uint32_t taskCount, uint32_t binCount, uint32_t nodeCount, Bin*
 						bestCost  = cost;
 						bestAxis  = axisIndex;
 						bestIndex = binIndex;
-						leftBin	  = curLeftBin;
+						leftBin   = curLeftBin;
 						rightBin  = rightBins[binIndex + 1];
 					}
 				}
@@ -534,68 +535,68 @@ FindObjectSplit( uint32_t taskCount, uint32_t binCount, uint32_t nodeCount, Bin*
 
 		if ( bestIndex == InvalidValue )
 		{
-			bestCost		   = task.m_box.area() * nodeSize;
-			bestAxis		   = 3;
-			bestIndex		   = nodeSize >> 1;
+			bestCost           = task.m_box.area() * nodeSize;
+			bestAxis           = 3;
+			bestIndex          = nodeSize >> 1;
 			leftBin.m_counter  = bestIndex;
 			rightBin.m_counter = nodeSize - bestIndex;
-			leftBin.m_box	   = task.m_box;
-			rightBin.m_box	   = task.m_box;
+			leftBin.m_box      = task.m_box;
+			rightBin.m_box     = task.m_box;
 		}
 
 		task.m_split.setSplitInfo( bestAxis, bestIndex, leftBin.m_counter == 1, rightBin.m_counter == 1, false );
-		task.m_box0			= leftBin.m_box;
-		task.m_counter0		= leftBin.m_counter;
-		task.m_box1			= rightBin.m_box;
-		task.m_counter1		= rightBin.m_counter;
-		task.m_cost			= bestCost;
+		task.m_box0         = leftBin.m_box;
+		task.m_counter0     = leftBin.m_counter;
+		task.m_box1         = rightBin.m_box;
+		task.m_counter1     = rightBin.m_counter;
+		task.m_cost         = bestCost;
 		taskQueue[nodeAddr] = task;
 	}
 }
 
 template <bool spatialSplits>
-__device__ void SplitReferences(
-	uint32_t	 taskCount,
-	uint32_t	 binCount,
-	uint32_t	 nodeCount,
-	uint32_t	 referenceCount,
-	uint32_t	 maxReferenceCount,
-	float		 overlapThreshold,
-	float		 edgeThreshold,
-	Bin*		 bins,
-	ScratchNode* scratchNodes,
-	Task*		 taskQueue,
-	uint32_t*	 taskCounter,
-	uint32_t*	 referenceCounter,
-	uint32_t*	 refOffsetCounter )
+HIPRT_DEVICE HIPRT_INLINE void SplitReferences(
+	const uint32_t taskCount,
+	const uint32_t binCount,
+	const uint32_t nodeCount,
+	const uint32_t referenceCount,
+	const uint32_t maxReferenceCount,
+	const float    overlapThreshold,
+	const float    edgeThreshold,
+	const Bin*     bins,
+	ScratchNode*   scratchNodes,
+	Task*          taskQueue,
+	uint32_t*      taskCounter,
+	uint32_t*      referenceCounter,
+	uint32_t*      refOffsetCounter )
 {
 	const uint32_t taskIndex = blockDim.x * blockIdx.x + threadIdx.x;
-	const uint32_t taskEnd	 = RoundUp( taskCount, WarpSize );
+	const uint32_t taskEnd   = RoundUp( taskCount, WarpSize );
 
 	if ( taskIndex < taskEnd )
 	{
 		uint32_t nodeAddr;
-		Task	 task;
+		Task     task;
 
 		if ( taskIndex < taskCount )
 		{
 			nodeAddr = nodeCount - taskCount + taskIndex;
-			task	 = taskQueue[nodeAddr];
+			task     = taskQueue[nodeAddr];
 		}
 
 		if constexpr ( spatialSplits )
 		{
 			uint32_t duplicateCount = 0;
-			Bin		 leftBin, rightBin;
-			Bin		 rightBins[SbvhMaxBinCount];
+			Bin      leftBin, rightBin;
+			Bin      rightBins[SbvhMaxBinCount];
 
-			float	 bestCost  = FltMax;
+			float    bestCost  = FltMax;
 			uint32_t bestAxis  = InvalidValue;
 			uint32_t bestIndex = InvalidValue;
 
 			if ( taskIndex < taskCount )
 			{
-				bestCost	 = task.m_cost;
+				bestCost     = task.m_cost;
 				Aabb overlap = task.m_box0;
 				overlap.intersect( task.m_box1 );
 
@@ -603,19 +604,21 @@ __device__ void SplitReferences(
 				{
 					for ( uint32_t axisIndex = 0; axisIndex < 3; ++axisIndex )
 					{
-						if ( ptr( task.m_box.m_max )[axisIndex] - ptr( task.m_box.m_min )[axisIndex] < edgeThreshold ) continue;
+						if ( component( task.m_box.m_max, axisIndex ) - component( task.m_box.m_min, axisIndex ) <
+						     edgeThreshold )
+							continue;
 
-						uint32_t binAddr		= taskIndex + taskCount * ( binCount - 1 + axisIndex * binCount );
+						uint32_t binAddr        = taskIndex + taskCount * ( binCount - 1 + axisIndex * binCount );
 						rightBins[binCount - 1] = bins[binAddr];
 
 						for ( int32_t binIndex = binCount - 2; binIndex >= 0; --binIndex )
 						{
-							binAddr				= taskIndex + taskCount * ( binIndex + axisIndex * binCount );
+							binAddr             = taskIndex + taskCount * ( binIndex + axisIndex * binCount );
 							rightBins[binIndex] = rightBins[binIndex + 1];
 							rightBins[binIndex].include( bins[binAddr] );
 						}
 
-						binAddr		   = taskIndex + taskCount * axisIndex * binCount;
+						binAddr        = taskIndex + taskCount * axisIndex * binCount;
 						Bin curLeftBin = bins[binAddr];
 						for ( uint32_t binIndex = 0; binIndex < binCount - 1; ++binIndex )
 						{
@@ -624,12 +627,12 @@ __device__ void SplitReferences(
 								float cost = curLeftBin.leftCost() + rightBins[binIndex + 1].rightCost();
 								if ( bestCost > cost )
 								{
-									bestCost		  = cost;
-									bestAxis		  = axisIndex;
-									bestIndex		  = binIndex;
-									leftBin			  = curLeftBin;
+									bestCost          = cost;
+									bestAxis          = axisIndex;
+									bestIndex         = binIndex;
+									leftBin           = curLeftBin;
 									leftBin.m_counter = leftBin.m_enter;
-									rightBin		  = rightBins[binIndex + 1];
+									rightBin          = rightBins[binIndex + 1];
 								}
 							}
 							binAddr = taskIndex + taskCount * ( binIndex + 1 + axisIndex * binCount );
@@ -651,9 +654,9 @@ __device__ void SplitReferences(
 					if ( referenceCount + referenceOffset + duplicateCount <= maxReferenceCount )
 					{
 						task.m_split.setSplitInfo( bestAxis, bestIndex, leftBin.m_enter == 1, rightBin.m_exit == 1, true );
-						task.m_box0		= leftBin.m_box;
+						task.m_box0     = leftBin.m_box;
 						task.m_counter0 = leftBin.m_enter;
-						task.m_box1		= rightBin.m_box;
+						task.m_box1     = rightBin.m_box;
 						task.m_counter1 = rightBin.m_exit;
 					}
 				}
@@ -661,13 +664,13 @@ __device__ void SplitReferences(
 		}
 
 		uint32_t outputTaskCount = ( task.m_counter0 > 1 ) + ( task.m_counter1 > 1 );
-		uint32_t taskOffset		 = warpOffset( outputTaskCount, taskCounter );
+		uint32_t taskOffset      = warpOffset( outputTaskCount, taskCounter );
 
 		uint32_t refCount = 0;
 		if ( task.m_counter0 > 1 ) refCount += task.m_counter0;
 		if ( task.m_counter1 > 1 ) refCount += task.m_counter1;
 
-		uint32_t leftRefOffset	= warpOffset( refCount, refOffsetCounter );
+		uint32_t leftRefOffset  = warpOffset( refCount, refOffsetCounter );
 		uint32_t rightRefOffset = leftRefOffset;
 		if ( task.m_counter0 > 1 ) rightRefOffset += task.m_counter0;
 
@@ -679,40 +682,40 @@ __device__ void SplitReferences(
 			uint32_t nodeOffset = taskOffset;
 			if ( task.m_counter0 > 1 )
 			{
-				uint32_t leftNodeAddr	= nodeCount + ( nodeOffset++ );
-				node.m_childIndex0		= encodeNodeIndex( leftNodeAddr, BoxType );
+				uint32_t leftNodeAddr   = nodeCount + ( nodeOffset++ );
+				node.m_childIndices[0]  = encodeNodeIndex( leftNodeAddr, BoxType );
 				taskQueue[leftNodeAddr] = Task( task.m_box0, leftRefOffset );
 			}
 
 			if ( task.m_counter1 > 1 )
 			{
-				uint32_t rightNodeAddr	 = nodeCount + nodeOffset;
-				node.m_childIndex1		 = encodeNodeIndex( rightNodeAddr, BoxType );
+				uint32_t rightNodeAddr   = nodeCount + nodeOffset;
+				node.m_childIndices[1]   = encodeNodeIndex( rightNodeAddr, BoxType );
 				taskQueue[rightNodeAddr] = Task( task.m_box1, rightRefOffset );
 			}
 			scratchNodes[nodeAddr] = node;
 
-			task.m_refOffset	= 0;
-			task.m_taskOffset	= taskOffset;
+			task.m_refOffset    = 0;
+			task.m_taskOffset   = taskOffset;
 			taskQueue[nodeAddr] = task;
 		}
 	}
 }
 
-extern "C" __global__ void SplitReferences_true(
-	uint32_t	 taskCount,
-	uint32_t	 binCount,
-	uint32_t	 nodeCount,
-	uint32_t	 referenceCount,
-	uint32_t	 maxReferenceCount,
-	float		 overlapThreshold,
-	float		 edgeThreshold,
-	Bin*		 bins,
-	ScratchNode* scratchNodes,
-	Task*		 taskQueue,
-	uint32_t*	 taskCounter,
-	uint32_t*	 referenceCounter,
-	uint32_t*	 refOffsetCounter )
+HIPRT_KERNEL void SplitReferences_true(
+	const uint32_t taskCount,
+	const uint32_t binCount,
+	const uint32_t nodeCount,
+	const uint32_t referenceCount,
+	const uint32_t maxReferenceCount,
+	const float    overlapThreshold,
+	const float    edgeThreshold,
+	const Bin*     bins,
+	ScratchNode*   scratchNodes,
+	Task*          taskQueue,
+	uint32_t*      taskCounter,
+	uint32_t*      referenceCounter,
+	uint32_t*      refOffsetCounter )
 {
 	SplitReferences<true>(
 		taskCount,
@@ -730,20 +733,20 @@ extern "C" __global__ void SplitReferences_true(
 		refOffsetCounter );
 }
 
-extern "C" __global__ void SplitReferences_false(
-	uint32_t	 taskCount,
-	uint32_t	 binCount,
-	uint32_t	 nodeCount,
-	uint32_t	 referenceCount,
-	uint32_t	 maxReferenceCount,
-	float		 overlapThreshold,
-	float		 edgeThreshold,
-	Bin*		 bins,
-	ScratchNode* scratchNodes,
-	Task*		 taskQueue,
-	uint32_t*	 taskCounter,
-	uint32_t*	 referenceCounter,
-	uint32_t*	 refOffsetCounter )
+HIPRT_KERNEL void SplitReferences_false(
+	const uint32_t taskCount,
+	const uint32_t binCount,
+	const uint32_t nodeCount,
+	const uint32_t referenceCount,
+	const uint32_t maxReferenceCount,
+	const float    overlapThreshold,
+	const float    edgeThreshold,
+	const Bin*     bins,
+	ScratchNode*   scratchNodes,
+	Task*          taskQueue,
+	uint32_t*      taskCounter,
+	uint32_t*      referenceCounter,
+	uint32_t*      refOffsetCounter )
 {
 	SplitReferences<false>(
 		taskCount,
@@ -762,58 +765,58 @@ extern "C" __global__ void SplitReferences_false(
 }
 
 template <typename PrimitiveContainer>
-__device__ void DistributeReferences(
-	uint32_t			activeRefCount,
-	uint32_t			referenceCount,
-	uint32_t			binCount,
-	uint32_t			nodeCount,
-	uint32_t			taskCount,
-	uint32_t			taskOffset,
-	uint32_t*			referenceIndices0,
-	uint32_t*			referenceIndices1,
-	uint32_t*			taskIndices,
-	Task*				taskQueue,
-	PrimitiveContainer& primitives,
-	ScratchNode*		scratchNodes,
-	ReferenceNode*		references,
-	uint32_t*			referenceCounter )
+HIPRT_DEVICE HIPRT_INLINE void DistributeReferences(
+	const uint32_t            activeRefCount,
+	const uint32_t            referenceCount,
+	const uint32_t            binCount,
+	const uint32_t            nodeCount,
+	const uint32_t            taskCount,
+	const uint32_t            taskOffset,
+	const PrimitiveContainer& primitives,
+	const uint32_t*           referenceIndices0,
+	uint32_t*                 referenceIndices1,
+	uint32_t*                 taskIndices,
+	Task*                     taskQueue,
+	ScratchNode*              scratchNodes,
+	ReferenceNode*            references,
+	uint32_t*                 referenceCounter )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 
 	uint32_t leafType;
-	if constexpr ( is_same<PrimitiveContainer, TriangleMesh>::value )
+	if constexpr ( is_same_v<PrimitiveContainer, TriangleMesh> )
 		leafType = TriangleType;
-	else if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+	else if constexpr ( is_same_v<PrimitiveContainer, AabbList> )
 		leafType = CustomType;
 	else if constexpr (
-		is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
-		is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
+		is_same_v<PrimitiveContainer, InstanceList<hiprtFrameSRT>> ||
+		is_same_v<PrimitiveContainer, InstanceList<hiprtFrameMatrix>> )
 		leafType = InstanceType;
 
 	if ( index < activeRefCount )
 	{
 		uint32_t referenceIndex = referenceIndices0[index];
-		uint32_t taskIndex		= taskIndices[referenceIndex];
-		uint32_t nodeAddr		= taskIndex + taskOffset;
+		uint32_t taskIndex      = taskIndices[referenceIndex];
+		uint32_t nodeAddr       = taskIndex + taskOffset;
 
-		Task		  task = taskQueue[nodeAddr];
+		Task          task = taskQueue[nodeAddr];
 		ReferenceNode ref  = references[referenceIndex];
 
-		uint32_t splitAxis	  = task.m_split.m_splitAxis;
-		uint32_t splitIndex	  = task.m_split.m_splitIndex;
-		bool	 leftLeaf	  = task.m_split.m_leftLeaf;
-		bool	 rightLeaf	  = task.m_split.m_rightLeaf;
-		bool	 spatialSplit = task.m_split.m_spatialSplit;
+		uint32_t splitAxis    = task.m_split.m_splitAxis;
+		uint32_t splitIndex   = task.m_split.m_splitIndex;
+		bool     leftLeaf     = task.m_split.m_leftLeaf;
+		bool     rightLeaf    = task.m_split.m_rightLeaf;
+		bool     spatialSplit = task.m_split.m_spatialSplit;
 
 		if ( !spatialSplit )
 		{
 			float3 k = ( 1.0f - SbvhEpsilon ) * ( static_cast<float>( binCount ) / ( task.m_box.m_max - task.m_box.m_min ) );
 			uint3  binIndex = clamp(
-				 make_uint3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_uint3( 0 ), make_uint3( binCount - 1 ) );
+                make_uint3( k * ( ref.m_box.center() - task.m_box.m_min ) ), make_uint3( 0 ), make_uint3( binCount - 1 ) );
 
 			bool onLeft;
 			if ( splitAxis < 3 )
-				onLeft = ptr( binIndex )[splitAxis] <= splitIndex;
+				onLeft = component( binIndex, splitAxis ) <= splitIndex;
 			else
 				onLeft = atomicAdd( &taskQueue[nodeAddr].m_refOffset, 1 ) < splitIndex;
 
@@ -823,14 +826,14 @@ __device__ void DistributeReferences(
 			if ( ( !onLeft || leftLeaf ) && ( onLeft || rightLeaf ) )
 			{
 				if ( onLeft )
-					scratchNodes[nodeAddr].m_childIndex0 = encodeNodeIndex( referenceIndex, leafType );
+					scratchNodes[nodeAddr].m_childIndices[0] = encodeNodeIndex( referenceIndex, leafType );
 				else
-					scratchNodes[nodeAddr].m_childIndex1 = encodeNodeIndex( referenceIndex, leafType );
+					scratchNodes[nodeAddr].m_childIndices[1] = encodeNodeIndex( referenceIndex, leafType );
 				ScratchNode node = scratchNodes[nodeAddr];
 			}
 			else
 			{
-				uint32_t newIndex			= atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
+				uint32_t newIndex           = atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
 				taskIndices[referenceIndex] = newTaskIndex;
 				referenceIndices1[newIndex] = referenceIndex;
 			}
@@ -838,69 +841,70 @@ __device__ void DistributeReferences(
 
 		else
 		{
-			float	 binSize  = ( ptr( task.m_box.m_max )[splitAxis] - ptr( task.m_box.m_min )[splitAxis] ) / float( binCount );
+			float binSize =
+				( component( task.m_box.m_max, splitAxis ) - component( task.m_box.m_min, splitAxis ) ) / float( binCount );
 			uint32_t firstBin = binCount - 1;
 			uint32_t lastBin  = firstBin;
 			for ( uint32_t i = 0; i < binCount; ++i )
 			{
-				float position = ptr( task.m_box.m_min )[splitAxis] + binSize * static_cast<float>( i + 1 );
-				if ( firstBin == binCount - 1 && ptr( ref.m_box.m_min )[splitAxis] < position ) firstBin = i;
-				if ( lastBin == binCount - 1 && ptr( ref.m_box.m_max )[splitAxis] <= position ) lastBin = i;
+				float position = component( task.m_box.m_min, splitAxis ) + binSize * static_cast<float>( i + 1 );
+				if ( firstBin == binCount - 1 && component( ref.m_box.m_min, splitAxis ) < position ) firstBin = i;
+				if ( lastBin == binCount - 1 && component( ref.m_box.m_max, splitAxis ) <= position ) lastBin = i;
 			}
 			if ( firstBin > lastBin ) firstBin = lastBin;
 
-			float position	 = ptr( task.m_box.m_min )[splitAxis] + binSize * static_cast<float>( splitIndex + 1 );
+			float position   = component( task.m_box.m_min, splitAxis ) + binSize * static_cast<float>( splitIndex + 1 );
 			bool  duplicated = firstBin <= splitIndex && lastBin > splitIndex;
 			if ( duplicated )
 			{
 				ReferenceNode leftRef( ref.m_primIndex );
 				ReferenceNode rightRef( ref.m_primIndex );
-				if constexpr ( is_same<PrimitiveContainer, AabbList>::value )
+				if constexpr ( is_same_v<PrimitiveContainer, AabbList> )
 				{
-					leftRef.m_box						   = ref.m_box;
-					rightRef.m_box						   = ref.m_box;
-					ptr( leftRef.m_box.m_max )[splitAxis]  = position;
-					ptr( rightRef.m_box.m_min )[splitAxis] = position;
+					leftRef.m_box                                = ref.m_box;
+					rightRef.m_box                               = ref.m_box;
+					component( leftRef.m_box.m_max, splitAxis )  = position;
+					component( rightRef.m_box.m_min, splitAxis ) = position;
 				}
 				else
 				{
 					if constexpr (
-						is_same<PrimitiveContainer, TriangleMesh>::value ||
-						is_same<PrimitiveContainer, InstanceList<hiprtFrameSRT>>::value ||
-						is_same<PrimitiveContainer, InstanceList<hiprtFrameMatrix>>::value )
+						is_same_v<PrimitiveContainer, TriangleMesh> ||
+						is_same_v<PrimitiveContainer, InstanceList<hiprtFrameSRT>> ||
+						is_same_v<PrimitiveContainer, InstanceList<hiprtFrameMatrix>> )
 					{
 						primitives.split( ref.m_primIndex, splitAxis, position, ref.m_box, leftRef.m_box, rightRef.m_box );
 					}
 
 					if ( !leftRef.m_box.valid() )
 					{
-						leftRef.m_box						  = ref.m_box;
-						ptr( leftRef.m_box.m_max )[splitAxis] = position;
+						leftRef.m_box                               = ref.m_box;
+						component( leftRef.m_box.m_max, splitAxis ) = position;
 						leftRef.m_box.grow( leftRef.m_box.center() );
 					}
 
 					if ( !rightRef.m_box.valid() )
 					{
-						rightRef.m_box						   = ref.m_box;
-						ptr( rightRef.m_box.m_min )[splitAxis] = position;
+						rightRef.m_box                               = ref.m_box;
+						component( rightRef.m_box.m_min, splitAxis ) = position;
 						rightRef.m_box.grow( rightRef.m_box.center() );
 					}
 				}
 
-				uint32_t referenceOffset	  = atomicAdd( referenceCounter, 1 );
-				uint32_t newReferenceIndex	  = referenceCount + referenceOffset;
-				references[referenceIndex]	  = leftRef;
+				uint32_t referenceOffset      = atomicAdd( referenceCounter, 1 );
+				uint32_t newReferenceIndex    = referenceCount + referenceOffset;
+				references[referenceIndex]    = leftRef;
 				references[newReferenceIndex] = rightRef;
 
 				uint32_t newTaskIndex = task.m_taskOffset;
 				if ( leftLeaf )
 				{
-					scratchNodes[nodeAddr].m_childIndex0 = encodeNodeIndex( referenceIndex, leafType );
-					ScratchNode node					 = scratchNodes[nodeAddr];
+					scratchNodes[nodeAddr].m_childIndices[0] = encodeNodeIndex( referenceIndex, leafType );
+					ScratchNode node                         = scratchNodes[nodeAddr];
 				}
 				else
 				{
-					uint32_t newIndex			= atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
+					uint32_t newIndex           = atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
 					taskIndices[referenceIndex] = newTaskIndex;
 					referenceIndices1[newIndex] = referenceIndex;
 				}
@@ -909,33 +913,33 @@ __device__ void DistributeReferences(
 				if ( !leftLeaf ) ++newTaskIndex;
 				if ( rightLeaf )
 				{
-					scratchNodes[nodeAddr].m_childIndex1 = encodeNodeIndex( newReferenceIndex, leafType );
-					ScratchNode node					 = scratchNodes[nodeAddr];
+					scratchNodes[nodeAddr].m_childIndices[1] = encodeNodeIndex( newReferenceIndex, leafType );
+					ScratchNode node                         = scratchNodes[nodeAddr];
 				}
 				else
 				{
-					uint32_t newIndex			   = atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
+					uint32_t newIndex              = atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
 					taskIndices[newReferenceIndex] = newTaskIndex;
-					referenceIndices1[newIndex]	   = newReferenceIndex;
+					referenceIndices1[newIndex]    = newReferenceIndex;
 				}
 			}
 			else
 			{
 				uint32_t newTaskIndex = task.m_taskOffset;
-				bool	 onLeft		  = ptr( ref.m_box.m_max )[splitAxis] <= position;
+				bool     onLeft       = component( ref.m_box.m_max, splitAxis ) <= position;
 				if ( !onLeft && !leftLeaf ) ++newTaskIndex;
 
 				if ( ( !onLeft || leftLeaf ) && ( onLeft || rightLeaf ) )
 				{
 					if ( onLeft )
-						scratchNodes[nodeAddr].m_childIndex0 = encodeNodeIndex( referenceIndex, leafType );
+						scratchNodes[nodeAddr].m_childIndices[0] = encodeNodeIndex( referenceIndex, leafType );
 					else
-						scratchNodes[nodeAddr].m_childIndex1 = encodeNodeIndex( referenceIndex, leafType );
+						scratchNodes[nodeAddr].m_childIndices[1] = encodeNodeIndex( referenceIndex, leafType );
 					ScratchNode node = scratchNodes[nodeAddr];
 				}
 				else
 				{
-					uint32_t newIndex			= atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
+					uint32_t newIndex           = atomicAdd( &taskQueue[newTaskIndex + nodeCount].m_refOffset, 1 );
 					taskIndices[referenceIndex] = newTaskIndex;
 					referenceIndices1[newIndex] = referenceIndex;
 				}
@@ -944,21 +948,21 @@ __device__ void DistributeReferences(
 	}
 }
 
-extern "C" __global__ void DistributeReferences_TriangleMesh(
-	uint32_t	   activeRefCount,
-	uint32_t	   referenceCount,
-	uint32_t	   binCount,
-	uint32_t	   nodeCount,
-	uint32_t	   taskCount,
-	uint32_t	   taskOffset,
-	uint32_t*	   referenceIndices0,
-	uint32_t*	   referenceIndices1,
-	uint32_t*	   taskIndices,
-	Task*		   taskQueue,
-	TriangleMesh   primitives,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	uint32_t*	   referenceCounter )
+HIPRT_KERNEL void DistributeReferences_TriangleMesh(
+	const uint32_t     activeRefCount,
+	const uint32_t     referenceCount,
+	const uint32_t     binCount,
+	const uint32_t     nodeCount,
+	const uint32_t     taskCount,
+	const uint32_t     taskOffset,
+	const TriangleMesh primitives,
+	const uint32_t*    referenceIndices0,
+	uint32_t*          referenceIndices1,
+	uint32_t*          taskIndices,
+	Task*              taskQueue,
+	ScratchNode*       scratchNodes,
+	ReferenceNode*     references,
+	uint32_t*          referenceCounter )
 {
 	DistributeReferences<TriangleMesh>(
 		activeRefCount,
@@ -967,31 +971,31 @@ extern "C" __global__ void DistributeReferences_TriangleMesh(
 		nodeCount,
 		taskCount,
 		taskOffset,
+		primitives,
 		referenceIndices0,
 		referenceIndices1,
 		taskIndices,
 		taskQueue,
-		primitives,
 		scratchNodes,
 		references,
 		referenceCounter );
 }
 
-extern "C" __global__ void DistributeReferences_AabbList(
-	uint32_t	   activeRefCount,
-	uint32_t	   referenceCount,
-	uint32_t	   binCount,
-	uint32_t	   nodeCount,
-	uint32_t	   taskCount,
-	uint32_t	   taskOffset,
-	uint32_t*	   referenceIndices0,
-	uint32_t*	   referenceIndices1,
-	uint32_t*	   taskIndices,
-	Task*		   taskQueue,
-	AabbList	   primitives,
-	ScratchNode*   scratchNodes,
-	ReferenceNode* references,
-	uint32_t*	   referenceCounter )
+HIPRT_KERNEL void DistributeReferences_AabbList(
+	const uint32_t  activeRefCount,
+	const uint32_t  referenceCount,
+	const uint32_t  binCount,
+	const uint32_t  nodeCount,
+	const uint32_t  taskCount,
+	const uint32_t  taskOffset,
+	const AabbList  primitives,
+	const uint32_t* referenceIndices0,
+	uint32_t*       referenceIndices1,
+	uint32_t*       taskIndices,
+	Task*           taskQueue,
+	ScratchNode*    scratchNodes,
+	ReferenceNode*  references,
+	uint32_t*       referenceCounter )
 {
 	DistributeReferences<AabbList>(
 		activeRefCount,
@@ -1000,31 +1004,31 @@ extern "C" __global__ void DistributeReferences_AabbList(
 		nodeCount,
 		taskCount,
 		taskOffset,
+		primitives,
 		referenceIndices0,
 		referenceIndices1,
 		taskIndices,
 		taskQueue,
-		primitives,
 		scratchNodes,
 		references,
 		referenceCounter );
 }
 
-extern "C" __global__ void DistributeReferences_InstanceList_hiprtFrameSRT(
-	uint32_t					activeRefCount,
-	uint32_t					referenceCount,
-	uint32_t					binCount,
-	uint32_t					nodeCount,
-	uint32_t					taskCount,
-	uint32_t					taskOffset,
-	uint32_t*					referenceIndices0,
-	uint32_t*					referenceIndices1,
-	uint32_t*					taskIndices,
-	Task*						taskQueue,
-	InstanceList<hiprtFrameSRT> primitives,
-	ScratchNode*				scratchNodes,
-	ReferenceNode*				references,
-	uint32_t*					referenceCounter )
+HIPRT_KERNEL void DistributeReferences_InstanceList_hiprtFrameSRT(
+	const uint32_t                    activeRefCount,
+	const uint32_t                    referenceCount,
+	const uint32_t                    binCount,
+	const uint32_t                    nodeCount,
+	const uint32_t                    taskCount,
+	const uint32_t                    taskOffset,
+	const InstanceList<hiprtFrameSRT> primitives,
+	const uint32_t*                   referenceIndices0,
+	uint32_t*                         referenceIndices1,
+	uint32_t*                         taskIndices,
+	Task*                             taskQueue,
+	ScratchNode*                      scratchNodes,
+	ReferenceNode*                    references,
+	uint32_t*                         referenceCounter )
 {
 	DistributeReferences<InstanceList<hiprtFrameSRT>>(
 		activeRefCount,
@@ -1033,31 +1037,31 @@ extern "C" __global__ void DistributeReferences_InstanceList_hiprtFrameSRT(
 		nodeCount,
 		taskCount,
 		taskOffset,
+		primitives,
 		referenceIndices0,
 		referenceIndices1,
 		taskIndices,
 		taskQueue,
-		primitives,
 		scratchNodes,
 		references,
 		referenceCounter );
 }
 
-extern "C" __global__ void DistributeReferences_InstanceList_hiprtFrameMatrix(
-	uint32_t					   activeRefCount,
-	uint32_t					   referenceCount,
-	uint32_t					   binCount,
-	uint32_t					   nodeCount,
-	uint32_t					   taskCount,
-	uint32_t					   taskOffset,
-	uint32_t*					   referenceIndices0,
-	uint32_t*					   referenceIndices1,
-	uint32_t*					   taskIndices,
-	Task*						   taskQueue,
-	InstanceList<hiprtFrameMatrix> primitives,
-	ScratchNode*				   scratchNodes,
-	ReferenceNode*				   references,
-	uint32_t*					   referenceCounter )
+HIPRT_KERNEL void DistributeReferences_InstanceList_hiprtFrameMatrix(
+	const uint32_t                       activeRefCount,
+	const uint32_t                       referenceCount,
+	const uint32_t                       binCount,
+	const uint32_t                       nodeCount,
+	const uint32_t                       taskCount,
+	const uint32_t                       taskOffset,
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const uint32_t*                      referenceIndices0,
+	uint32_t*                            referenceIndices1,
+	uint32_t*                            taskIndices,
+	Task*                                taskQueue,
+	ScratchNode*                         scratchNodes,
+	ReferenceNode*                       references,
+	uint32_t*                            referenceCounter )
 {
 	DistributeReferences<InstanceList<hiprtFrameMatrix>>(
 		activeRefCount,
@@ -1066,11 +1070,11 @@ extern "C" __global__ void DistributeReferences_InstanceList_hiprtFrameMatrix(
 		nodeCount,
 		taskCount,
 		taskOffset,
+		primitives,
 		referenceIndices0,
 		referenceIndices1,
 		taskIndices,
 		taskQueue,
-		primitives,
 		scratchNodes,
 		references,
 		referenceCounter );

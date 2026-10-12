@@ -31,6 +31,7 @@
 #endif
 #include <queue>
 #include <cfloat>
+#include <cassert>
 
 struct Aabb
 {
@@ -78,7 +79,7 @@ struct Aabb
 		return *this;
 	}
 
-	float3 center() const
+	[[nodiscard]] float3 center() const
 	{
 		float3 c;
 		c.x = ( m_max.x + m_min.x ) * 0.5f;
@@ -87,7 +88,7 @@ struct Aabb
 		return c;
 	}
 
-	float3 extent() const
+	[[nodiscard]] float3 extent() const
 	{
 		float3 e;
 		e.x = m_max.x - m_min.x;
@@ -96,13 +97,13 @@ struct Aabb
 		return e;
 	}
 
-	float area() const
+	[[nodiscard]] float area() const
 	{
-		float3 ext = extent();
+		const float3 ext = extent();
 		return 2 * ( ext.x * ext.y + ext.x * ext.z + ext.y * ext.z );
 	}
 
-	bool valid( void ) { return m_min.x <= m_max.x && m_min.y <= m_max.y && m_min.z <= m_max.z; }
+	[[nodiscard]] bool valid( void ) { return m_min.x <= m_max.x && m_min.y <= m_max.y && m_min.z <= m_max.z; }
 
 	void intersect( const Aabb& box )
 	{
@@ -123,8 +124,8 @@ struct QueueEntry
 	uint32_t m_nodeIndex;
 	uint32_t m_begin;
 	uint32_t m_end;
-	Aabb	 m_box;
-	QueueEntry( uint32_t nodeIndex, uint32_t begin, uint32_t end, const Aabb& box )
+	Aabb     m_box;
+	QueueEntry( const uint32_t nodeIndex, const uint32_t begin, const uint32_t end, const Aabb& box )
 		: m_nodeIndex( nodeIndex ), m_begin( begin ), m_end( end ), m_box( box )
 	{
 	}
@@ -133,16 +134,16 @@ struct QueueEntry
 class BvhBuilder
 {
   public:
-	BvhBuilder( void )						   = delete;
+	BvhBuilder( void )                         = delete;
 	BvhBuilder& operator=( const BvhBuilder& ) = delete;
 
-	static void build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes );
+	static void build( const uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes );
 };
 
-void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes )
+void BvhBuilder::build( const uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes )
 {
-	ASSERT( nPrims >= 2 );
-	std::vector<Aabb>	  rightBoxes( nPrims );
+	assert( nPrims >= 2 );
+	std::vector<Aabb>     rightBoxes( nPrims );
 	std::vector<uint32_t> tmpIndices( nPrims );
 	std::vector<uint32_t> leftIndices( nPrims );
 
@@ -168,16 +169,16 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 	nodes.push_back( hiprtInternalNode() );
 	while ( !queue.empty() )
 	{
-		uint32_t nodeIndex = queue.front().m_nodeIndex;
-		uint32_t begin	   = queue.front().m_begin;
-		uint32_t end	   = queue.front().m_end;
-		Aabb	 box	   = queue.front().m_box;
+		const uint32_t nodeIndex = queue.front().m_nodeIndex;
+		const uint32_t begin     = queue.front().m_begin;
+		const uint32_t end       = queue.front().m_end;
+		const Aabb     box       = queue.front().m_box;
 		queue.pop();
 
-		float	 minCost  = FLT_MAX;
+		float    minCost  = FLT_MAX;
 		uint32_t minAxis  = 0;
 		uint32_t minIndex = 0;
-		Aabb	 minLeftBox, minRightBox;
+		Aabb     minLeftBox, minRightBox;
 		for ( uint32_t k = 0; k < 3; ++k )
 		{
 			rightBoxes[end - 1] = primBoxes[indices[k][end - 1]];
@@ -187,17 +188,17 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 			Aabb leftBox, rightBox;
 			for ( uint32_t i = begin; i < end - 1; ++i )
 			{
-				uint32_t leftCount	= ( i + 1 ) - begin;
+				uint32_t leftCount  = ( i + 1 ) - begin;
 				uint32_t rightCount = end - ( i + 1 );
 				leftBox.grow( primBoxes[indices[k][i]] );
 				rightBox   = rightBoxes[i + 1];
 				float cost = leftBox.area() * leftCount + rightBox.area() * rightCount;
 				if ( cost < minCost )
 				{
-					minCost		= cost;
-					minIndex	= i + 1;
-					minAxis		= k;
-					minLeftBox	= leftBox;
+					minCost     = cost;
+					minIndex    = i + 1;
+					minAxis     = k;
+					minLeftBox  = leftBox;
 					minRightBox = rightBox;
 				}
 				assert( leftBox.area() <= box.area() );
@@ -211,7 +212,7 @@ void BvhBuilder::build( uint32_t nPrims, const std::vector<Aabb>& primBoxes, std
 		std::memset( leftIndices.data(), 0, nPrims * sizeof( uint32_t ) );
 		for ( uint32_t i = begin; i < minIndex; ++i )
 		{
-			uint32_t index	   = indices[minAxis][i];
+			uint32_t index     = indices[minAxis][i];
 			leftIndices[index] = 1;
 		}
 

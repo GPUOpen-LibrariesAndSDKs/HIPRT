@@ -51,9 +51,9 @@ struct alignas( 4 * sizeof( T ) ) Vector<T, 4>
 };
 } // namespace hiprt
 
-using hiprtInt2	  = hiprt::Vector<int, 2>;
-using hiprtInt3	  = hiprt::Vector<int, 3>;
-using hiprtInt4	  = hiprt::Vector<int, 4>;
+using hiprtInt2   = hiprt::Vector<int, 2>;
+using hiprtInt3   = hiprt::Vector<int, 3>;
+using hiprtInt4   = hiprt::Vector<int, 4>;
 using hiprtUint2  = hiprt::Vector<unsigned int, 2>;
 using hiprtUint3  = hiprt::Vector<unsigned int, 3>;
 using hiprtUint4  = hiprt::Vector<unsigned int, 4>;
@@ -61,20 +61,20 @@ using hiprtFloat2 = hiprt::Vector<float, 2>;
 using hiprtFloat3 = hiprt::Vector<float, 3>;
 using hiprtFloat4 = hiprt::Vector<float, 4>;
 #if defined( HIPRT_EXPORTS )
-using int2	 = hiprtInt2;
-using int3	 = hiprtInt3;
-using int4	 = hiprtInt4;
-using uint2	 = hiprtUint2;
-using uint3	 = hiprtUint3;
-using uint4	 = hiprtUint4;
+using int2   = hiprtInt2;
+using int3   = hiprtInt3;
+using int4   = hiprtInt4;
+using uint2  = hiprtUint2;
+using uint3  = hiprtUint3;
+using uint4  = hiprtUint4;
 using float2 = hiprtFloat2;
 using float3 = hiprtFloat3;
 using float4 = hiprtFloat4;
 #endif
 #else
-using hiprtInt2	  = int2;
-using hiprtInt3	  = int3;
-using hiprtInt4	  = int4;
+using hiprtInt2   = int2;
+using hiprtInt3   = int3;
+using hiprtInt4   = int4;
 using hiprtUint2  = uint2;
 using hiprtUint3  = uint3;
 using hiprtUint4  = uint4;

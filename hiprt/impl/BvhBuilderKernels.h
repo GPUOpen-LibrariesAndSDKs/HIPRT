@@ -41,34 +41,23 @@
 #include <hiprt/impl/Transform.h>
 #include <hiprt/impl/TriangleMesh.h>
 #include <hiprt/impl/BvhConfig.h>
+#include <hiprt/impl/BvhCommon.h>
 using namespace hiprt;
 
-HIPRT_DEVICE HIPRT_INLINE uint3 atomic_load( const uint3* addr )
+template <typename PrimitiveNode>
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE uint32_t getLeafType()
 {
-	uint3 value;
-#if HIPRT_RTIP >= 31
-	value.x = __hip_atomic_load( &addr->x, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT );
-	value.y = __hip_atomic_load( &addr->y, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT );
-	value.z = __hip_atomic_load( &addr->z, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT );
-#else
-	value = *addr;
-#endif
-	return value;
-}
-
-HIPRT_DEVICE HIPRT_INLINE void atomic_store( uint3* addr, const uint3& value )
-{
-#if HIPRT_RTIP >= 31
-	__hip_atomic_store( &addr->x, value.x, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT );
-	__hip_atomic_store( &addr->y, value.y, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT );
-	__hip_atomic_store( &addr->z, value.z, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT );
-#else
-	*addr = value;
-#endif
-}
+	if constexpr ( is_same_v<PrimitiveNode, TriangleNode> )
+		return TriangleType;
+	else if constexpr ( is_same_v<PrimitiveNode, CustomNode> )
+		return CustomType;
+	else if constexpr ( is_same_v<PrimitiveNode, InstanceNode> )
+		return InstanceType;
+	return InvalidType;
+};
 
 template <typename BinaryNode>
-HIPRT_DEVICE HIPRT_INLINE Aabb
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE Aabb
 getNodeBox( const uint32_t nodeIndex, const BinaryNode* binaryNodes, const ReferenceNode* references )
 {
 	const uint32_t nodeType = getNodeType( nodeIndex );
@@ -80,16 +69,16 @@ getNodeBox( const uint32_t nodeIndex, const BinaryNode* binaryNodes, const Refer
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode>
-HIPRT_DEVICE HIPRT_INLINE Aabb
-getNodeBox( const uint32_t nodeIndex, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE Aabb
+getNodeBox( const uint32_t nodeIndex, PrimitiveContainer& primitives, const BoxNode* boxNodes, const PrimitiveNode* primNodes )
 {
 	const uint32_t nodeAddr = getNodeAddr( nodeIndex );
 	const uint32_t nodeType = getNodeType( nodeIndex );
 	if ( nodeType != BoxType )
 	{
-		if constexpr ( is_same<PrimitiveNode, TrianglePairNode>::value )
+		if constexpr ( isTrianglePairNode<PrimitiveNode>() )
 			return primNodes[nodeAddr].aabb();
-		else if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value )
+		else if constexpr ( isTrianglePacketNode<PrimitiveNode>() )
 			return primNodes[nodeAddr].aabb( typeToTriPairIndex( nodeType ) );
 		else
 			return primitives.fetchAabb( primNodes[nodeAddr].m_primIndex );
@@ -101,25 +90,25 @@ getNodeBox( const uint32_t nodeIndex, PrimitiveContainer& primitives, BoxNode* b
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode>
-HIPRT_DEVICE HIPRT_INLINE Obb getNodeObb(
-	const uint32_t		matrixIndex,
-	const uint32_t		nodeIndex,
-	const Aabb&			nodeBox,
-	PrimitiveContainer& primitives,
-	PrimitiveNode*		primNodes,
-	Kdop*				kdops )
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE Obb getNodeObb(
+	const uint32_t            matrixIndex,
+	const uint32_t            nodeIndex,
+	const Aabb&               nodeBox,
+	const PrimitiveContainer& primitives,
+	const PrimitiveNode*      primNodes,
+	const Kdop*               kdops )
 {
 	const uint32_t nodeAddr = getNodeAddr( nodeIndex );
 	const uint32_t nodeType = getNodeType( nodeIndex );
 	if ( nodeType != BoxType )
 	{
-		if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value )
+		if constexpr ( isTrianglePacketNode<PrimitiveNode>() )
 		{
 			Obb obb = primNodes[nodeAddr].obb( typeToTriPairIndex( nodeType ), matrixIndex, nodeBox );
 			if ( !obb.aabb().valid() ) obb = Obb( matrixIndex ).grow( nodeBox );
 			return obb;
 		}
-		else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+		else if constexpr ( is_same_v<PrimitiveNode, InstanceNode> )
 		{
 			return primitives.fetchObb( primNodes[nodeAddr].m_primIndex, matrixIndex, nodeBox );
 		}
@@ -136,15 +125,20 @@ HIPRT_DEVICE HIPRT_INLINE Obb getNodeObb(
 
 template <auto IsLeafNode, typename BinaryNode>
 HIPRT_DEVICE HIPRT_INLINE void openNodes(
-	const BinaryNode* binaryNodes, const ReferenceNode* references, uint32_t& childCount, uint32_t& childIndex, Aabb& childBox )
+	const BinaryNode*    binaryNodes,
+	const ReferenceNode* references,
+	const uint32_t       maxChildCount,
+	uint32_t&            childCount,
+	uint32_t&            childIndex,
+	Aabb&                childBox )
 {
-	const uint32_t laneIndex	= threadIdx.x % WarpSize;
-	const uint32_t sublaneIndex = laneIndex % BranchingFactor;
-	const uint32_t subwarpIndex = laneIndex / BranchingFactor;
-	const uint64_t subwarpMask	= ( ( 1 << BranchingFactor ) - 1 )
-								 << static_cast<uint64_t>( ( BranchingFactor * subwarpIndex ) );
+	const uint32_t laneIndex    = threadIdx.x % WarpSize;
+	const uint32_t sublaneIndex = laneIndex % BoxNode::BranchingFactor;
+	const uint32_t subwarpIndex = laneIndex / BoxNode::BranchingFactor;
+	const uint64_t subwarpMask  = ( ( 1ull << BoxNode::BranchingFactor ) - 1ull )
+	                             << static_cast<uint64_t>( ( BoxNode::BranchingFactor * subwarpIndex ) );
 
-	bool done = childCount == BranchingFactor;
+	bool done = childCount == maxChildCount;
 	while ( hiprt::ballot( !done ) )
 	{
 		sync_warp();
@@ -159,14 +153,13 @@ HIPRT_DEVICE HIPRT_INLINE void openNodes(
 		}
 
 		float maxArea = area;
-#pragma unroll
-		for ( uint32_t i = 1; i < BranchingFactor; i <<= 1 )
+		HIPRT_UNROLL
+		for ( uint32_t i = 1; i < BoxNode::BranchingFactor; i <<= 1 )
 			maxArea = hiprt::max( maxArea, shfl_xor( maxArea, i ) );
 		if ( maxArea < 0.0f ) done = true;
 
-		const uint32_t maxLaneIndex =
-			__ffsll( static_cast<unsigned long long>( hiprt::ballot( maxArea == area ) ) & subwarpMask ) - 1;
-		const uint32_t maxIndex		 = maxLaneIndex % BranchingFactor;
+		const uint32_t maxLaneIndex  = hiprt::ffsll( hiprt::ballot( maxArea == area ) & subwarpMask ) - 1;
+		const uint32_t maxIndex      = maxLaneIndex % BoxNode::BranchingFactor;
 		const uint32_t maxChildIndex = shfl( childIndex, maxLaneIndex );
 
 		if ( !done )
@@ -187,57 +180,62 @@ HIPRT_DEVICE HIPRT_INLINE void openNodes(
 
 			childCount++;
 
-			if ( childCount == BranchingFactor ) done = true;
+			if ( childCount == maxChildCount ) done = true;
 		}
 	}
 }
 
-__device__ void InitGeomDataImpl(
-	uint32_t	index,
-	uint32_t	primCount,
-	size_t		size,
-	BoxNode*	boxNodes,
-	void*		primNodes,
-	uint32_t	geomType,
-	GeomHeader* geomHeader )
+HIPRT_DEVICE HIPRT_INLINE void InitGeomDataImpl(
+	const uint32_t index,
+	const uint32_t primCount,
+	const uint32_t geomType,
+	const size_t   size,
+	BoxNode*       boxNodes,
+	void*          primNodes,
+	GeomHeader*    geomHeader )
 {
 	if ( index == 0 )
 	{
-		geomHeader->m_size			 = size;
-		geomHeader->m_boxNodes		 = boxNodes;
-		geomHeader->m_primNodes		 = primNodes;
+		geomHeader->m_size           = size;
+		geomHeader->m_boxNodes       = boxNodes;
+		geomHeader->m_primNodes      = primNodes;
 		geomHeader->m_referenceCount = primCount == 1u ? 1u : 0u;
-		geomHeader->m_boxNodeCount	 = 1u;
-		geomHeader->m_primNodeCount	 = primCount == 1u ? 1u : 0u;
-		geomHeader->m_geomType		 = geomType;
-		geomHeader->m_rtip			 = Rtip;
+		geomHeader->m_boxNodeCount   = 1u;
+		geomHeader->m_primNodeCount  = primCount == 1u ? 1u : 0u;
+		geomHeader->m_geomType       = geomType;
+		geomHeader->m_rtip           = Rtip;
 	}
 }
 
-extern "C" __global__ void
-InitGeomData( size_t size, uint32_t primCount, BoxNode* boxNodes, void* primNodes, uint32_t geomType, GeomHeader* geomHeader )
+HIPRT_KERNEL void InitGeomData(
+	const uint32_t primCount,
+	const uint32_t geomType,
+	const size_t   size,
+	BoxNode*       boxNodes,
+	void*          primNodes,
+	GeomHeader*    geomHeader )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
-	InitGeomDataImpl( index, primCount, size, boxNodes, primNodes, geomType, geomHeader );
+	InitGeomDataImpl( index, primCount, geomType, size, boxNodes, primNodes, geomHeader );
 }
 
 template <typename InstanceList>
-__device__ void InitSceneData(
-	uint32_t	  index,
-	size_t		  size,
-	InstanceList& instanceList,
-	BoxNode*	  boxNodes,
-	InstanceNode* primNodes,
-	Instance*	  instances,
-	Frame*		  frames,
-	SceneHeader*  sceneHeader )
+HIPRT_DEVICE HIPRT_INLINE void InitSceneData(
+	const uint32_t index,
+	const size_t   size,
+	InstanceList&  instanceList,
+	BoxNode*       boxNodes,
+	InstanceNode*  primNodes,
+	Instance*      instances,
+	Frame*         frames,
+	SceneHeader*   sceneHeader )
 {
 	if ( index < instanceList.getCount() )
 	{
-		hiprtInstance		 i = instanceList.fetchInstance( index );
-		hiprtTransformHeader t = instanceList.fetchTransformHeader( index );
-		Instance			 instance;
-		instance.m_type		  = i.type;
+		const hiprtInstance        i = instanceList.fetchInstance( index );
+		const hiprtTransformHeader t = instanceList.fetchTransformHeader( index );
+		Instance                   instance;
+		instance.m_type       = i.type;
 		instance.m_frameIndex = t.frameIndex;
 		instance.m_frameCount = t.frameCount;
 		if ( i.type == hiprtInstanceTypeGeometry )
@@ -251,42 +249,42 @@ __device__ void InitSceneData(
 
 	if ( index == 0 )
 	{
-		sceneHeader->m_size			  = size;
-		sceneHeader->m_boxNodes		  = boxNodes;
-		sceneHeader->m_primNodes	  = primNodes;
-		sceneHeader->m_instances	  = instances;
-		sceneHeader->m_frames		  = frames;
+		sceneHeader->m_size           = size;
+		sceneHeader->m_boxNodes       = boxNodes;
+		sceneHeader->m_primNodes      = primNodes;
+		sceneHeader->m_instances      = instances;
+		sceneHeader->m_frames         = frames;
 		sceneHeader->m_referenceCount = instanceList.getCount() == 1u ? 1u : 0u;
-		sceneHeader->m_primCount	  = instanceList.getCount();
+		sceneHeader->m_primCount      = instanceList.getCount();
 		sceneHeader->m_primNodeCount  = instanceList.getCount() == 1u ? 1u : 0u;
-		sceneHeader->m_boxNodeCount	  = 1u;
-		sceneHeader->m_frameCount	  = instanceList.getFrameCount();
-		sceneHeader->m_rtip			  = Rtip;
+		sceneHeader->m_boxNodeCount   = 1u;
+		sceneHeader->m_frameCount     = instanceList.getFrameCount();
+		sceneHeader->m_rtip           = Rtip;
 	}
 }
 
-extern "C" __global__ void InitSceneData_InstanceList_hiprtFrameSRT(
-	size_t						size,
+HIPRT_KERNEL void InitSceneData_InstanceList_hiprtFrameSRT(
+	const size_t                size,
 	InstanceList<hiprtFrameSRT> instanceList,
-	BoxNode*					boxNodes,
-	InstanceNode*				primNodes,
-	Instance*					instances,
-	Frame*						frames,
-	SceneHeader*				sceneHeader )
+	BoxNode*                    boxNodes,
+	InstanceNode*               primNodes,
+	Instance*                   instances,
+	Frame*                      frames,
+	SceneHeader*                sceneHeader )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
 	InitSceneData<InstanceList<hiprtFrameSRT>>(
 		index, size, instanceList, boxNodes, primNodes, instances, frames, sceneHeader );
 }
 
-extern "C" __global__ void InitSceneData_InstanceList_hiprtFrameMatrix(
-	size_t						   size,
+HIPRT_KERNEL void InitSceneData_InstanceList_hiprtFrameMatrix(
+	const size_t                   size,
 	InstanceList<hiprtFrameMatrix> instanceList,
-	BoxNode*					   boxNodes,
-	InstanceNode*				   primNodes,
-	Instance*					   instances,
-	Frame*						   frames,
-	SceneHeader*				   sceneHeader )
+	BoxNode*                       boxNodes,
+	InstanceNode*                  primNodes,
+	Instance*                      instances,
+	Frame*                         frames,
+	SceneHeader*                   sceneHeader )
 {
 	uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
 	InitSceneData<InstanceList<hiprtFrameMatrix>>(
@@ -294,90 +292,81 @@ extern "C" __global__ void InitSceneData_InstanceList_hiprtFrameMatrix(
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode>
-__device__ void
-SingletonConstruction( uint32_t index, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
+HIPRT_DEVICE HIPRT_INLINE void
+SingletonConstruction( const uint32_t index, const PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
 {
 	if ( index > 0 ) return;
 
-	const uint32_t leafType = []() {
-		if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-			return TriangleType;
-		else if constexpr ( is_same<PrimitiveNode, CustomNode>::value )
-			return CustomType;
-		else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
-			return InstanceType;
-	}();
+	primNodes[0] = primitives.template fetchPrimNode<PrimitiveNode>( 0 );
 
-	primNodes[0] = primitives.fetchPrimNode( 0 );
+	Aabb     childBoxes[BoxNode::BranchingFactor];
+	uint32_t childIndices[BoxNode::BranchingFactor];
 
-	Aabb	 childBoxes[BranchingFactor];
-	uint32_t childIndices[BranchingFactor];
-
-	childBoxes[0]	= primitives.fetchAabb( 0 );
-	childIndices[0] = encodeNodeIndex( 0, leafType );
-	for ( uint32_t i = 1; i < BranchingFactor; ++i )
+	childBoxes[0]   = primitives.fetchAabb( 0 );
+	childIndices[0] = encodeNodeIndex( 0, getLeafType<PrimitiveNode>() );
+	for ( uint32_t i = 1; i < BoxNode::BranchingFactor; ++i )
 		childIndices[i] = InvalidValue;
 
 	boxNodes[0].init( InvalidValue, 1, 0, 0, childIndices, childBoxes );
 }
 
-extern "C" __global__ void
-SingletonConstruction_TriangleMesh_TrianglePairNode( TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
+HIPRT_KERNEL void SingletonConstruction_TriangleMesh_rtip11_TrianglePairNode(
+	const TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<TriangleMesh, TriangleNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void
-SingletonConstruction_TriangleMesh_TrianglePacketNode( TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
+HIPRT_KERNEL void SingletonConstruction_TriangleMesh_rtip31_TrianglePacketNode(
+	const TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<TriangleMesh, TriangleNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void
-SingletonConstruction_AabbList_CustomNode( AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
+HIPRT_KERNEL void
+SingletonConstruction_AabbList_CustomNode( const AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<AabbList, CustomNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameSRT_UserInstanceNode(
-	InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void SingletonConstruction_InstanceList_hiprtFrameSRT_rtip11_InstanceNode(
+	const InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<InstanceList<hiprtFrameSRT>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameSRT_HwInstanceNode(
-	InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void SingletonConstruction_InstanceList_hiprtFrameSRT_rtip31_InstanceNode(
+	const InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<InstanceList<hiprtFrameSRT>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameMatrix_UserInstanceNode(
-	InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void SingletonConstruction_InstanceList_hiprtFrameMatrix_rtip11_InstanceNode(
+	const InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<InstanceList<hiprtFrameMatrix>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void SingletonConstruction_InstanceList_hiprtFrameMatrix_HwInstanceNode(
-	InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void SingletonConstruction_InstanceList_hiprtFrameMatrix_rtip31_InstanceNode(
+	const InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	SingletonConstruction<InstanceList<hiprtFrameMatrix>, InstanceNode>( index, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PairTriangles( TriangleMesh mesh, uint2* pairIndices, uint32_t* pairCounter )
+HIPRT_KERNEL void PairTriangles( const TriangleMesh mesh, uint2* pairIndices, uint32_t* pairCounter )
 {
-	const uint32_t index	 = blockIdx.x * blockDim.x + threadIdx.x;
+	const uint32_t index     = blockIdx.x * blockDim.x + threadIdx.x;
 	const uint32_t laneIndex = threadIdx.x & ( WarpSize - 1 );
 
-	bool	 valid		 = index < mesh.getCount();
+	bool     valid       = index < mesh.getCount();
 	uint32_t pairedIndex = InvalidValue;
-	uint64_t activeMask	 = hiprt::ballot( valid );
+	uint64_t activeMask  = hiprt::ballot( valid );
 
 	uint3 triIndices;
 	if ( valid ) triIndices = mesh.fetchTriangleIndices( index );
@@ -386,23 +375,23 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, uint2* pairIndices,
 	{
 		activeMask = shfl( activeMask, 0 );
 
-		const uint64_t broadcastLane = __ffsll( static_cast<unsigned long long>( activeMask ) ) - 1;
+		const uint64_t broadcastLane = hiprt::ffsll( activeMask ) - 1;
 		if ( laneIndex == broadcastLane ) valid = false;
 
 		activeMask &= activeMask - 1;
 
-		const uint32_t broadcastIndex	   = shfl( index, broadcastLane );
-		const uint3	   triIndicesBroadcast = {
-			   shfl( triIndices.x, broadcastLane ), shfl( triIndices.y, broadcastLane ), shfl( triIndices.z, broadcastLane ) };
+		const uint32_t broadcastIndex      = shfl( index, broadcastLane );
+		const uint3    triIndicesBroadcast = {
+            shfl( triIndices.x, broadcastLane ), shfl( triIndices.y, broadcastLane ), shfl( triIndices.z, broadcastLane ) };
 
 		bool pairable = false;
 		if ( index != broadcastIndex && valid )
 			pairable = tryPairTriangles( triIndicesBroadcast, triIndices ).x != InvalidValue;
 
-		const uint32_t firstPairedLane = __ffsll( static_cast<unsigned long long>( hiprt::ballot( pairable ) ) ) - 1;
+		const uint32_t firstPairedLane = hiprt::ffsll( hiprt::ballot( pairable ) ) - 1;
 		if ( firstPairedLane < WarpSize )
 		{
-			activeMask &= ~( 1u << firstPairedLane );
+			activeMask &= ~( 1ull << firstPairedLane );
 			if ( laneIndex == firstPairedLane ) valid = false;
 
 			const uint32_t secondIndex = shfl( index, firstPairedLane );
@@ -414,13 +403,13 @@ extern "C" __global__ void PairTriangles( TriangleMesh mesh, uint2* pairIndices,
 		}
 	}
 
-	bool	 pairing   = index < mesh.getCount() && pairedIndex != InvalidValue;
+	bool     pairing   = index < mesh.getCount() && pairedIndex != InvalidValue;
 	uint32_t pairIndex = warpOffset( pairing, pairCounter );
 	if ( pairing ) pairIndices[pairIndex] = make_uint2( index, pairedIndex );
 }
 
 template <typename PrimitiveContainer>
-__device__ void ComputeCentroidBox( PrimitiveContainer& primitives, Aabb* centroidBox )
+HIPRT_DEVICE HIPRT_INLINE void ComputeCentroidBox( const PrimitiveContainer& primitives, Aabb* centroidBox )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -430,40 +419,40 @@ __device__ void ComputeCentroidBox( PrimitiveContainer& primitives, Aabb* centro
 	else
 		primBox = primitives.fetchAabb( primitives.getCount() - 1 );
 
-	constexpr uint32_t							  WarpsPerBlock = DivideRoundUp( BvhBuilderReductionBlockSize, WarpSize );
+	constexpr uint32_t                            WarpsPerBlock = DivideRoundUp( BvhBuilderReductionBlockSize, WarpSize );
 	alignas( alignof( Aabb ) ) __shared__ uint8_t cache[sizeof( Aabb ) * WarpsPerBlock];
-	Aabb*										  blockBoxes = reinterpret_cast<Aabb*>( cache );
+	Aabb*                                         blockBoxes = reinterpret_cast<Aabb*>( cache );
 
 	Aabb blockBox = blockUnion( primBox, blockBoxes );
 	if ( threadIdx.x == 0 ) centroidBox->atomicGrow( blockBox );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCentroidBox_TriangleMesh( TriangleMesh primitives, Aabb* centroidBox )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeCentroidBox_TriangleMesh( const TriangleMesh primitives, Aabb* centroidBox )
 {
 	ComputeCentroidBox<TriangleMesh>( primitives, centroidBox );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCentroidBox_AabbList( AabbList primitives, Aabb* centroidBox )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeCentroidBox_AabbList( const AabbList primitives, Aabb* centroidBox )
 {
 	ComputeCentroidBox<AabbList>( primitives, centroidBox );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCentroidBox_InstanceList_hiprtFrameSRT( InstanceList<hiprtFrameSRT> primitives, Aabb* centroidBox )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeCentroidBox_InstanceList_hiprtFrameSRT( const InstanceList<hiprtFrameSRT> primitives, Aabb* centroidBox )
 {
 	ComputeCentroidBox<InstanceList<hiprtFrameSRT>>( primitives, centroidBox );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCentroidBox_InstanceList_hiprtFrameMatrix( InstanceList<hiprtFrameMatrix> primitives, Aabb* centroidBox )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeCentroidBox_InstanceList_hiprtFrameMatrix( const InstanceList<hiprtFrameMatrix> primitives, Aabb* centroidBox )
 {
 	ComputeCentroidBox<InstanceList<hiprtFrameMatrix>>( primitives, centroidBox );
 }
 
 template <typename PrimitiveContainer>
-__device__ void ComputeBox( PrimitiveContainer& primitives, Aabb* box )
+HIPRT_DEVICE HIPRT_INLINE void ComputeBox( const PrimitiveContainer& primitives, Aabb* box )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -473,41 +462,40 @@ __device__ void ComputeBox( PrimitiveContainer& primitives, Aabb* box )
 	else
 		primBox = primitives.fetchAabb( primitives.getCount() - 1 );
 
-	constexpr uint32_t							  WarpsPerBlock = DivideRoundUp( BvhBuilderReductionBlockSize, WarpSize );
+	constexpr uint32_t                            WarpsPerBlock = DivideRoundUp( BvhBuilderReductionBlockSize, WarpSize );
 	alignas( alignof( Aabb ) ) __shared__ uint8_t cache[sizeof( Aabb ) * WarpsPerBlock];
-	Aabb*										  blockBoxes = reinterpret_cast<Aabb*>( cache );
+	Aabb*                                         blockBoxes = reinterpret_cast<Aabb*>( cache );
 
 	Aabb blockBox = blockUnion( primBox, blockBoxes );
 	if ( threadIdx.x == 0 ) box->atomicGrow( blockBox );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeBox_TriangleMesh( TriangleMesh primitives, Aabb* box )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeBox_TriangleMesh( const TriangleMesh primitives, Aabb* box )
 {
 	ComputeBox<TriangleMesh>( primitives, box );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeBox_AabbList( AabbList primitives, Aabb* box )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize ) ComputeBox_AabbList( const AabbList primitives, Aabb* box )
 {
 	ComputeBox<AabbList>( primitives, box );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeBox_InstanceList_hiprtFrameSRT( InstanceList<hiprtFrameSRT> primitives, Aabb* box )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeBox_InstanceList_hiprtFrameSRT( const InstanceList<hiprtFrameSRT> primitives, Aabb* box )
 {
 	ComputeBox<InstanceList<hiprtFrameSRT>>( primitives, box );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeBox_InstanceList_hiprtFrameMatrix( InstanceList<hiprtFrameMatrix> primitives, Aabb* box )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeBox_InstanceList_hiprtFrameMatrix( const InstanceList<hiprtFrameMatrix> primitives, Aabb* box )
 {
 	ComputeBox<InstanceList<hiprtFrameMatrix>>( primitives, box );
 }
 
 template <typename PrimitiveContainer>
-__device__ void
-ComputeMortonCodes( PrimitiveContainer& primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+HIPRT_DEVICE HIPRT_INLINE void ComputeMortonCodes(
+	const PrimitiveContainer& primitives, const Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
 {
 	const Aabb box = *centroidBox;
 
@@ -515,139 +503,106 @@ ComputeMortonCodes( PrimitiveContainer& primitives, Aabb* centroidBox, uint32_t*
 
 	if ( index < primitives.getCount() )
 	{
-		const float3 boxExtent		  = box.extent();
-		const float3 center			  = primitives.fetchCenter( index );
+		const float3 boxExtent        = box.extent();
+		const float3 center           = primitives.fetchCenter( index );
 		const float3 normalizedCenter = ( center - box.m_min ) / boxExtent;
-		mortonCodeKeys[index]		  = computeExtendedMortonCode( normalizedCenter, boxExtent );
-		mortonCodeValues[index]		  = index;
+		mortonCodeKeys[index]         = computeExtendedMortonCode( normalizedCenter, boxExtent );
+		mortonCodeValues[index]       = index;
 	}
 }
 
-extern "C" __global__ void ComputeMortonCodes_TriangleMesh(
-	TriangleMesh primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+HIPRT_KERNEL void ComputeMortonCodes_TriangleMesh(
+	const TriangleMesh primitives, const Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
 {
 	ComputeMortonCodes<TriangleMesh>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
-extern "C" __global__ void
-ComputeMortonCodes_AabbList( AabbList primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+HIPRT_KERNEL void ComputeMortonCodes_AabbList(
+	const AabbList primitives, const Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
 {
 	ComputeMortonCodes<AabbList>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
-extern "C" __global__ void ComputeMortonCodes_InstanceList_hiprtFrameSRT(
-	InstanceList<hiprtFrameSRT> primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+HIPRT_KERNEL void ComputeMortonCodes_InstanceList_hiprtFrameSRT(
+	const InstanceList<hiprtFrameSRT> primitives,
+	const Aabb*                       centroidBox,
+	uint32_t*                         mortonCodeKeys,
+	uint32_t*                         mortonCodeValues )
 {
 	ComputeMortonCodes<InstanceList<hiprtFrameSRT>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
-extern "C" __global__ void ComputeMortonCodes_InstanceList_hiprtFrameMatrix(
-	InstanceList<hiprtFrameMatrix> primitives, Aabb* centroidBox, uint32_t* mortonCodeKeys, uint32_t* mortonCodeValues )
+HIPRT_KERNEL void ComputeMortonCodes_InstanceList_hiprtFrameMatrix(
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const Aabb*                          centroidBox,
+	uint32_t*                            mortonCodeKeys,
+	uint32_t*                            mortonCodeValues )
 {
 	ComputeMortonCodes<InstanceList<hiprtFrameMatrix>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
-__device__ void ResetCountersAndUpdateLeaves(
+HIPRT_DEVICE HIPRT_INLINE void ResetCountersAndUpdateLeaves(
 	const Header* header, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 
 	if ( index < header->m_boxNodeCount ) boxNodes[index].m_updateCounter = 0;
 
-	if constexpr ( is_same<PrimitiveNode, TrianglePairNode>::value )
+	if constexpr ( isTrianglePairNode<PrimitiveNode>() )
 	{
 		if ( index < header->m_primNodeCount )
 		{
-			primNodes[index] =
-				primitives.fetchPrimNode( { primNodes[index].getPrimIndex( 0 ), primNodes[index].getPrimIndex( 1 ) } );
+			primNodes[index] = primitives.template fetchPrimNode<PrimitiveNode>(
+				{ primNodes[index].getPrimIndex( 0 ), primNodes[index].getPrimIndex( 1 ) } );
 		}
 	}
-	else if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value )
+	else if constexpr ( is_same_v<PrimitiveNode, rtip31::TrianglePacketNode> )
 	{
 		if ( index < header->m_primNodeCount )
 		{
-			uint32_t vertIndexCache[MaxVerticesPerTrianglePacket];
-			uint32_t vertexCount = 0;
-
+			// Write each vertex into the slot the BUILD assigned it, taken from the
+			// packet's own pair descriptors, instead of re-deriving a vertex ordering
+			// here. Re-deriving can produce more unique vertices than the build
+			// reserved room for -- the vertex section only extends to
+			// m_indexSectionMidpoint -- and the surplus then overwrites the primitive
+			// index anchor/payload and the pair descriptors. Reusing the descriptors
+			// makes the write bounded by construction: every slot referenced by a
+			// descriptor is a slot the build allocated.
 			PrimitiveNode  triPacketNode = primNodes[index];
-			const uint32_t triPairCount	 = triPacketNode.getTrianglePairCount();
+			const uint32_t triPairCount  = triPacketNode.getTrianglePairCount();
 			for ( uint32_t triPairIndex = 0; triPairIndex < triPairCount; ++triPairIndex )
 			{
 				const uint2 pairIndices{
 					triPacketNode.getPrimIndex( triPairIndex, 0 ), triPacketNode.getPrimIndex( triPairIndex, 1 ) };
-				const uint3 indices0 = primitives.fetchTriangleIndices( pairIndices.x );
-				uint4		indices	 = make_uint4( indices0, indices0.z );
 
-				uint3 vertexMapping{};
-				if ( pairIndices.x != pairIndices.y )
+				for ( uint32_t t = 0; t < 2; ++t )
 				{
-					uint3 indices1 = primitives.fetchTriangleIndices( pairIndices.y );
-					vertexMapping  = tryPairTriangles( indices0, indices1 );
+					// A pair holding a single triangle repeats its primitive index.
+					if ( t == 1 && pairIndices.x == pairIndices.y ) break;
 
-					uint32_t vertexIndex = 0;
-					if ( vertexMapping.x == 3 ) vertexIndex = indices1.x;
-					if ( vertexMapping.y == 3 ) vertexIndex = indices1.y;
-					if ( vertexMapping.z == 3 ) vertexIndex = indices1.z;
-					indices.w = vertexIndex;
+					const uint32_t primIndex = t == 0 ? pairIndices.x : pairIndices.y;
+					const uint3    indices   = primitives.fetchTriangleIndices( primIndex );
+					const uint4    slots     = triPacketNode.readDescriptor( triPairIndex, t );
+
+					triPacketNode.template writeVertex<false, true>( slots.x, primitives.fetchVertex( indices.x ) );
+					triPacketNode.template writeVertex<false, true>( slots.y, primitives.fetchVertex( indices.y ) );
+					triPacketNode.template writeVertex<false, true>( slots.z, primitives.fetchVertex( indices.z ) );
 				}
-
-				uint32_t newVertMask = 0;
-				for ( uint32_t j = 0; j < 4; ++j )
-				{
-					if ( j == 3 && pairIndices.x == pairIndices.y ) break;
-
-					bool contains = false;
-					for ( uint32_t k = 0; k < vertexCount; ++k )
-					{
-						if ( vertIndexCache[k] == ( &indices.x )[j] )
-						{
-							contains = true;
-							break;
-						}
-					}
-
-					if ( !contains )
-					{
-						newVertMask |= 1 << j;
-					}
-				}
-
-				const uint32_t oldVertCount = vertexCount;
-				const uint32_t newVertCount = __popc( newVertMask );
-				for ( uint32_t j = 0; j < 4; ++j )
-				{
-					if ( j == 3 && pairIndices.x == pairIndices.y ) break;
-
-					bool contains = !( newVertMask & ( 1 << j ) );
-					if ( !contains )
-					{
-						uint32_t vertexMask			= ( 1 << j ) - 1;
-						uint32_t vertexIndex		= oldVertCount + __popc( newVertMask & vertexMask );
-						vertIndexCache[vertexIndex] = ( &indices.x )[j];
-					}
-				}
-				vertexCount += newVertCount;
-			}
-
-			for ( uint32_t j = 0; j < vertexCount; ++j )
-			{
-				const float3 vertex = primitives.fetchVertex( vertIndexCache[j] );
-				triPacketNode.template writeVertex<false, true>( j, vertex );
 			}
 
 			primNodes[index] = triPacketNode;
 		}
 	}
-	else if constexpr ( is_same<PrimitiveNode, InstanceNode>::value )
+	else if constexpr ( is_same_v<PrimitiveNode, InstanceNode> )
 	{
 		if ( index < primitives.getFrameCount() ) primitives.convertFrame( index );
 
 		if ( index < header->m_primNodeCount )
 		{
-			const uint32_t		 primIndex = primNodes[index].m_primIndex;
+			const uint32_t       primIndex = primNodes[index].m_primIndex;
 			hiprtTransformHeader transform = primitives.fetchTransformHeader( primIndex );
-			primNodes[index].m_mask		   = primitives.fetchMask( primIndex );
+			primNodes[index].m_mask        = primitives.fetchMask( primIndex );
 			if ( transform.frameCount == 1 )
 				primNodes[index].m_identity =
 					primitives.computeInvTransformMatrix( transform.frameIndex, primNodes[index].m_matrix ) ? 1 : 0;
@@ -657,80 +612,81 @@ __device__ void ResetCountersAndUpdateLeaves(
 	}
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_TriangleMesh_TrianglePairNode(
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_TriangleMesh_rtip11_TrianglePairNode(
 	const GeomHeader* header, TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_TriangleMesh_TrianglePacketNode(
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_TriangleMesh_rtip31_TrianglePacketNode(
 	const GeomHeader* header, TriangleMesh primitives, BoxNode* boxNodes, TriangleNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_AabbList_CustomNode(
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_AabbList_CustomNode(
 	const GeomHeader* header, AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameMatrix_UserInstanceNode(
-	const SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, UserInstanceNode* primNodes )
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameMatrix_rtip11_InstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameMatrix_HwInstanceNode(
-	const SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, HwInstanceNode* primNodes )
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameMatrix_rtip31_InstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameSRT_UserInstanceNode(
-	const SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, UserInstanceNode* primNodes )
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameSRT_rtip11_InstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
-extern "C" __global__ void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameSRT_HwInstanceNode(
-	const SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, HwInstanceNode* primNodes )
+HIPRT_KERNEL void ResetCountersAndUpdateLeaves_InstanceList_hiprtFrameSRT_rtip31_InstanceNode(
+	const SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
 {
 	ResetCountersAndUpdateLeaves( header, primitives, boxNodes, primNodes );
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
-__device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
+HIPRT_DEVICE HIPRT_INLINE void
+FitBounds( const Header* header, const PrimitiveContainer& primitives, const PrimitiveNode* primNodes, BoxNode* boxNodes )
 {
-	const uint32_t threadIndex	= threadIdx.x + blockIdx.x * blockDim.x;
-	const uint32_t laneIndex	= threadIdx.x % WarpSize;
-	const uint32_t sublaneIndex = laneIndex % BranchingFactor;
-	const uint32_t subwarpIndex = laneIndex / BranchingFactor;
-	const uint64_t subwarpMask	= ( ( 1 << BranchingFactor ) - 1 )
-								 << static_cast<uint64_t>( ( BranchingFactor * subwarpIndex ) );
+	const uint32_t threadIndex  = threadIdx.x + blockIdx.x * blockDim.x;
+	const uint32_t laneIndex    = threadIdx.x % WarpSize;
+	const uint32_t sublaneIndex = laneIndex % BoxNode::BranchingFactor;
+	const uint32_t subwarpIndex = laneIndex / BoxNode::BranchingFactor;
+	const uint64_t subwarpMask  = ( ( 1ull << BoxNode::BranchingFactor ) - 1ull )
+	                             << static_cast<uint64_t>( ( BoxNode::BranchingFactor * subwarpIndex ) );
 
-	uint32_t index = threadIndex / BranchingFactor;
+	uint32_t index = threadIndex / BoxNode::BranchingFactor;
 
 	bool done = index >= header->m_boxNodeCount;
 
-	BoxNode	 node;
+	BoxNode  node;
 	uint32_t childCount{};
-	bool	 internal = false;
+	bool     internal = false;
 	if ( !done )
 	{
-		node	   = boxNodes[index];
+		node       = boxNodes[index];
 		childCount = node.getChildCount();
 		internal   = sublaneIndex < childCount && node.getChildType( sublaneIndex ) == BoxType;
 	}
 
-	uint32_t internalCount = __popcll( hiprt::ballot( internal ) & subwarpMask );
+	uint32_t internalCount = hiprt::popcll( hiprt::ballot( internal ) & subwarpMask );
 	if ( internalCount > 0 ) done = true;
 
 	while ( hiprt::any( !done ) )
 	{
 		__threadfence();
 
-		Aabb	 childBox;
+		Aabb     childBox;
 		uint32_t childIndex = InvalidValue;
 		uint32_t childRange = InvalidValue;
 		if ( !done && sublaneIndex < childCount )
@@ -741,8 +697,8 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 		}
 
 		Aabb nodeBox = childBox;
-#pragma unroll
-		for ( uint32_t i = 1; i < BranchingFactor; i <<= 1 )
+		HIPRT_UNROLL
+		for ( uint32_t i = 1; i < BoxNode::BranchingFactor; i <<= 1 )
 			nodeBox.grow( shflAabb( nodeBox, laneIndex ^ i ) );
 
 		if ( !done )
@@ -756,72 +712,72 @@ __device__ void FitBounds( Header* header, PrimitiveContainer& primitives, BoxNo
 		internal = false;
 		if ( !done )
 		{
-			node	   = boxNodes[index];
+			node       = boxNodes[index];
 			childCount = node.getChildCount();
 			internal   = sublaneIndex < childCount && node.getChildType( sublaneIndex ) == BoxType;
 		}
 
-		internalCount = __popcll( hiprt::ballot( internal ) & subwarpMask );
+		internalCount = hiprt::popcll( hiprt::ballot( internal ) & subwarpMask );
 
 		__threadfence();
 
 		if ( !done && sublaneIndex == 0 && atomicAdd( &boxNodes[index].m_updateCounter, 1 ) < internalCount - 1 ) done = true;
 
-		done = shfl( done, subwarpIndex * BranchingFactor );
+		done = shfl( done, subwarpIndex * BoxNode::BranchingFactor );
 	}
 }
 
-extern "C" __global__ void FitBounds_TriangleMesh_TrianglePairNode(
-	GeomHeader* header, TriangleMesh primitives, BoxNode* boxNodes, TrianglePairNode* primNodes )
+HIPRT_KERNEL void FitBounds_TriangleMesh_rtip11_TrianglePairNode(
+	GeomHeader* header, TriangleMesh primitives, TriangleNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
-extern "C" __global__ void FitBounds_TriangleMesh_TrianglePacketNode(
-	GeomHeader* header, TriangleMesh primitives, BoxNode* boxNodes, TrianglePacketNode* primNodes )
+HIPRT_KERNEL void FitBounds_TriangleMesh_rtip31_TrianglePacketNode(
+	GeomHeader* header, TriangleMesh primitives, TriangleNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
-extern "C" __global__ void
-FitBounds_AabbList_CustomNode( GeomHeader* header, AabbList primitives, BoxNode* boxNodes, CustomNode* primNodes )
+HIPRT_KERNEL void
+FitBounds_AabbList_CustomNode( GeomHeader* header, AabbList primitives, CustomNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_hiprtFrameSRT_UserInstanceNode(
-	SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void FitBounds_InstanceList_hiprtFrameSRT_rtip11_InstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, InstanceNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_hiprtFrameSRT_HwInstanceNode(
-	SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void FitBounds_InstanceList_hiprtFrameSRT_rtip31_InstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameSRT> primitives, InstanceNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_hiprtFrameMatrix_UserInstanceNode(
-	SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void FitBounds_InstanceList_hiprtFrameMatrix_rtip11_InstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, InstanceNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
-extern "C" __global__ void FitBounds_InstanceList_hiprtFrameMatrix_HwInstanceNode(
-	SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, BoxNode* boxNodes, InstanceNode* primNodes )
+HIPRT_KERNEL void FitBounds_InstanceList_hiprtFrameMatrix_rtip31_InstanceNode(
+	SceneHeader* header, InstanceList<hiprtFrameMatrix> primitives, InstanceNode* primNodes, BoxNode* boxNodes )
 {
-	FitBounds( header, primitives, boxNodes, primNodes );
+	FitBounds( header, primitives, primNodes, boxNodes );
 }
 
 // assuming that OBBs are AMD specific, there are no warp syncs
-template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
-__device__ void FitOrientedBounds(
-	Header*				header,
-	PrimitiveContainer& primitives,
-	Box8Node*			boxNodes,
-	PrimitiveNode*		primNodes,
-	Kdop*				kdops,
-	uint32_t*			updateCounters )
+template <typename PrimitiveContainer, typename PrimitiveNode, typename OrientedBoxNode, typename Header>
+HIPRT_DEVICE HIPRT_INLINE void FitOrientedBounds(
+	const Header*             header,
+	const PrimitiveContainer& primitives,
+	const PrimitiveNode*      primNodes,
+	OrientedBoxNode*          boxNodes,
+	Kdop*                     kdops,
+	uint32_t*                 updateCounters )
 {
 	const uint32_t threadIndex = threadIdx.x + blockIdx.x * blockDim.x;
 	const uint32_t laneIndex   = threadIdx.x % WarpSize;
@@ -830,11 +786,11 @@ __device__ void FitOrientedBounds(
 
 	if ( index >= header->m_boxNodeCount ) return;
 
-	Box8Node node		= boxNodes[index];
-	uint32_t childCount = node.getChildCount();
-	bool	 internal	= laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
+	OrientedBoxNode node       = boxNodes[index];
+	uint32_t        childCount = node.getChildCount();
+	bool            internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
 
-	uint32_t internalCount = __popcll( hiprt::ballot( internal ) );
+	uint32_t internalCount = hiprt::popcll( hiprt::ballot( internal ) );
 
 	bool done = internalCount > 0;
 
@@ -845,13 +801,13 @@ __device__ void FitOrientedBounds(
 		if ( index > 0 )
 		{
 			uint32_t minIndexLane = InvalidValue;
-			float	 minAreaLane  = FltMax;
+			float    minAreaLane  = FltMax;
 			for ( uint32_t j = laneIndex; j <= RotationCount; j += WarpSize )
 			{
 				Aabb obb;
 				for ( uint32_t i = 0; i < childCount; ++i )
 				{
-					const Aabb	   childBox	  = node.getChildBox( i );
+					const Aabb     childBox   = node.getChildBox( i );
 					const uint32_t childIndex = node.getChildIndex( i );
 					obb.grow( getNodeObb( j, childIndex, childBox, primitives, primNodes, kdops ).aabb() );
 				}
@@ -860,16 +816,16 @@ __device__ void FitOrientedBounds(
 
 				if ( minAreaLane > obb.area() )
 				{
-					minAreaLane	 = obb.area();
+					minAreaLane  = obb.area();
 					minIndexLane = j;
 				}
 			}
 
-			const float	   minArea	= warpMin( minAreaLane );
-			const uint32_t minIndex = __ffsll( static_cast<unsigned long long>( hiprt::ballot( minAreaLane == minArea ) ) ) - 1;
+			const float    minArea     = warpMin( minAreaLane );
+			const uint32_t minIndex    = hiprt::ffsll( hiprt::ballot( minAreaLane == minArea ) ) - 1;
 			const uint32_t matrixIndex = shfl( minIndexLane, minIndex );
 
-			Aabb	 childBox;
+			Aabb     childBox;
 			uint32_t childIndex;
 			uint32_t childRange;
 			if ( laneIndex < childCount )
@@ -908,11 +864,11 @@ __device__ void FitOrientedBounds(
 		index = node.getParentAddr();
 		if ( index == InvalidValue ) break;
 
-		node	   = boxNodes[index];
+		node       = boxNodes[index];
 		childCount = node.getChildCount();
 		internal   = laneIndex < childCount && node.getChildType( laneIndex ) == BoxType;
 
-		internalCount = __popcll( hiprt::ballot( internal ) );
+		internalCount = hiprt::popcll( hiprt::ballot( internal ) );
 
 		__threadfence();
 
@@ -922,70 +878,57 @@ __device__ void FitOrientedBounds(
 	}
 }
 
-extern "C" __global__ void FitOrientedBounds_TriangleMesh_TrianglePacketNode(
-	GeomHeader*			header,
-	TriangleMesh		primitives,
-	Box8Node*			boxNodes,
-	TrianglePacketNode* primNodes,
-	Kdop*				kdops,
-	uint32_t*			updateCounters )
+HIPRT_KERNEL void FitOrientedBounds_TriangleMesh_rtip31_TrianglePacketNode_rtip31_BoxNode(
+	const GeomHeader*                 header,
+	const TriangleMesh                primitives,
+	const rtip31::TrianglePacketNode* primNodes,
+	rtip31::BoxNode*                  boxNodes,
+	Kdop*                             kdops,
+	uint32_t*                         updateCounters )
 {
-	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
+	FitOrientedBounds( header, primitives, primNodes, boxNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_AabbList_CustomNode(
-	GeomHeader* header, AabbList primitives, Box8Node* boxNodes, CustomNode* primNodes, Kdop* kdops, uint32_t* updateCounters )
+HIPRT_KERNEL void FitOrientedBounds_AabbList_CustomNode_rtip31_BoxNode(
+	const GeomHeader* header,
+	const AabbList    primitives,
+	const CustomNode* primNodes,
+	rtip31::BoxNode*  boxNodes,
+	Kdop*             kdops,
+	uint32_t*         updateCounters )
 {
-	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
+	FitOrientedBounds( header, primitives, primNodes, boxNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameSRT_UserInstanceNode(
-	SceneHeader*				header,
-	InstanceList<hiprtFrameSRT> primitives,
-	Box8Node*					boxNodes,
-	InstanceNode*				primNodes,
-	Kdop*						kdops,
-	uint32_t*					updateCounters )
+HIPRT_KERNEL void FitOrientedBounds_InstanceList_hiprtFrameSRT_rtip31_InstanceNode_rtip31_BoxNode(
+	const SceneHeader*                header,
+	const InstanceList<hiprtFrameSRT> primitives,
+	const InstanceNode*               primNodes,
+	rtip31::BoxNode*                  boxNodes,
+	Kdop*                             kdops,
+	uint32_t*                         updateCounters )
 {
-	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
+	FitOrientedBounds( header, primitives, primNodes, boxNodes, kdops, updateCounters );
 }
 
-extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameSRT_HwInstanceNode(
-	SceneHeader*				header,
-	InstanceList<hiprtFrameSRT> primitives,
-	Box8Node*					boxNodes,
-	InstanceNode*				primNodes,
-	Kdop*						kdops,
-	uint32_t*					updateCounters )
+HIPRT_KERNEL void FitOrientedBounds_InstanceList_hiprtFrameMatrix_rtip31_InstanceNode_rtip31_BoxNode(
+	const SceneHeader*                   header,
+	const InstanceList<hiprtFrameMatrix> primitives,
+	const InstanceNode*                  primNodes,
+	rtip31::BoxNode*                     boxNodes,
+	Kdop*                                kdops,
+	uint32_t*                            updateCounters )
 {
-	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
-}
-
-extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameMatrix_UserInstanceNode(
-	SceneHeader*				   header,
-	InstanceList<hiprtFrameMatrix> primitives,
-	Box8Node*					   boxNodes,
-	InstanceNode*				   primNodes,
-	Kdop*						   kdops,
-	uint32_t*					   updateCounters )
-{
-	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
-}
-
-extern "C" __global__ void FitOrientedBounds_InstanceList_hiprtFrameMatrix_HwInstanceNode(
-	SceneHeader*				   header,
-	InstanceList<hiprtFrameMatrix> primitives,
-	Box8Node*					   boxNodes,
-	InstanceNode*				   primNodes,
-	Kdop*						   kdops,
-	uint32_t*					   updateCounters )
-{
-	FitOrientedBounds( header, primitives, boxNodes, primNodes, kdops, updateCounters );
+	FitOrientedBounds( header, primitives, primNodes, boxNodes, kdops, updateCounters );
 }
 
 template <typename BinaryNode>
-__device__ void
-ComputeParentAddrs( uint32_t index, uint32_t leafCount, uint32_t rootAddr, BinaryNode* binaryNodes, uint32_t* parentAddrs )
+HIPRT_DEVICE HIPRT_INLINE void ComputeParentAddrs(
+	const uint32_t    index,
+	const uint32_t    leafCount,
+	const uint32_t    rootAddr,
+	const BinaryNode* binaryNodes,
+	uint32_t*         parentAddrs )
 {
 	if ( index < leafCount - 1 )
 	{
@@ -998,33 +941,35 @@ ComputeParentAddrs( uint32_t index, uint32_t leafCount, uint32_t rootAddr, Binar
 	}
 }
 
-extern "C" __global__ void
-ComputeParentAddrs_ScratchNode( uint32_t leafCount, uint32_t rootAddr, ScratchNode* binaryNodes, uint32_t* parentAddrs )
+HIPRT_KERNEL void ComputeParentAddrs_ScratchNode(
+	const uint32_t leafCount, const uint32_t rootAddr, const ScratchNode* binaryNodes, uint32_t* parentAddrs )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	ComputeParentAddrs( index, leafCount, rootAddr, binaryNodes, parentAddrs );
 }
 
-extern "C" __global__ void
-ComputeParentAddrs_ApiNode( uint32_t leafCount, uint32_t rootAddr, ApiNode* binaryNodes, uint32_t* parentAddrs )
+HIPRT_KERNEL void ComputeParentAddrs_ApiNode(
+	const uint32_t leafCount, const uint32_t rootAddr, const ApiNode* binaryNodes, uint32_t* parentAddrs )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	ComputeParentAddrs( index, leafCount, rootAddr, binaryNodes, parentAddrs );
 }
 
 template <typename BinaryNode>
-__device__ void ComputeFatLeaves(
-	uint32_t	index,
-	uint32_t	leafCount,
-	BinaryNode* binaryNodes,
-	uint32_t*	parentAddrs,
-	uint32_t*	triangleCounts,
-	uint32_t*	updateCounters )
+HIPRT_DEVICE HIPRT_INLINE void ComputeFatLeaves(
+	const uint32_t  index,
+	const uint32_t  leafCount,
+	const uint32_t* parentAddrs,
+	BinaryNode*     binaryNodes,
+	uint32_t*       triangleCounts,
+	uint32_t*       updateCounters )
 {
-	if ( index >= leafCount ) return;
+	uint32_t nodeIndex = index;
 
-	if ( index >= leafCount - 1 ) return;
-	BinaryNode node			 = binaryNodes[index];
+	if ( nodeIndex >= leafCount ) return;
+
+	if ( nodeIndex >= leafCount - 1 ) return;
+	BinaryNode node          = binaryNodes[nodeIndex];
 	uint32_t   internalCount = 0;
 	for ( uint32_t i = 0; i < 2; ++i )
 	{
@@ -1037,7 +982,7 @@ __device__ void ComputeFatLeaves(
 	{
 		__threadfence();
 
-		BinaryNode& binaryNode = binaryNodes[index];
+		BinaryNode& binaryNode = binaryNodes[nodeIndex];
 
 		uint32_t triangleCount = 0;
 		for ( uint32_t i = 0; i < 2; ++i )
@@ -1048,16 +993,16 @@ __device__ void ComputeFatLeaves(
 			else
 				childTriCount = triangleCounts[binaryNode.getChildAddr( i )];
 
-			if ( childTriCount <= MaxFatLeafSize ) binaryNode.setChildFatLeafFlag( i );
+			if ( childTriCount <= getMaxFatLeafSize( Rtip ) ) binaryNode.setChildFatLeafFlag( i );
 
 			triangleCount += childTriCount;
 		}
 
-		triangleCounts[index] = triangleCount;
+		triangleCounts[nodeIndex] = triangleCount;
 
-		index = parentAddrs[index];
-		if ( index == InvalidValue ) break;
-		node = binaryNodes[index];
+		nodeIndex = parentAddrs[nodeIndex];
+		if ( nodeIndex == InvalidValue ) break;
+		node = binaryNodes[nodeIndex];
 
 		internalCount = 0;
 		for ( uint32_t i = 0; i < 2; ++i )
@@ -1067,42 +1012,50 @@ __device__ void ComputeFatLeaves(
 
 		__threadfence();
 
-		if ( atomicAdd( &updateCounters[index], 1 ) < internalCount - 1 ) break;
+		if ( atomicAdd( &updateCounters[nodeIndex], 1 ) < internalCount - 1 ) break;
 	}
 }
 
-extern "C" __global__ void ComputeFatLeaves_ScratchNode(
-	uint32_t leafCount, ScratchNode* binaryNodes, uint32_t* parentAddrs, uint32_t* triangleCounts, uint32_t* updateCounters )
+HIPRT_KERNEL void ComputeFatLeaves_ScratchNode(
+	const uint32_t  leafCount,
+	const uint32_t* parentAddrs,
+	ScratchNode*    binaryNodes,
+	uint32_t*       triangleCounts,
+	uint32_t*       updateCounters )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	ComputeFatLeaves( index, leafCount, binaryNodes, parentAddrs, triangleCounts, updateCounters );
+	ComputeFatLeaves( index, leafCount, parentAddrs, binaryNodes, triangleCounts, updateCounters );
 }
 
-extern "C" __global__ void ComputeFatLeaves_ApiNode(
-	uint32_t leafCount, ApiNode* binaryNodes, uint32_t* parentAddrs, uint32_t* triangleCounts, uint32_t* updateCounters )
+HIPRT_KERNEL void ComputeFatLeaves_ApiNode(
+	const uint32_t  leafCount,
+	const uint32_t* parentAddrs,
+	ApiNode*        binaryNodes,
+	uint32_t*       triangleCounts,
+	uint32_t*       updateCounters )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	ComputeFatLeaves( index, leafCount, binaryNodes, parentAddrs, triangleCounts, updateCounters );
+	ComputeFatLeaves( index, leafCount, parentAddrs, binaryNodes, triangleCounts, updateCounters );
 }
 
 template <typename PrimitiveNode, typename BinaryNode, typename Header>
-__device__ void Collapse(
-	uint32_t	   index,
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	Header*		   header,
-	BinaryNode*	   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_DEVICE HIPRT_INLINE void Collapse(
+	const uint32_t       index,
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const BinaryNode*    binaryNodes,
+	const ReferenceNode* references,
+	Header*              header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
-	const uint32_t laneIndex	= threadIdx.x % WarpSize;
-	const uint32_t taskIndex	= index / BranchingFactor;
-	const uint32_t sublaneIndex = laneIndex % BranchingFactor;
-	const uint32_t subwarpIndex = laneIndex / BranchingFactor;
-	const uint64_t subwarpMask	= ( ( 1 << BranchingFactor ) - 1 )
-								 << static_cast<uint64_t>( ( BranchingFactor * subwarpIndex ) );
+	const uint32_t laneIndex    = threadIdx.x % WarpSize;
+	const uint32_t taskIndex    = index / BoxNode::BranchingFactor;
+	const uint32_t sublaneIndex = laneIndex % BoxNode::BranchingFactor;
+	const uint32_t subwarpIndex = laneIndex / BoxNode::BranchingFactor;
+	const uint64_t subwarpShift = static_cast<uint64_t>( ( BoxNode::BranchingFactor * subwarpIndex ) );
+	const uint64_t subwarpMask  = ( ( 1ull << BoxNode::BranchingFactor ) - 1ull ) << subwarpShift;
 
 	bool done = taskIndex >= maxBoxNodeCount || taskIndex >= referenceCount;
 
@@ -1113,33 +1066,33 @@ __device__ void Collapse(
 
 		if ( atomicAdd( &header->m_referenceCount, 0 ) == referenceCount ) done = true;
 
-		uint32_t nodeIndex	= InvalidValue;
-		uint32_t nodeAddr	= InvalidValue;
-		uint32_t parentAddr = InvalidValue;
-		uint3	 task		= make_uint3( InvalidValue );
+		uint32_t       nodeIndex  = InvalidValue;
+		uint32_t       nodeAddr   = InvalidValue;
+		uint32_t       parentAddr = InvalidValue;
+		ConversionTask task{};
 		if ( !done )
 		{
-			task	   = atomic_load( &taskQueue[taskIndex] );
-			nodeIndex  = task.x;
-			nodeAddr   = task.y;
-			parentAddr = task.z;
+			task       = taskQueue[taskIndex].atomic_load();
+			nodeIndex  = task.m_nodeIndex;
+			nodeAddr   = task.m_nodeAddr;
+			parentAddr = task.m_parentAddr;
 		}
 
 		// we need to check all three values
-		const bool valid = nodeIndex != InvalidValue && nodeAddr != InvalidValue && parentAddr != InvalidValue;
+		const bool valid = task.valid();
 
 		// skip inactive warps
 		if ( hiprt::all( !valid ) ) continue;
 
-		Aabb	 childBox;
+		Aabb     childBox;
 		uint32_t childIndex = InvalidValue;
 		uint32_t childCount = 2;
 
 		if ( nodeAddr == 0 ) parentAddr = InvalidValue;
 
 		// fill inactive lanes with first valid node index
-		const uint32_t firstValidLane = __ffsll( static_cast<unsigned long long>( hiprt::ballot( valid ) ) ) - 1;
-		nodeIndex					  = shfl( nodeIndex, valid ? laneIndex : firstValidLane );
+		const uint32_t firstValidLane = hiprt::ffsll( hiprt::ballot( valid ) ) - 1;
+		nodeIndex                     = shfl( nodeIndex, valid ? laneIndex : firstValidLane );
 
 		BinaryNode binaryNode = binaryNodes[getNodeAddr( nodeIndex )];
 		if ( sublaneIndex < 2 )
@@ -1149,63 +1102,89 @@ __device__ void Collapse(
 		}
 
 		// open internal nodes first
-		if constexpr ( is_same<PrimitiveNode, TrianglePacketNode>::value )
-			openNodes<isFatLeafNode>( binaryNodes, references, childCount, childIndex, childBox );
+		const uint32_t maxChildCount = nodeAddr == 0 ? InstanceNode::BranchingFactor : BoxNode::BranchingFactor;
+		if constexpr ( isTrianglePacketNode<PrimitiveNode>() )
+			openNodes<isFatLeafNode>( binaryNodes, references, maxChildCount, childCount, childIndex, childBox );
 
 		// open fat leaves for the remaining slots
-		openNodes<isLeafNode>( binaryNodes, references, childCount, childIndex, childBox );
+		openNodes<isLeafNode>( binaryNodes, references, maxChildCount, childCount, childIndex, childBox );
 
 		const bool active = valid && sublaneIndex < childCount;
 
-		const bool	   internal		= isInternalNode( childIndex ) && !isFatLeafNode( childIndex );
-		const uint32_t childAddr	= warpOffset( active && internal, &header->m_boxNodeCount );
-		const uint32_t internalBase = shfl( childAddr, subwarpIndex * BranchingFactor );
+		const bool     internal     = isInternalNode( childIndex ) && !isFatLeafNode( childIndex );
+		const uint32_t childAddr    = warpOffset( active && internal, &header->m_boxNodeCount );
+		const uint32_t internalBase = shfl( childAddr, subwarpIndex * BoxNode::BranchingFactor );
 		if ( active && internal )
 		{
-			atomic_store( &taskQueue[childAddr], { childIndex, childAddr, nodeAddr } );
+			taskQueue[childAddr].atomic_store( ConversionTask( childIndex, childAddr, nodeAddr ) );
 			childIndex = encodeNodeIndex( childAddr, getNodeType( childIndex ) );
 			__threadfence();
 		}
 
+		const bool fatLeaf  = isFatLeafNode( childIndex ) && !isLeafNode( childIndex );
+		const bool leaf     = isLeafNode( childIndex );
+		uint32_t   leafMask = InvalidValue;
+		{
+			const uint64_t activeSubmask = hiprt::ballot( active && ( leaf || fatLeaf ) ) & subwarpMask;
+			leafMask                     = static_cast<uint32_t>( activeSubmask >> subwarpShift );
+		}
+
 		if ( valid )
 		{
-			if constexpr ( !is_same<PrimitiveNode, TrianglePacketNode>::value )
+			const uint32_t leafType = getLeafType<PrimitiveNode>();
+			if constexpr ( !isTrianglePacketNode<PrimitiveNode>() )
 			{
 				boxNodes[nodeAddr].init(
-					sublaneIndex, parentAddr, childCount, internalBase, 0, childIndex, childBox, binaryNode.m_box );
+					sublaneIndex,
+					parentAddr,
+					childCount,
+					leafType,
+					leafMask,
+					internalBase,
+					0,
+					childIndex,
+					childBox,
+					binaryNode.m_box );
 			}
 			else
 			{
-				const bool fatLeaf = isFatLeafNode( childIndex ) && !isLeafNode( childIndex );
 				if ( fatLeaf ) childIndex = encodeNodeIndex( getNodeAddr( childIndex ), TriangleType );
 				boxNodes[nodeAddr].init(
-					sublaneIndex, parentAddr, childCount, internalBase, 0, childIndex, childBox, binaryNode.m_box );
+					sublaneIndex,
+					parentAddr,
+					childCount,
+					leafType,
+					leafMask,
+					internalBase,
+					0,
+					childIndex,
+					childBox,
+					binaryNode.m_box );
 				if ( fatLeaf ) childIndex = encodeNodeIndex( getNodeAddr( childIndex ), BoxType ) | FatLeafBit;
 			}
 		}
 
-		task = make_uint3( InvalidValue );
+		task = ConversionTask{};
 
-		if constexpr ( !is_same<PrimitiveNode, TrianglePacketNode>::value )
+		if constexpr ( !isTrianglePacketNode<PrimitiveNode>() )
 		{
-			const bool	   leaf			 = isLeafNode( childIndex );
 			const uint64_t activeSubmask = hiprt::ballot( active && leaf ) & subwarpMask;
-			const uint32_t rangeSize	 = __popcll( activeSubmask );
-			const uint32_t rangeAddr	 = warpOffset( active && leaf, &header->m_referenceCount );
-			if ( active && leaf ) referenceIndices[rangeAddr] = childIndex;
-			if ( valid && sublaneIndex == 0 && activeSubmask != 0 ) task = { rangeAddr, nodeAddr, rangeSize };
+			const uint32_t rangeSize     = hiprt::popcll( activeSubmask );
+			const uint32_t rangeOffset   = warpOffset( active && leaf, &header->m_referenceCount );
+			if ( active && leaf ) referenceIndices[rangeOffset] = childIndex;
+			if ( valid && sublaneIndex == 0 && activeSubmask != 0 ) task = ConversionTask( rangeOffset, nodeAddr, rangeSize );
 		}
 		else
 		{
 			uint32_t leafRangeSize = 0;
-			uint32_t subtreeRefIndices[MaxFatLeafSize];
+			uint32_t subtreeRefIndices[PrimitiveNode::MaxFatLeafSize];
 
 			const bool fatLeaf = isFatLeafNode( childIndex );
 			if ( active && fatLeaf )
 			{
 				uint32_t prevLeafRangeSize = 0;
-				leafRangeSize			   = 1;
-				subtreeRefIndices[0]	   = childIndex;
+				leafRangeSize              = 1;
+				subtreeRefIndices[0]       = childIndex;
 				while ( prevLeafRangeSize != leafRangeSize )
 				{
 					prevLeafRangeSize = leafRangeSize;
@@ -1213,8 +1192,8 @@ __device__ void Collapse(
 					{
 						if ( !isLeafNode( subtreeRefIndices[j] ) )
 						{
-							const uint32_t referenceIndex	   = subtreeRefIndices[j];
-							subtreeRefIndices[j]			   = binaryNodes[getNodeAddr( referenceIndex )][0];
+							const uint32_t referenceIndex      = subtreeRefIndices[j];
+							subtreeRefIndices[j]               = binaryNodes[getNodeAddr( referenceIndex )][0];
 							subtreeRefIndices[leafRangeSize++] = binaryNodes[getNodeAddr( referenceIndex )][1];
 						}
 					}
@@ -1222,7 +1201,7 @@ __device__ void Collapse(
 			}
 
 			const uint32_t rangeBase   = warpOffset( leafRangeSize, &header->m_referenceCount );
-			uint32_t	   rangeOffset = rangeBase;
+			uint32_t       rangeOffset = rangeBase;
 
 			if ( active && fatLeaf )
 			{
@@ -1242,14 +1221,14 @@ __device__ void Collapse(
 			if ( valid && sublaneIndex == 0 && activeSubmask != 0 )
 			{
 				const uint32_t rangeSize = lastRangeOffset - rangeBase;
-				task					 = { rangeBase, nodeAddr, rangeSize };
+				task                     = ConversionTask( rangeBase, nodeAddr, rangeSize );
 			}
 		}
 		sync_warp();
 
 		if ( valid )
 		{
-			if ( sublaneIndex == 0 ) atomic_store( &taskQueue[taskIndex], task );
+			if ( sublaneIndex == 0 ) taskQueue[taskIndex].atomic_store( task );
 			done = true;
 		}
 
@@ -1257,164 +1236,166 @@ __device__ void Collapse(
 	}
 }
 
-extern "C" __global__ void Collapse_TrianglePairNode_ScratchNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	GeomHeader*	   header,
-	ScratchNode*   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void Collapse_rtip11_TrianglePairNode_ScratchNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ScratchNode*   binaryNodes,
+	const ReferenceNode* references,
+	GeomHeader*          header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<TrianglePairNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
+	Collapse<rtip11::TrianglePairNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void Collapse_TrianglePacketNode_ScratchNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	GeomHeader*	   header,
-	ScratchNode*   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void Collapse_rtip31_TrianglePacketNode_ScratchNode(
+	const uint32_t maxBoxNodeCount,
+	const uint32_t referenceCount,
+
+	const ScratchNode*   binaryNodes,
+	const ReferenceNode* references,
+	GeomHeader*          header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<TrianglePacketNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
+	Collapse<rtip31::TrianglePacketNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void Collapse_CustomNode_ScratchNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	GeomHeader*	   header,
-	ScratchNode*   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
-{
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<CustomNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
-}
-
-extern "C" __global__ void Collapse_UserInstanceNode_ScratchNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	SceneHeader*   header,
-	ScratchNode*   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
-{
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<UserInstanceNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
-}
-
-extern "C" __global__ void Collapse_HwInstanceNode_ScratchNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	SceneHeader*   header,
-	ScratchNode*   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
-{
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<HwInstanceNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
-}
-
-extern "C" __global__ void Collapse_TrianglePairNode_ApiNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	GeomHeader*	   header,
-	ApiNode*	   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
-{
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<TrianglePairNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
-}
-
-extern "C" __global__ void Collapse_TrianglePacketNode_ApiNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	GeomHeader*	   header,
-	ApiNode*	   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
-{
-	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<TrianglePacketNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
-}
-
-extern "C" __global__ void Collapse_CustomNode_ApiNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	GeomHeader*	   header,
-	ApiNode*	   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void Collapse_CustomNode_ScratchNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ScratchNode*   binaryNodes,
+	const ReferenceNode* references,
+	GeomHeader*          header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	Collapse<CustomNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void Collapse_UserInstanceNode_ApiNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	SceneHeader*   header,
-	ApiNode*	   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void Collapse_rtip11_InstanceNode_ScratchNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ScratchNode*   binaryNodes,
+	const ReferenceNode* references,
+	SceneHeader*         header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<UserInstanceNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
+	Collapse<rtip11::InstanceNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
 }
 
-extern "C" __global__ void Collapse_HwInstanceNode_ApiNode(
-	uint32_t	   maxBoxNodeCount,
-	uint32_t	   referenceCount,
-	SceneHeader*   header,
-	ApiNode*	   binaryNodes,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void Collapse_rtip31_InstanceNode_ScratchNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ScratchNode*   binaryNodes,
+	const ReferenceNode* references,
+	SceneHeader*         header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	Collapse<HwInstanceNode>(
-		index, maxBoxNodeCount, referenceCount, header, binaryNodes, references, boxNodes, taskQueue, referenceIndices );
+	Collapse<rtip31::InstanceNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
 }
 
-__device__ void CompactTasks( uint32_t index, uint32_t taskCount, uint3* taskQueue, uint32_t* taskCounter )
+HIPRT_KERNEL void Collapse_rtip11_TrianglePairNode_ApiNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ApiNode*       binaryNodes,
+	const ReferenceNode* references,
+	GeomHeader*          header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
 {
-	uint3 task	= make_uint3( InvalidValue );
-	bool  valid = false;
+	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<rtip11::TrianglePairNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
+}
+
+HIPRT_KERNEL void Collapse_rtip31_TrianglePacketNode_ApiNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ApiNode*       binaryNodes,
+	const ReferenceNode* references,
+	GeomHeader*          header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
+{
+	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<rtip31::TrianglePacketNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
+}
+
+HIPRT_KERNEL void Collapse_CustomNode_ApiNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ApiNode*       binaryNodes,
+	const ReferenceNode* references,
+	GeomHeader*          header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
+{
+	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<CustomNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
+}
+
+HIPRT_KERNEL void Collapse_rtip11_InstanceNode_ApiNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ApiNode*       binaryNodes,
+	const ReferenceNode* references,
+	SceneHeader*         header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
+{
+	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<rtip11::InstanceNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
+}
+
+HIPRT_KERNEL void Collapse_rtip31_InstanceNode_ApiNode(
+	const uint32_t       maxBoxNodeCount,
+	const uint32_t       referenceCount,
+	const ApiNode*       binaryNodes,
+	const ReferenceNode* references,
+	SceneHeader*         header,
+	BoxNode*             boxNodes,
+	ConversionTask*      taskQueue,
+	uint32_t*            referenceIndices )
+{
+	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
+	Collapse<rtip31::InstanceNode>(
+		index, maxBoxNodeCount, referenceCount, binaryNodes, references, header, boxNodes, taskQueue, referenceIndices );
+}
+
+HIPRT_DEVICE HIPRT_INLINE void
+CompactTasks( const uint32_t index, const uint32_t taskCount, ConversionTask* taskQueue, uint32_t* taskCounter )
+{
+	ConversionTask task{};
+	bool           valid = false;
 	if ( index < taskCount )
 	{
 		task  = taskQueue[index];
-		valid = task.z != InvalidValue && task.z > 0;
+		valid = task.m_rangeSize != InvalidValue && task.m_rangeSize > 0;
 	}
 	__syncthreads();
 
@@ -1423,7 +1404,7 @@ __device__ void CompactTasks( uint32_t index, uint32_t taskCount, uint3* taskQue
 	if ( valid ) taskQueue[newIndex] = task;
 }
 
-extern "C" __global__ void CompactTasks( uint32_t taskCount, uint3* taskQueue, uint32_t* taskCounter )
+HIPRT_KERNEL void CompactTasks( const uint32_t taskCount, ConversionTask* taskQueue, uint32_t* taskCounter )
 {
 	__shared__ uint32_t newTaskCount;
 	if ( threadIdx.x == 0 ) newTaskCount = 0;
@@ -1439,383 +1420,95 @@ extern "C" __global__ void CompactTasks( uint32_t taskCount, uint3* taskQueue, u
 }
 
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
-__device__ void PackLeaves(
-	uint32_t			index,
-	uint32_t			taskCount,
-	Header*				header,
-	ReferenceNode*		references,
-	BoxNode*			boxNodes,
-	PrimitiveNode*		primNodes,
-	PrimitiveContainer& primitives,
-	uint3*				taskQueue,
-	uint32_t*			referenceIndices )
+HIPRT_DEVICE HIPRT_INLINE void PackLeaves(
+	const uint32_t            index,
+	const uint32_t            taskCount,
+	const ConversionTask*     taskQueue,
+	const uint32_t*           referenceIndices,
+	const ReferenceNode*      references,
+	const PrimitiveContainer& primitives,
+	Header*                   header,
+	BoxNode*                  boxNodes,
+	PrimitiveNode*            primNodes )
 {
 	if ( index >= taskCount ) return;
 
-	uint3	 task			 = taskQueue[index];
-	uint32_t referenceOffset = task.x;
-	uint32_t nodeAddr		 = task.y;
-	uint32_t leafCount		 = task.z;
-	if ( leafCount == InvalidValue || leafCount == 0 ) return;
-
-	const uint32_t primNodeBase	  = atomicAdd( &header->m_primNodeCount, leafCount );
-	uint32_t	   primNodeOffset = primNodeBase;
-
-	BoxNode& node = boxNodes[nodeAddr];
-	node.setPrimNodeBase( primNodeBase );
-	for ( uint32_t i = 0; i < node.getChildCount(); ++i )
-	{
-		uint32_t childIndex = node.getChildIndex( i );
-		if ( isLeafNode( childIndex ) )
-		{
-			const uint32_t		referenceIndex = referenceIndices[referenceOffset++];
-			const ReferenceNode reference	   = references[getNodeAddr( referenceIndex )];
-			primNodes[primNodeOffset]		   = primitives.fetchPrimNode( reference.m_primIndex );
-			childIndex						   = encodeNodeIndex( primNodeOffset, getNodeType( childIndex ) );
-			node.patchChild( i, childIndex, 1 );
-			primNodeOffset++;
-		}
-	}
-}
-
-// assuming that triangle packets are AMD specific, there are no warp syncs
-template <>
-__device__ void PackLeaves<TriangleMesh, TrianglePacketNode, GeomHeader>(
-	uint32_t			index,
-	uint32_t			taskCount,
-	GeomHeader*			header,
-	ReferenceNode*		references,
-	BoxNode*			boxNodes,
-	TrianglePacketNode* primNodes,
-	TriangleMesh&		primitives,
-	uint3*				taskQueue,
-	uint32_t*			referenceIndices )
-{
-	if ( index >= taskCount ) return;
-
-	uint3	 task		 = taskQueue[index];
-	uint32_t rangeOffset = task.x;
-	uint32_t nodeAddr	 = task.y;
-	uint32_t rangeSize	 = task.z;
+	const ConversionTask task        = taskQueue[index];
+	const uint32_t       nodeAddr    = task.m_nodeAddr;
+	const uint32_t       rangeSize   = task.m_rangeSize;
+	uint32_t             rangeOffset = task.m_rangeOffset;
 	if ( rangeSize == InvalidValue || rangeSize == 0 ) return;
 
-	TrianglePacketCache triPacketCache;
-	TrianglePairOffsets triPairOffsetCache[BranchingFactor];
+	const uint32_t primNodeBase   = atomicAdd( &header->m_primNodeCount, rangeSize );
+	uint32_t       primNodeOffset = primNodeBase;
 
-	uint32_t		   primNodeCount = 1;
-	TrianglePacketData packet{};
-
-	const uint32_t rangeBase = rangeOffset;
-	while ( rangeOffset < rangeBase + rangeSize )
-	{
-		uint32_t referenceIndex = referenceIndices[rangeOffset];
-		referenceIndex &= ~RangeStartBit;
-		referenceIndex &= ~RangeEndBit;
-
-		// form triangle pair
-		const ReferenceNode reference	= references[getNodeAddr( referenceIndex )];
-		const uint2			pairIndices = primitives.fetchTrianglePairIndices( reference.m_primIndex );
-		uint3				indices0	= primitives.fetchTriangleIndices( pairIndices.x );
-		uint4				indices		= make_uint4( indices0, indices0.z );
-
-		if ( pairIndices.x != pairIndices.y )
-		{
-			uint3 indices1		= primitives.fetchTriangleIndices( pairIndices.y );
-			uint3 vertexMapping = tryPairTriangles( indices0, indices1 );
-
-			uint32_t vertexIndex = 0;
-			if ( vertexMapping.x == 3 ) vertexIndex = indices1.x;
-			if ( vertexMapping.y == 3 ) vertexIndex = indices1.y;
-			if ( vertexMapping.z == 3 ) vertexIndex = indices1.z;
-			indices.w = vertexIndex;
-		}
-
-		// find new vertices
-		uint32_t newVertMask = 0;
-		for ( uint32_t j = 0; j < 4; ++j )
-		{
-			if ( j == 3 && pairIndices.x == pairIndices.y ) break;
-
-			bool contains = false;
-			for ( uint32_t k = 0; k < packet.m_vertCount; ++k )
-			{
-				if ( triPacketCache.m_vertexIndices[k] == ( &indices.x )[j] )
-				{
-					contains = true;
-					break;
-				}
-			}
-
-			if ( !contains ) newVertMask |= 1 << j;
-		}
-
-		const uint32_t oldVertCount = packet.m_vertCount;
-		const uint32_t newVertCount = __popc( newVertMask );
-
-		// try to fit
-		if ( !packet.tryAddTrianglePair( pairIndices.x, pairIndices.y, newVertCount ) )
-		{
-			primNodeCount++;
-			packet = TrianglePacketData{};
-			continue;
-		}
-
-		// store new vertices
-		for ( uint32_t j = 0; j < 4; ++j )
-		{
-			if ( j == 3 && pairIndices.x == pairIndices.y ) break;
-
-			bool contains = !( newVertMask & ( 1 << j ) );
-			if ( !contains )
-			{
-				uint32_t vertexMask							= ( 1 << j ) - 1;
-				uint32_t vertexIndex						= oldVertCount + __popc( newVertMask & vertexMask );
-				triPacketCache.m_vertexIndices[vertexIndex] = ( &indices.x )[j];
-			}
-		}
-
-		rangeOffset++;
-	}
-
-	const uint32_t primNodeBase	  = atomicAdd( &header->m_primNodeCount, primNodeCount );
-	uint32_t	   primNodeOffset = primNodeBase;
-
-	uint32_t triPairOffset	 = 0;
-	uint32_t triPacketOffset = 0;
-	uint32_t leafIndex		 = 0;
-
-	packet		= TrianglePacketData{};
-	rangeOffset = rangeBase;
-
-	while ( rangeOffset < rangeBase + rangeSize )
-	{
-		uint32_t   referenceIndex = referenceIndices[rangeOffset];
-		const bool rangeStart	  = referenceIndex & RangeStartBit;
-		const bool rangeEnd		  = referenceIndex & RangeEndBit;
-		referenceIndex &= ~RangeStartBit;
-		referenceIndex &= ~RangeEndBit;
-
-		// form triangle pair
-		const ReferenceNode reference	= references[getNodeAddr( referenceIndex )];
-		const uint2			pairIndices = primitives.fetchTrianglePairIndices( reference.m_primIndex );
-		uint3				indices0	= primitives.fetchTriangleIndices( pairIndices.x );
-		uint4				indices		= make_uint4( indices0, indices0.z );
-
-		uint3 vertexMapping{};
-		if ( pairIndices.x != pairIndices.y )
-		{
-			uint3 indices1 = primitives.fetchTriangleIndices( pairIndices.y );
-			vertexMapping  = tryPairTriangles( indices0, indices1 );
-
-			uint32_t vertexIndex = 0;
-			if ( vertexMapping.x == 3 ) vertexIndex = indices1.x;
-			if ( vertexMapping.y == 3 ) vertexIndex = indices1.y;
-			if ( vertexMapping.z == 3 ) vertexIndex = indices1.z;
-			indices.w = vertexIndex;
-		}
-
-		// find new vertices
-		uint32_t newVertMask = 0;
-		uint4	 vertexIndicesInPacket{};
-		for ( uint32_t j = 0; j < 4; ++j )
-		{
-			if ( j == 3 && pairIndices.x == pairIndices.y ) break;
-
-			bool contains = false;
-			for ( uint32_t k = 0; k < packet.m_vertCount; ++k )
-			{
-				if ( triPacketCache.m_vertexIndices[k] == ( &indices.x )[j] )
-				{
-					( &vertexIndicesInPacket.x )[j] = k;
-					contains						= true;
-					break;
-				}
-			}
-
-			if ( !contains )
-			{
-				( &vertexIndicesInPacket.x )[j] = packet.m_vertCount + __popc( newVertMask );
-				newVertMask |= 1 << j;
-			}
-		}
-
-		const uint32_t newVertCount = __popc( newVertMask );
-
-		// try to fit
-		if ( !packet.tryAddTrianglePair( pairIndices.x, pairIndices.y, newVertCount ) )
-		{
-			// build packet
-			TrianglePacketNode triPacketNode{};
-
-			// write header
-			TrianglePacketHeader hdr = packet.buildHeader();
-			triPacketNode.writeHeader( hdr );
-
-			// write indices & descriptors
-			for ( uint32_t j = 0; j < packet.m_triPairCount; ++j )
-			{
-				// write indices
-				triPacketNode.writePrimIndex( j, 0, hdr, triPacketCache.m_triPairData[j].m_pairIndices.x );
-				triPacketNode.writePrimIndex( j, 1, hdr, triPacketCache.m_triPairData[j].m_pairIndices.y );
-
-				// write descriptor
-				triPacketNode.writeDescriptor( j, triPacketCache.m_triPairData[j].m_descriptor );
-			}
-
-			// write vertices
-			for ( uint32_t j = 0; j < packet.m_vertCount; ++j )
-			{
-				const float3 vertex = primitives.fetchVertex( triPacketCache.m_vertexIndices[j] );
-				triPacketNode.writeVertex( j, vertex );
-			}
-
-			// write packet
-			primNodes[primNodeOffset++] = triPacketNode;
-
-			packet = TrianglePacketData{};
-			continue;
-		}
-
-		if ( rangeStart )
-		{
-			triPairOffset	= packet.m_triPairCount - 1;
-			triPacketOffset = primNodeOffset;
-		}
-
-		if ( rangeEnd )
-		{
-			triPairOffsetCache[leafIndex++] = TrianglePairOffsets( triPairOffset, triPacketOffset );
-		}
-
-		// store new vertices
-		for ( uint32_t j = 0; j < 4; ++j )
-		{
-			if ( j == 3 && pairIndices.x == pairIndices.y ) break;
-
-			bool contains = !( newVertMask & ( 1 << j ) );
-			if ( !contains )
-			{
-				uint32_t vertexIndexInPacket						= ( &vertexIndicesInPacket.x )[j];
-				triPacketCache.m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[j];
-			}
-		}
-
-		uint3 triIndices0 = make_uint3( vertexIndicesInPacket );
-		uint3 triIndices1{};
-		if ( pairIndices.x != pairIndices.y )
-		{
-			triIndices1.x = ( &vertexIndicesInPacket.x )[vertexMapping.x];
-			triIndices1.y = ( &vertexIndicesInPacket.x )[vertexMapping.y];
-			triIndices1.z = ( &vertexIndicesInPacket.x )[vertexMapping.z];
-		}
-
-		// store triangle pair
-		triPacketCache.m_triPairData[packet.m_triPairCount - 1] =
-			TrianglePairData( pairIndices, triIndices0, triIndices1, rangeEnd );
-
-		rangeOffset++;
-	}
-
-	// build packet
-	{
-		TrianglePacketNode triPacketNode{};
-
-		// write header
-		TrianglePacketHeader hdr = packet.buildHeader();
-		triPacketNode.writeHeader( hdr );
-
-		// write indices & descriptors
-		for ( uint32_t j = 0; j < packet.m_triPairCount; ++j )
-		{
-			// write indices
-			triPacketNode.writePrimIndex( j, 0, hdr, triPacketCache.m_triPairData[j].m_pairIndices.x );
-			triPacketNode.writePrimIndex( j, 1, hdr, triPacketCache.m_triPairData[j].m_pairIndices.y );
-
-			// write descriptor
-			triPacketNode.writeDescriptor( j, triPacketCache.m_triPairData[j].m_descriptor );
-		}
-
-		// write vertices
-		for ( uint32_t j = 0; j < packet.m_vertCount; ++j )
-		{
-			const float3 vertex = primitives.fetchVertex( triPacketCache.m_vertexIndices[j] );
-			triPacketNode.writeVertex( j, vertex );
-		}
-
-		// write packet
-		primNodes[primNodeOffset++] = triPacketNode;
-	}
-
-	// patch children
 	BoxNode& node = boxNodes[nodeAddr];
-	node.setPrimNodeBase( primNodeBase );
-	const uint32_t leafCount = leafIndex;
-	leafIndex				 = 0;
 	for ( uint32_t i = 0; i < node.getChildCount(); ++i )
 	{
-		uint32_t childIndex = node.getChildIndex( i );
+		const uint32_t childIndex = node.getChildIndex( i );
 		if ( isLeafNode( childIndex ) )
 		{
-			uint32_t childType	   = triPairIndexToType( triPairOffsetCache[leafIndex].m_pairOffset );
-			uint32_t childOffsset0 = triPairOffsetCache[leafIndex].m_packetOffset;
-			uint32_t childOffsset1 = triPairOffsetCache[min( leafIndex + 1, leafCount - 1 )].m_packetOffset;
-			uint32_t childRange	   = childOffsset1 - childOffsset0;
-			node.patchChild( i, childType, childRange );
-			leafIndex++;
+			const uint32_t      referenceIndex = referenceIndices[rangeOffset++];
+			const ReferenceNode reference      = references[getNodeAddr( referenceIndex )];
+			primNodes[primNodeOffset++]        = primitives.template fetchPrimNode<PrimitiveNode>( reference.m_primIndex );
 		}
 	}
+
+	// patch parent
+	node.patchParent( primNodeBase );
 }
 
 // assuming that triangle packets are AMD specific, there are no warp syncs
-__device__ void PackLeavesWarp(
-	uint32_t			index,
-	uint32_t			taskCount,
-	GeomHeader*			header,
-	ReferenceNode*		references,
-	BoxNode*			boxNodes,
-	TrianglePacketNode* primNodes,
-	TriangleMesh&		primitives,
-	uint3*				taskQueue,
-	uint32_t*			referenceIndices )
+HIPRT_DEVICE HIPRT_INLINE void PackLeaves(
+	const uint32_t              index,
+	const uint32_t              taskCount,
+	const ConversionTask*       taskQueue,
+	const uint32_t*             referenceIndices,
+	const ReferenceNode*        references,
+	const TriangleMesh&         primitives,
+	GeomHeader*                 header,
+	rtip31::BoxNode*            boxNodes,
+	rtip31::TrianglePacketNode* primNodes )
 {
 	if ( threadIdx.x >= WarpSize ) return;
 
-	constexpr uint32_t			   PacketTasksPerWarp = WarpSize / LanesPerLeafPacketTask;
-	__shared__ TrianglePacketCache triPacketCache[PacketTasksPerWarp];
-	__shared__ TrianglePairOffsets triPairOffsetCache[PacketTasksPerWarp][BranchingFactor];
+	constexpr uint32_t PacketTasksPerWarp = WarpSize / rtip31::TrianglePacketNode::LanesPerLeafPacketTask;
+	__shared__ rtip31::TrianglePacketCache triPacketCache[PacketTasksPerWarp];
+	__shared__ rtip31::TrianglePairOffsets triPairOffsetCache[PacketTasksPerWarp][rtip31::BoxNode::BranchingFactor];
 
-	const uint32_t laneIndex	= threadIdx.x % WarpSize;
-	const uint32_t taskIndex	= index / LanesPerLeafPacketTask;
-	const uint32_t subwarpIndex = laneIndex / LanesPerLeafPacketTask;
-	const uint32_t sublaneIndex = laneIndex % LanesPerLeafPacketTask;
+	const uint32_t laneIndex    = threadIdx.x % WarpSize;
+	const uint32_t taskIndex    = index / rtip31::TrianglePacketNode::LanesPerLeafPacketTask;
+	const uint32_t subwarpIndex = laneIndex / rtip31::TrianglePacketNode::LanesPerLeafPacketTask;
+	const uint32_t sublaneIndex = laneIndex % rtip31::TrianglePacketNode::LanesPerLeafPacketTask;
 
-	uint3	 task		 = taskQueue[min( taskIndex, taskCount - 1 )];
-	uint32_t rangeOffset = task.x;
-	uint32_t nodeAddr	 = task.y;
-	uint32_t rangeSize	 = task.z;
+	const ConversionTask task        = taskQueue[min( taskIndex, taskCount - 1 )];
+	const uint32_t       nodeAddr    = task.m_nodeAddr;
+	const uint32_t       rangeSize   = task.m_rangeSize;
+	uint32_t             rangeOffset = task.m_rangeOffset;
 
 	uint32_t primNodeCount = 0;
 
 	const uint32_t rangeBase = rangeOffset;
 	while ( hiprt::ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
 	{
-		TrianglePacketData packet{};
+		rtip31::TrianglePacketData packet{};
 
-		while ( rangeOffset < rangeBase + rangeSize && packet.m_triPairCount < MaxTrianglePairsPerTrianglePacket )
+		while ( rangeOffset < rangeBase + rangeSize &&
+		        packet.getTrianglePairCount() < rtip31::TrianglePacketNode::MaxTrianglePairs )
 		{
 			uint32_t referenceIndex = referenceIndices[rangeOffset];
 			referenceIndex &= ~RangeStartBit;
 			referenceIndex &= ~RangeEndBit;
 
 			// form triangle pair
-			const ReferenceNode reference	= references[getNodeAddr( referenceIndex )];
-			const uint2			pairIndices = primitives.fetchTrianglePairIndices( reference.m_primIndex );
-			uint3				indices0	= primitives.fetchTriangleIndices( pairIndices.x );
-			uint4				indices		= make_uint4( indices0, indices0.z );
+			const ReferenceNode reference   = references[getNodeAddr( referenceIndex )];
+			const uint2         pairIndices = primitives.fetchTrianglePairIndices( reference.m_primIndex );
+			uint3               indices0    = primitives.fetchTriangleIndices( pairIndices.x );
+			uint4               indices     = make_uint4( indices0, indices0.z );
 
 			if ( pairIndices.x != pairIndices.y )
 			{
-				uint3 indices1		= primitives.fetchTriangleIndices( pairIndices.y );
+				uint3 indices1      = primitives.fetchTriangleIndices( pairIndices.y );
 				uint3 vertexMapping = tryPairTriangles( indices0, indices1 );
 
 				uint32_t vertexIndex = 0;
@@ -1828,22 +1521,23 @@ __device__ void PackLeavesWarp(
 			// find new vertices
 			const bool valid = sublaneIndex < 3 || pairIndices.x != pairIndices.y;
 
-			bool	 contains = false;
+			bool     contains = false;
 			uint32_t vertexIndexInPacket{};
 			for ( uint32_t k = 0; k < packet.m_vertCount; ++k )
 			{
-				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == ( &indices.x )[sublaneIndex] )
+				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == component( indices, sublaneIndex ) )
 				{
 					vertexIndexInPacket = k;
-					contains			= true;
+					contains            = true;
 					break;
 				}
 			}
 
-			const uint32_t newVertMask =
-				( hiprt::ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpIndex ) ) & 0xf;
+			const uint32_t newVertMask = ( hiprt::ballot( !contains && valid ) >>
+			                               ( rtip31::TrianglePacketNode::LanesPerLeafPacketTask * subwarpIndex ) ) &
+			                             0xf;
 			const uint32_t oldVertCount = packet.m_vertCount;
-			const uint32_t newVertCount = __popc( newVertMask );
+			const uint32_t newVertCount = hiprt::popc( newVertMask );
 
 			// try to fit
 			if ( !packet.tryAddTrianglePair( pairIndices.x, pairIndices.y, newVertCount ) ) break;
@@ -1852,8 +1546,8 @@ __device__ void PackLeavesWarp(
 			if ( !contains )
 			{
 				const uint32_t vertexMask = ( 1 << sublaneIndex ) - 1;
-				vertexIndexInPacket		  = oldVertCount + __popc( newVertMask & vertexMask );
-				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[sublaneIndex];
+				vertexIndexInPacket       = oldVertCount + hiprt::popc( newVertMask & vertexMask );
+				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = component( indices, sublaneIndex );
 			}
 
 			rangeOffset++;
@@ -1867,33 +1561,34 @@ __device__ void PackLeavesWarp(
 		if ( taskIndex < taskCount && packet.m_triPairCount > 0 ) primNodeCount++;
 	}
 
-	const uint32_t primNodeBase =
-		warpOffset( sublaneIndex == LanesPerLeafPacketTask - 1 ? primNodeCount : 0u, &header->m_primNodeCount );
+	const uint32_t primNodeBase = warpOffset(
+		sublaneIndex == rtip31::TrianglePacketNode::LanesPerLeafPacketTask - 1 ? primNodeCount : 0u, &header->m_primNodeCount );
 	uint32_t primNodeOffset = primNodeBase;
 
-	uint32_t triPairOffset	 = 0;
+	uint32_t triPairOffset   = 0;
 	uint32_t triPacketOffset = 0;
-	uint32_t leafIndex		 = 0;
+	uint32_t leafIndex       = 0;
 
 	rangeOffset = rangeBase;
 
 	while ( hiprt::ballot( taskIndex < taskCount && rangeOffset < rangeBase + rangeSize ) )
 	{
-		TrianglePacketData packet{};
+		rtip31::TrianglePacketData packet{};
 
-		while ( rangeOffset < rangeBase + rangeSize && packet.m_triPairCount < MaxTrianglePairsPerTrianglePacket )
+		while ( rangeOffset < rangeBase + rangeSize &&
+		        packet.getTrianglePairCount() < rtip31::TrianglePacketNode::MaxTrianglePairs )
 		{
 			uint32_t   referenceIndex = referenceIndices[rangeOffset];
-			const bool rangeStart	  = referenceIndex & RangeStartBit;
-			const bool rangeEnd		  = referenceIndex & RangeEndBit;
+			const bool rangeStart     = referenceIndex & RangeStartBit;
+			const bool rangeEnd       = referenceIndex & RangeEndBit;
 			referenceIndex &= ~RangeStartBit;
 			referenceIndex &= ~RangeEndBit;
 
 			// form triangle pair
-			const ReferenceNode reference	= references[getNodeAddr( referenceIndex )];
-			const uint2			pairIndices = primitives.fetchTrianglePairIndices( reference.m_primIndex );
-			uint3				indices0	= primitives.fetchTriangleIndices( pairIndices.x );
-			uint4				indices		= make_uint4( indices0, indices0.z );
+			const ReferenceNode reference   = references[getNodeAddr( referenceIndex )];
+			const uint2         pairIndices = primitives.fetchTrianglePairIndices( reference.m_primIndex );
+			uint3               indices0    = primitives.fetchTriangleIndices( pairIndices.x );
+			uint4               indices     = make_uint4( indices0, indices0.z );
 
 			uint3 vertexMapping{};
 			if ( pairIndices.x != pairIndices.y )
@@ -1911,65 +1606,73 @@ __device__ void PackLeavesWarp(
 			// find new vertices
 			const bool valid = sublaneIndex < 3 || pairIndices.x != pairIndices.y;
 
-			bool	 contains = false;
+			bool     contains = false;
 			uint32_t vertexIndexInPacket{};
 			for ( uint32_t k = 0; k < packet.m_vertCount; ++k )
 			{
-				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == ( &indices.x )[sublaneIndex] )
+				if ( triPacketCache[subwarpIndex].m_vertexIndices[k] == component( indices, sublaneIndex ) )
 				{
 					vertexIndexInPacket = k;
-					contains			= true;
+					contains            = true;
 					break;
 				}
 			}
 
-			const uint32_t newVertMask =
-				( hiprt::ballot( !contains && valid ) >> ( LanesPerLeafPacketTask * subwarpIndex ) ) & 0xf;
+			const uint32_t newVertMask = ( hiprt::ballot( !contains && valid ) >>
+			                               ( rtip31::TrianglePacketNode::LanesPerLeafPacketTask * subwarpIndex ) ) &
+			                             0xf;
 			const uint32_t oldVertCount = packet.m_vertCount;
-			const uint32_t newVertCount = __popc( newVertMask );
+			const uint32_t newVertCount = hiprt::popc( newVertMask );
 
 			// try to fit
 			if ( !packet.tryAddTrianglePair( pairIndices.x, pairIndices.y, newVertCount ) ) break;
 
 			if ( rangeStart )
 			{
-				triPairOffset	= packet.m_triPairCount - 1;
-				triPacketOffset = primNodeOffset;
+				triPairOffset   = packet.m_triPairCount - 1;
+				triPacketOffset = primNodeOffset - primNodeBase;
 			}
 
 			if ( rangeEnd )
 			{
-				triPairOffsetCache[subwarpIndex][leafIndex++] = TrianglePairOffsets( triPairOffset, triPacketOffset );
+				triPairOffsetCache[subwarpIndex][leafIndex++] = rtip31::TrianglePairOffsets( triPairOffset, triPacketOffset );
 			}
 
 			// store new vertices
 			if ( !contains )
 			{
 				const uint32_t vertexMask = ( 1 << sublaneIndex ) - 1;
-				vertexIndexInPacket		  = oldVertCount + __popc( newVertMask & vertexMask );
-				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = ( &indices.x )[sublaneIndex];
+				vertexIndexInPacket       = oldVertCount + hiprt::popc( newVertMask & vertexMask );
+				triPacketCache[subwarpIndex].m_vertexIndices[vertexIndexInPacket] = component( indices, sublaneIndex );
 			}
 
 			// shuffle vertex indices in packet
 			uint4 vertexIndicesInPacket;
-			vertexIndicesInPacket.x = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 0 );
-			vertexIndicesInPacket.y = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 1 );
-			vertexIndicesInPacket.z = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 2 );
-			vertexIndicesInPacket.w = shfl( vertexIndexInPacket, subwarpIndex * LanesPerLeafPacketTask + 3 );
+			vertexIndicesInPacket.x =
+				shfl( vertexIndexInPacket, subwarpIndex * rtip31::TrianglePacketNode::LanesPerLeafPacketTask + 0 );
+			vertexIndicesInPacket.y =
+				shfl( vertexIndexInPacket, subwarpIndex * rtip31::TrianglePacketNode::LanesPerLeafPacketTask + 1 );
+			vertexIndicesInPacket.z =
+				shfl( vertexIndexInPacket, subwarpIndex * rtip31::TrianglePacketNode::LanesPerLeafPacketTask + 2 );
+			vertexIndicesInPacket.w =
+				shfl( vertexIndexInPacket, subwarpIndex * rtip31::TrianglePacketNode::LanesPerLeafPacketTask + 3 );
 
 			uint3 triIndices0 = make_uint3( vertexIndicesInPacket );
 			uint3 triIndices1{};
-			if ( pairIndices.x != pairIndices.y )
+			// tryPairTriangles reports InvalidValue when the two triangles cannot share vertex slots, which
+			// indexes past the packet's four slots. Degenerate triangles make its verdict order-dependent,
+			// so a caller-supplied pair can fail here even though it passed the caller's own pairing test.
+			if ( pairIndices.x != pairIndices.y && vertexMapping.x != InvalidValue )
 			{
-				triIndices1.x = ( &vertexIndicesInPacket.x )[vertexMapping.x];
-				triIndices1.y = ( &vertexIndicesInPacket.x )[vertexMapping.y];
-				triIndices1.z = ( &vertexIndicesInPacket.x )[vertexMapping.z];
+				triIndices1.x = component( vertexIndicesInPacket, vertexMapping.x );
+				triIndices1.y = component( vertexIndicesInPacket, vertexMapping.y );
+				triIndices1.z = component( vertexIndicesInPacket, vertexMapping.z );
 			}
 
 			// store triangle pair
 			if ( sublaneIndex == 0 )
 				triPacketCache[subwarpIndex].m_triPairData[packet.m_triPairCount - 1] =
-					TrianglePairData( pairIndices, triIndices0, triIndices1, rangeEnd );
+					rtip31::TrianglePairData( pairIndices, triIndices0, triIndices1, rangeEnd );
 
 			rangeOffset++;
 			// not sure why but this fixes the issue on linux
@@ -1985,21 +1688,21 @@ __device__ void PackLeavesWarp(
 			const uint32_t halfWarpIndex = laneIndex / 16;
 			const uint32_t halfLaneIndex = laneIndex % 16;
 
-			const uint32_t broadcastLane0 = __ffsll( static_cast<unsigned long long>( packetMask ) ) - 1;
-			packetMask ^= 1 << broadcastLane0;
+			const uint32_t broadcastLane0 = hiprt::ffsll( packetMask ) - 1;
+			packetMask ^= 1ull << broadcastLane0;
 
-			const uint32_t broadcastLane1 = __ffsll( static_cast<unsigned long long>( packetMask ) ) - 1;
-			const bool	   secondValid	  = packetMask != 0;
-			if ( secondValid ) packetMask ^= 1 << broadcastLane1;
+			const uint32_t broadcastLane1 = hiprt::ffsll( packetMask ) - 1;
+			const bool     secondValid    = packetMask != 0;
+			if ( secondValid ) packetMask ^= 1ull << broadcastLane1;
 
-			const uint32_t			 broadcastLane			 = ( halfWarpIndex == 0 ) ? broadcastLane0 : broadcastLane1;
-			const uint32_t			 broadcastSubwarpIndex	 = broadcastLane / LanesPerLeafPacketTask;
-			const uint32_t			 broadcastPrimNodeOffset = shfl( primNodeOffset, broadcastLane );
-			const TrianglePacketData broadcastPacket		 = packet.shuffle( broadcastLane );
+			const uint32_t broadcastLane           = ( halfWarpIndex == 0 ) ? broadcastLane0 : broadcastLane1;
+			const uint32_t broadcastSubwarpIndex   = broadcastLane / rtip31::TrianglePacketNode::LanesPerLeafPacketTask;
+			const uint32_t broadcastPrimNodeOffset = shfl( primNodeOffset, broadcastLane );
+			const rtip31::TrianglePacketData broadcastPacket = packet.shuffle( broadcastLane );
 
 			// store current packet data to registers
-			TrianglePairData halfLaneTriPairData;
-			uint32_t		 halfLaneVertexIndex;
+			rtip31::TrianglePairData halfLaneTriPairData;
+			uint32_t                 halfLaneVertexIndex;
 			if ( halfWarpIndex == 0 || secondValid )
 			{
 				if ( halfLaneIndex < 2 * broadcastPacket.m_triPairCount )
@@ -2009,8 +1712,8 @@ __device__ void PackLeavesWarp(
 			}
 
 			// reuse shared memory
-			TrianglePacketNode& triPacketNode =
-				*reinterpret_cast<TrianglePacketNode*>( &triPacketCache[broadcastSubwarpIndex] );
+			rtip31::TrianglePacketNode& triPacketNode =
+				*reinterpret_cast<rtip31::TrianglePacketNode*>( &triPacketCache[broadcastSubwarpIndex] );
 			if ( halfWarpIndex == 0 || secondValid )
 			{
 				triPacketNode.m_data[halfLaneIndex + 0 * 16] = 0;
@@ -2021,7 +1724,7 @@ __device__ void PackLeavesWarp(
 			if ( halfWarpIndex == 0 || secondValid )
 			{
 				// write header
-				TrianglePacketHeader hdr = broadcastPacket.buildHeader();
+				rtip31::TrianglePacketHeader hdr = broadcastPacket.buildHeader();
 				if ( halfLaneIndex == 0 ) triPacketNode.writeHeader<true>( hdr );
 
 				// write indices & descriptors
@@ -2032,7 +1735,7 @@ __device__ void PackLeavesWarp(
 						halfLaneIndex / 2,
 						halfLaneIndex % 2,
 						hdr,
-						( &halfLaneTriPairData.m_pairIndices.x )[halfLaneIndex % 2] );
+						component( halfLaneTriPairData.m_pairIndices, halfLaneIndex % 2 ) );
 
 					// write descriptors
 					if ( halfLaneIndex % 2 == 0 )
@@ -2060,129 +1763,111 @@ __device__ void PackLeavesWarp(
 		if ( taskIndex < taskCount && packet.m_triPairCount > 0 ) primNodeOffset++;
 	}
 
-	// patch children
-	if ( taskIndex < taskCount )
-	{
-		BoxNode& node = boxNodes[nodeAddr];
-		node.setPrimNodeBase( primNodeBase );
-		const uint32_t leafCount = leafIndex;
-		leafIndex				 = 0;
-		for ( uint32_t i = 0; i < node.getChildCount(); ++i )
-		{
-			uint32_t childIndex = node.getChildIndex( i );
-			if ( isLeafNode( childIndex ) )
-			{
-				uint32_t childType	   = triPairIndexToType( triPairOffsetCache[subwarpIndex][leafIndex].m_pairOffset );
-				uint32_t childOffsset0 = triPairOffsetCache[subwarpIndex][leafIndex].m_packetOffset;
-				uint32_t childOffsset1 = triPairOffsetCache[subwarpIndex][min( leafIndex + 1, leafCount - 1 )].m_packetOffset;
-				uint32_t childRange	   = childOffsset1 - childOffsset0;
-				node.patchChild( i, childType, childRange );
-				leafIndex++;
-			}
-		}
-	}
+	// patch parent
+	if ( taskIndex < taskCount && sublaneIndex == 0 )
+		boxNodes[nodeAddr].patchParent( primNodeBase, leafIndex, triPairOffsetCache[subwarpIndex] );
 }
 
-extern "C" __global__ void __launch_bounds__( WarpSize ) PackLeaves_TriangleMesh_TrianglePacketNode(
-	uint32_t			taskCount,
-	GeomHeader*			header,
-	ReferenceNode*		references,
-	BoxNode*			boxNodes,
-	TrianglePacketNode* primNodes,
-	TriangleMesh		primitives,
-	uint3*				taskQueue,
-	uint32_t*			referenceIndices )
+HIPRT_KERNEL void __launch_bounds__( WarpSize ) PackLeaves_TriangleMesh_rtip31_TrianglePacketNode(
+	const uint32_t              taskCount,
+	const ConversionTask*       taskQueue,
+	const uint32_t*             referenceIndices,
+	const ReferenceNode*        references,
+	const TriangleMesh          primitives,
+	GeomHeader*                 header,
+	rtip31::BoxNode*            boxNodes,
+	rtip31::TrianglePacketNode* primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeavesWarp( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PackLeaves_TriangleMesh_TrianglePairNode(
-	uint32_t	   taskCount,
-	GeomHeader*	   header,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	TriangleNode*  primNodes,
-	TriangleMesh   primitives,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void PackLeaves_TriangleMesh_rtip11_TrianglePairNode(
+	const uint32_t        taskCount,
+	const ConversionTask* taskQueue,
+	const uint32_t*       referenceIndices,
+	const ReferenceNode*  references,
+	const TriangleMesh    primitives,
+	GeomHeader*           header,
+	BoxNode*              boxNodes,
+	TriangleNode*         primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PackLeaves_AabbList_CustomNode(
-	uint32_t	   taskCount,
-	GeomHeader*	   header,
-	ReferenceNode* references,
-	BoxNode*	   boxNodes,
-	CustomNode*	   primNodes,
-	AabbList	   primitives,
-	uint3*		   taskQueue,
-	uint32_t*	   referenceIndices )
+HIPRT_KERNEL void PackLeaves_AabbList_CustomNode(
+	const uint32_t        taskCount,
+	const ConversionTask* taskQueue,
+	const uint32_t*       referenceIndices,
+	const ReferenceNode*  references,
+	const AabbList        primitives,
+	GeomHeader*           header,
+	BoxNode*              boxNodes,
+	CustomNode*           primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameSRT_UserInstanceNode(
-	uint32_t					taskCount,
-	SceneHeader*				header,
-	ReferenceNode*				references,
-	BoxNode*					boxNodes,
-	InstanceNode*				primNodes,
-	InstanceList<hiprtFrameSRT> primitives,
-	uint3*						taskQueue,
-	uint32_t*					referenceIndices )
+HIPRT_KERNEL void PackLeaves_InstanceList_hiprtFrameSRT_rtip11_InstanceNode(
+	const uint32_t                    taskCount,
+	const ConversionTask*             taskQueue,
+	const uint32_t*                   referenceIndices,
+	const ReferenceNode*              references,
+	const InstanceList<hiprtFrameSRT> primitives,
+	SceneHeader*                      header,
+	BoxNode*                          boxNodes,
+	InstanceNode*                     primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameSRT_HwInstanceNode(
-	uint32_t					taskCount,
-	SceneHeader*				header,
-	ReferenceNode*				references,
-	BoxNode*					boxNodes,
-	InstanceNode*				primNodes,
-	InstanceList<hiprtFrameSRT> primitives,
-	uint3*						taskQueue,
-	uint32_t*					referenceIndices )
+HIPRT_KERNEL void PackLeaves_InstanceList_hiprtFrameSRT_rtip31_InstanceNode(
+	const uint32_t                    taskCount,
+	const ConversionTask*             taskQueue,
+	const uint32_t*                   referenceIndices,
+	const ReferenceNode*              references,
+	const InstanceList<hiprtFrameSRT> primitives,
+	SceneHeader*                      header,
+	BoxNode*                          boxNodes,
+	InstanceNode*                     primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameMatrix_UserInstanceNode(
-	uint32_t					   taskCount,
-	SceneHeader*				   header,
-	ReferenceNode*				   references,
-	BoxNode*					   boxNodes,
-	InstanceNode*				   primNodes,
-	InstanceList<hiprtFrameMatrix> primitives,
-	uint3*						   taskQueue,
-	uint32_t*					   referenceIndices )
+HIPRT_KERNEL void PackLeaves_InstanceList_hiprtFrameMatrix_rtip11_InstanceNode(
+	const uint32_t                       taskCount,
+	const ConversionTask*                taskQueue,
+	const uint32_t*                      referenceIndices,
+	const ReferenceNode*                 references,
+	const InstanceList<hiprtFrameMatrix> primitives,
+	SceneHeader*                         header,
+	BoxNode*                             boxNodes,
+	InstanceNode*                        primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
-extern "C" __global__ void PackLeaves_InstanceList_hiprtFrameMatrix_HwInstanceNode(
-	uint32_t					   taskCount,
-	SceneHeader*				   header,
-	ReferenceNode*				   references,
-	BoxNode*					   boxNodes,
-	InstanceNode*				   primNodes,
-	InstanceList<hiprtFrameMatrix> primitives,
-	uint3*						   taskQueue,
-	uint32_t*					   referenceIndices )
+HIPRT_KERNEL void PackLeaves_InstanceList_hiprtFrameMatrix_rtip31_InstanceNode(
+	const uint32_t                       taskCount,
+	const ConversionTask*                taskQueue,
+	const uint32_t*                      referenceIndices,
+	const ReferenceNode*                 references,
+	const InstanceList<hiprtFrameMatrix> primitives,
+	SceneHeader*                         header,
+	BoxNode*                             boxNodes,
+	InstanceNode*                        primNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
-	PackLeaves( index, taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices );
+	PackLeaves( index, taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes );
 }
 
 template <uint32_t LeafType>
-__device__ void PatchApiNodes( uint32_t index, uint32_t nodeCount, ApiNode* apiNodes )
+HIPRT_DEVICE HIPRT_INLINE void PatchApiNodes( const uint32_t index, const uint32_t nodeCount, ApiNode* apiNodes )
 {
 	if ( index < nodeCount )
 	{
@@ -2197,43 +1882,43 @@ __device__ void PatchApiNodes( uint32_t index, uint32_t nodeCount, ApiNode* apiN
 	}
 }
 
-extern "C" __global__ void PatchApiNodes_TriangleMesh( uint32_t nodeCount, ApiNode* apiNodes )
+HIPRT_KERNEL void PatchApiNodes_TriangleMesh( const uint32_t nodeCount, ApiNode* apiNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PatchApiNodes<TriangleType>( index, nodeCount, apiNodes );
 }
 
-extern "C" __global__ void PatchApiNodes_AabbList( uint32_t nodeCount, ApiNode* apiNodes )
+HIPRT_KERNEL void PatchApiNodes_AabbList( const uint32_t nodeCount, ApiNode* apiNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PatchApiNodes<CustomType>( index, nodeCount, apiNodes );
 }
 
-extern "C" __global__ void PatchApiNodes_InstanceList_hiprtFrameSRT( uint32_t nodeCount, ApiNode* apiNodes )
+HIPRT_KERNEL void PatchApiNodes_InstanceList_hiprtFrameSRT( const uint32_t nodeCount, ApiNode* apiNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PatchApiNodes<InstanceType>( index, nodeCount, apiNodes );
 }
 
-extern "C" __global__ void PatchApiNodes_InstanceList_hiprtFrameMatrix( uint32_t nodeCount, ApiNode* apiNodes )
+HIPRT_KERNEL void PatchApiNodes_InstanceList_hiprtFrameMatrix( const uint32_t nodeCount, ApiNode* apiNodes )
 {
 	const uint32_t index = threadIdx.x + blockIdx.x * blockDim.x;
 	PatchApiNodes<InstanceType>( index, nodeCount, apiNodes );
 }
 
-extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
-	ComputeCost( uint32_t nodeCount, BoxNode* boxNodes, float* costCounter )
+HIPRT_KERNEL void __launch_bounds__( BvhBuilderReductionBlockSize )
+	ComputeCost( const uint32_t nodeCount, const BoxNode* boxNodes, float* costCounter )
 {
 	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	float cost = 0.0f;
 	if ( index < nodeCount )
 	{
-		float rootAreaInv = 1.0f / boxNodes[0].area();
+		const float rootAreaInv = 1.0f / boxNodes[0].area();
 
 		for ( uint32_t i = 0; i < boxNodes[index].getChildCount(); ++i )
 			cost += ( boxNodes[index].getChildType( i ) == BoxType ? Ct : Ci ) * boxNodes[index].getChildBox( i ).area() *
-					rootAreaInv;
+			        rootAreaInv;
 
 		if ( index == 0 ) cost += Ct;
 	}
@@ -2241,6 +1926,6 @@ extern "C" __global__ void __launch_bounds__( BvhBuilderReductionBlockSize )
 	constexpr uint32_t WarpsPerBlock = DivideRoundUp( BvhBuilderReductionBlockSize, WarpSize );
 	__shared__ float   costCache[WarpsPerBlock];
 
-	float blockCost = blockSum( cost, costCache );
+	const float blockCost = blockSum( cost, costCache );
 	if ( threadIdx.x == 0 ) atomicAdd( costCounter, blockCost );
 }

@@ -46,7 +46,7 @@ class LbvhBuilder
 {
   public:
 	static constexpr uint32_t ReductionBlockSize = BvhBuilderReductionBlockSize;
-	static constexpr uint32_t EmitBlockSize		 = LbvhEmitBlockSize;
+	static constexpr uint32_t EmitBlockSize      = LbvhEmitBlockSize;
 
 	enum Times
 	{
@@ -62,137 +62,136 @@ class LbvhBuilder
 		PackLeavesTime,
 	};
 
-	LbvhBuilder()								 = delete;
+	LbvhBuilder()                                = delete;
 	LbvhBuilder& operator=( const LbvhBuilder& ) = delete;
 
-	static size_t getTemporaryBufferSize( const size_t count );
+	[[nodiscard]] static size_t getTemporaryBufferSize( const size_t count );
 
-	static size_t
+	[[nodiscard]] static size_t
 	getTemporaryBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
-	static size_t
+	[[nodiscard]] static size_t
 	getTemporaryBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
-	static size_t
+	[[nodiscard]] static size_t
 	getStorageBufferSize( Context& context, const hiprtGeometryBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
-	static size_t
+	[[nodiscard]] static size_t
 	getStorageBufferSize( Context& context, const hiprtSceneBuildInput& buildInput, const hiprtBuildOptions buildOptions );
 
 	static void build(
-		Context&					   context,
+		Context&                       context,
 		const hiprtGeometryBuildInput& buildInput,
-		const hiprtBuildOptions		   buildOptions,
-		hiprtDevicePtr				   temporaryBuffer,
-		oroStream					   stream,
-		hiprtDevicePtr				   buffer );
+		const hiprtBuildOptions        buildOptions,
+		hiprtDevicePtr                 temporaryBuffer,
+		oroStream                      stream,
+		hiprtDevicePtr                 buffer );
 
 	static void build(
-		Context&					context,
+		Context&                    context,
 		const hiprtSceneBuildInput& buildInput,
-		const hiprtBuildOptions		buildOptions,
-		hiprtDevicePtr				temporaryBuffer,
-		oroStream					stream,
-		hiprtDevicePtr				buffer );
+		const hiprtBuildOptions     buildOptions,
+		hiprtDevicePtr              temporaryBuffer,
+		const oroStream             stream,
+		hiprtDevicePtr              buffer );
 
 	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void build(
-		Context&				context,
-		PrimitiveContainer&		primitives,
+		Context&                context,
+		PrimitiveContainer&     primitives,
 		const hiprtBuildOptions buildOptions,
-		uint32_t				geomType,
-		MemoryArena&			temporaryMemoryArena,
-		oroStream				stream,
-		MemoryArena&			storageMemoryArena );
+		const uint32_t          geomType,
+		MemoryArena&            temporaryMemoryArena,
+		const oroStream         stream,
+		MemoryArena&            storageMemoryArena );
 
 	static void update(
-		Context&					   context,
+		Context&                       context,
 		const hiprtGeometryBuildInput& buildInput,
-		const hiprtBuildOptions		   buildOptions,
-		hiprtDevicePtr				   temporaryBuffer,
-		oroStream					   stream,
-		hiprtDevicePtr				   buffer );
+		const hiprtBuildOptions        buildOptions,
+		hiprtDevicePtr                 temporaryBuffer,
+		const oroStream                stream,
+		hiprtDevicePtr                 buffer );
 
 	static void update(
-		Context&					context,
+		Context&                    context,
 		const hiprtSceneBuildInput& buildInput,
-		const hiprtBuildOptions		buildOptions,
-		hiprtDevicePtr				temporaryBuffer,
-		oroStream					stream,
-		hiprtDevicePtr				buffer );
+		const hiprtBuildOptions     buildOptions,
+		hiprtDevicePtr              temporaryBuffer,
+		const oroStream             stream,
+		hiprtDevicePtr              buffer );
 
 	template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 	static void update(
-		Context&				context,
-		PrimitiveContainer&		primitives,
+		Context&                context,
+		PrimitiveContainer&     primitives,
 		const hiprtBuildOptions buildOptions,
-		oroStream				stream,
-		MemoryArena&			storageMemoryArena );
+		const oroStream         stream,
+		MemoryArena&            storageMemoryArena );
 };
 
 template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void LbvhBuilder::build(
-	Context&				context,
-	PrimitiveContainer&		primitives,
+	Context&                context,
+	PrimitiveContainer&     primitives,
 	const hiprtBuildOptions buildOptions,
-	uint32_t				geomType,
-	MemoryArena&			temporaryMemoryArena,
-	oroStream				stream,
-	MemoryArena&			storageMemoryArena )
+	const uint32_t          geomTypeIn,
+	MemoryArena&            temporaryMemoryArena,
+	const oroStream         stream,
+	MemoryArena&            storageMemoryArena )
 {
-	using Header = typename std::conditional<
-		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
-		SceneHeader,
-		GeomHeader>::type;
+	using Header = typename std::conditional<isInstanceNode<PrimitiveNode>(), SceneHeader, GeomHeader>::type;
 
 	const uint32_t maxBoxNodeCount =
 		static_cast<uint32_t>( getMaxBoxNodeCount<BoxNode, PrimitiveNode>( primitives.getCount() ) );
-	const uint32_t maxPrimNodeCount = static_cast<uint32_t>( getMaxPrimNodeCount<PrimitiveNode>( primitives.getCount() ) );
+	const uint32_t maxPrimNodeCount =
+		static_cast<uint32_t>( getMaxPrimNodeCount<PrimitiveNode>( context.getRtip(), primitives.getCount() ) );
 
-	Header*		   header	 = storageMemoryArena.allocate<Header>();
-	BoxNode*	   boxNodes	 = storageMemoryArena.allocate<BoxNode>( maxBoxNodeCount );
+	Header*        header    = storageMemoryArena.allocate<Header>();
+	BoxNode*       boxNodes  = storageMemoryArena.allocate<BoxNode>( maxBoxNodeCount );
 	PrimitiveNode* primNodes = storageMemoryArena.allocate<PrimitiveNode>( maxPrimNodeCount );
+	if ( reinterpret_cast<uintptr_t>( boxNodes ) - reinterpret_cast<uintptr_t>( header ) != sizeof( Header ) )
+		throw std::runtime_error( "Box nodes must be appended just after the header." );
 
-	Aabb*		   centroidBox		= temporaryMemoryArena.allocate<Aabb>();
-	ScratchNode*   scratchNodes		= temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
-	ReferenceNode* references		= temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
-	uint32_t*	   referenceIndices = temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
-	uint32_t*	   taskCounter		= temporaryMemoryArena.allocate<uint32_t>();
-	uint3*		   taskQueue		= temporaryMemoryArena.allocate<uint3>( primitives.getCount() );
+	Aabb*           centroidBox      = temporaryMemoryArena.allocate<Aabb>();
+	ScratchNode*    scratchNodes     = temporaryMemoryArena.allocate<ScratchNode>( primitives.getCount() );
+	ReferenceNode*  references       = temporaryMemoryArena.allocate<ReferenceNode>( primitives.getCount() );
+	uint32_t*       referenceIndices = temporaryMemoryArena.allocate<uint32_t>( primitives.getCount() );
+	uint32_t*       taskCounter      = temporaryMemoryArena.allocate<uint32_t>();
+	ConversionTask* taskQueue        = temporaryMemoryArena.allocate<ConversionTask>( primitives.getCount() );
 
 	uint32_t* mortonCodeKeys[2];
 	uint32_t* mortonCodeValues[2];
-	mortonCodeKeys[0]	= reinterpret_cast<uint32_t*>( taskQueue ) + 0 * primitives.getCount();
+	mortonCodeKeys[0]   = reinterpret_cast<uint32_t*>( taskQueue ) + 0 * primitives.getCount();
 	mortonCodeValues[0] = reinterpret_cast<uint32_t*>( taskQueue ) + 1 * primitives.getCount();
-	mortonCodeKeys[1]	= reinterpret_cast<uint32_t*>( boxNodes ) + 0 * primitives.getCount();
+	mortonCodeKeys[1]   = reinterpret_cast<uint32_t*>( boxNodes ) + 0 * primitives.getCount();
 	mortonCodeValues[1] = reinterpret_cast<uint32_t*>( boxNodes ) + 1 * primitives.getCount();
 
 	uint32_t* updateCounters = reinterpret_cast<uint32_t*>( boxNodes ) + 2 * primitives.getCount();
 
 	RadixSort sort( context.getDevice(), stream, context.getOrochiUtils() );
-	Timer	  timer;
+	Timer     timer;
 
-	Compiler&				 compiler = context.getCompiler();
+	Compiler&                compiler = context.getCompiler();
 	std::vector<const char*> opts;
 	// opts.push_back( "-G" );
 
-	const std::string headerParam			 = Compiler::kernelNameSufix( Traits<Header>::TYPE_NAME );
-	const std::string containerParam		 = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
-	const std::string primNodeParam			 = Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
-	const std::string binNodeParam			 = Compiler::kernelNameSufix( Traits<ScratchNode>::TYPE_NAME );
+	const std::string headerParam            = Compiler::kernelNameSufix( Traits<Header>::TYPE_NAME );
+	const std::string containerParam         = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
+	const std::string primNodeParam          = Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
+	const std::string binNodeParam           = Compiler::kernelNameSufix( Traits<ScratchNode>::TYPE_NAME );
 	const std::string containerPrimNodeParam = containerParam + "_" + primNodeParam;
-	const std::string primNodeBinNodeParam	 = primNodeParam + "_" + binNodeParam;
+	const std::string primNodeBinNodeParam   = primNodeParam + "_" + binNodeParam;
 
 	bool pairTriangles = false;
-	if constexpr (
-		std::is_same<PrimitiveNode, TrianglePairNode>::value || std::is_same<PrimitiveNode, TrianglePacketNode>::value )
+	if constexpr ( isTriangleNode<PrimitiveNode>() )
 		pairTriangles = primitives.pairable() && !( buildOptions.buildFlags & hiprtBuildFlagBitDisableTrianglePairing );
 
 	// STEP 0: Init data
-	if constexpr ( std::is_same<Header, SceneHeader>::value )
+	if constexpr ( std::is_same_v<Header, SceneHeader> )
 	{
 		Instance* instances = storageMemoryArena.allocate<Instance>( primitives.getCount() );
-		Frame*	  frames	= storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
+		Frame*    frames    = storageMemoryArena.allocate<Frame>( primitives.getFrameCount() );
 
 		primitives.setFrames( frames );
 		Kernel initDataKernel = compiler.getKernel(
@@ -207,18 +206,16 @@ void LbvhBuilder::build(
 	}
 	else
 	{
-		geomType <<= 1;
-		if constexpr (
-			std::is_same<PrimitiveNode, TrianglePairNode>::value || std::is_same<PrimitiveNode, TrianglePacketNode>::value )
-			geomType |= 1;
-		const uint32_t primCount	  = pairTriangles ? 0u : primitives.getCount();
-		Kernel		   initDataKernel = compiler.getKernel(
-			context,
-			Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
-			"InitGeomData",
-			opts,
-			GET_ARG_LIST( BvhBuilderKernels ) );
-		initDataKernel.setArgs( { storageMemoryArena.getStorageSize(), primCount, boxNodes, primNodes, geomType, header } );
+		constexpr bool triangleGeom   = isTriangleNode<PrimitiveNode>();
+		const uint32_t geomType       = ( geomTypeIn << 1 ) | ( triangleGeom ? 1 : 0 );
+		const uint32_t primCount      = pairTriangles ? 0u : primitives.getCount();
+		Kernel         initDataKernel = compiler.getKernel(
+            context,
+            Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+            "InitGeomData",
+            opts,
+            GET_ARG_LIST( BvhBuilderKernels ) );
+		initDataKernel.setArgs( { primCount, geomType, storageMemoryArena.getStorageSize(), boxNodes, primNodes, header } );
 		initDataKernel.launch( 1, stream );
 	}
 
@@ -237,8 +234,7 @@ void LbvhBuilder::build(
 	}
 
 	// STEP 1: Pair triangles
-	if constexpr (
-		std::is_same<PrimitiveNode, TrianglePairNode>::value || std::is_same<PrimitiveNode, TrianglePacketNode>::value )
+	if constexpr ( isTriangleNode<PrimitiveNode>() )
 	{
 		if ( pairTriangles )
 		{
@@ -303,7 +299,7 @@ void LbvhBuilder::build(
 		opts,
 		GET_ARG_LIST( LbvhBuilderKernels ) );
 	emitTopologyAndFitBoundsKernel.setArgs(
-		{ mortonCodeKeys[1], mortonCodeValues[1], updateCounters, primitives, scratchNodes, references } );
+		{ primitives, mortonCodeKeys[1], mortonCodeValues[1], updateCounters, scratchNodes, references } );
 	timer.measure( EmitTopologyTime, [&]() { emitTopologyAndFitBoundsKernel.launch( primitives.getCount(), stream ); } );
 
 	uint32_t rootAddr;
@@ -312,10 +308,10 @@ void LbvhBuilder::build(
 	checkOro( oroStreamSynchronize( stream ) );
 
 	// STEP 6: Compute fat leaves
-	if constexpr ( std::is_same<PrimitiveNode, TrianglePacketNode>::value )
+	if constexpr ( isTrianglePacketNode<PrimitiveNode>() )
 	{
 		uint32_t* updateCounters = reinterpret_cast<uint32_t*>( taskQueue );
-		uint32_t* parentAddrs	 = updateCounters + primitives.getCount();
+		uint32_t* parentAddrs    = updateCounters + primitives.getCount();
 		uint32_t* triangleCounts = parentAddrs + primitives.getCount();
 		checkOro( oroMemsetD8Async(
 			reinterpret_cast<oroDeviceptr>( updateCounters ), 0, sizeof( uint32_t ) * primitives.getCount(), stream ) );
@@ -335,15 +331,19 @@ void LbvhBuilder::build(
 			"ComputeFatLeaves_" + binNodeParam,
 			opts,
 			GET_ARG_LIST( BvhBuilderKernels ) );
-		computeFatLeaves.setArgs( { primitives.getCount(), scratchNodes, parentAddrs, triangleCounts, updateCounters } );
+		computeFatLeaves.setArgs( { primitives.getCount(), parentAddrs, scratchNodes, triangleCounts, updateCounters } );
 		timer.measure( ComputeFatLeavesTime, [&]() { computeFatLeaves.launch( primitives.getCount(), stream ); } );
 	}
 
 	// STEP 7: Collapse
-	uint3 rootCollapseTask = { ( rootAddr << 4 ) | BoxType, 0, 0 };
-	checkOro( oroMemcpyHtoDAsync( reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( uint3 ), stream ) );
+	ConversionTask rootCollapseTask( ( rootAddr << 4 ) | BoxType, 0, 0 );
+	checkOro( oroMemcpyHtoDAsync(
+		reinterpret_cast<oroDeviceptr>( taskQueue ), &rootCollapseTask, sizeof( ConversionTask ), stream ) );
 	checkOro( oroMemsetD8Async(
-		reinterpret_cast<oroDeviceptr>( taskQueue + 1 ), 0xFF, sizeof( uint3 ) * ( primitives.getCount() - 1 ), stream ) );
+		reinterpret_cast<oroDeviceptr>( taskQueue + 1 ),
+		0xFF,
+		sizeof( ConversionTask ) * ( primitives.getCount() - 1 ),
+		stream ) );
 
 	Kernel collapseKernel = compiler.getKernel(
 		context,
@@ -352,7 +352,7 @@ void LbvhBuilder::build(
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
 	collapseKernel.setArgs(
-		{ maxBoxNodeCount, primitives.getCount(), header, scratchNodes, references, boxNodes, taskQueue, referenceIndices } );
+		{ maxBoxNodeCount, primitives.getCount(), scratchNodes, references, header, boxNodes, taskQueue, referenceIndices } );
 	timer.measure( CollapseTime, [&]() { collapseKernel.launch( context.getBranchingFactor() * maxBoxNodeCount, stream ); } );
 
 	uint32_t boxNodeCount{};
@@ -381,10 +381,10 @@ void LbvhBuilder::build(
 		"PackLeaves_" + containerPrimNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
-	packLeavesKernel.setArgs( { taskCount, header, references, boxNodes, primNodes, primitives, taskQueue, referenceIndices } );
+	packLeavesKernel.setArgs( { taskCount, taskQueue, referenceIndices, references, primitives, header, boxNodes, primNodes } );
 	timer.measure( PackLeavesTime, [&]() {
-		if constexpr ( std::is_same<PrimitiveNode, TrianglePacketNode>::value )
-			packLeavesKernel.launch( taskCount * LanesPerLeafPacketTask, context.getWarpSize(), stream );
+		if constexpr ( isTrianglePacketNode<PrimitiveNode>() )
+			packLeavesKernel.launch( taskCount * context.getLanesPerLeafPacketTask(), context.getWarpSize(), stream );
 		else
 			packLeavesKernel.launch( taskCount, stream );
 	} );
@@ -411,10 +411,10 @@ void LbvhBuilder::build(
 	if constexpr ( Timer::EnableTimer )
 	{
 		const float time = timer.getTimeRecord( PairTrianglesTime ) + timer.getTimeRecord( ComputeCentroidBoxTime ) +
-						   timer.getTimeRecord( ComputeMortonCodesTime ) + timer.getTimeRecord( SortTime ) +
-						   timer.getTimeRecord( EmitTopologyTime ) + timer.getTimeRecord( ComputeParentAddrsTime ) +
-						   timer.getTimeRecord( ComputeFatLeavesTime ) + timer.getTimeRecord( CollapseTime ) +
-						   timer.getTimeRecord( CompactTasksTime ) + timer.getTimeRecord( PackLeavesTime );
+		                   timer.getTimeRecord( ComputeMortonCodesTime ) + timer.getTimeRecord( SortTime ) +
+		                   timer.getTimeRecord( EmitTopologyTime ) + timer.getTimeRecord( ComputeParentAddrsTime ) +
+		                   timer.getTimeRecord( ComputeFatLeavesTime ) + timer.getTimeRecord( CollapseTime ) +
+		                   timer.getTimeRecord( CompactTasksTime ) + timer.getTimeRecord( PackLeavesTime );
 		std::cout << "Lbvh total construction time: " << time << " ms" << std::endl;
 		std::cout << "\tpair triangles time: " << timer.getTimeRecord( PairTrianglesTime ) << " ms" << std::endl;
 		std::cout << "\tcompute centroid box time: " << timer.getTimeRecord( ComputeCentroidBoxTime ) << " ms" << std::endl;
@@ -431,36 +431,34 @@ void LbvhBuilder::build(
 
 template <typename BoxNode, typename PrimitiveNode, typename PrimitiveContainer>
 void LbvhBuilder::update(
-	Context&				context,
-	PrimitiveContainer&		primitives,
+	Context&                context,
+	PrimitiveContainer&     primitives,
 	const hiprtBuildOptions buildOptions,
-	oroStream				stream,
-	MemoryArena&			storageMemoryArena )
+	const oroStream         stream,
+	MemoryArena&            storageMemoryArena )
 {
-	using Header = typename std::conditional<
-		std::is_same<PrimitiveNode, UserInstanceNode>::value || std::is_same<PrimitiveNode, HwInstanceNode>::value,
-		SceneHeader,
-		GeomHeader>::type;
+	using Header = typename std::conditional<isInstanceNode<PrimitiveNode>(), SceneHeader, GeomHeader>::type;
 
 	Header* header = storageMemoryArena.allocate<Header>();
 
-	Header h;
-	checkOro( oroMemcpyDtoHAsync( &h, reinterpret_cast<oroDeviceptr>( header ), sizeof( Header ), stream ) );
+	Header headerHost{};
+	checkOro( oroMemcpyDtoHAsync( &headerHost, reinterpret_cast<oroDeviceptr>( header ), sizeof( Header ), stream ) );
 	checkOro( oroStreamSynchronize( stream ) );
 
-	BoxNode*	   boxNodes	 = reinterpret_cast<BoxNode*>( h.m_boxNodes );
-	PrimitiveNode* primNodes = reinterpret_cast<PrimitiveNode*>( h.m_primNodes );
+	BoxNode*       boxNodes  = reinterpret_cast<BoxNode*>( headerHost.m_boxNodes );
+	PrimitiveNode* primNodes = reinterpret_cast<PrimitiveNode*>( headerHost.m_primNodes );
 
-	std::string containerParam		   = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
-	std::string containerPrimNodeParam = containerParam + "_" + Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
+	const std::string containerParam = Compiler::kernelNameSufix( Traits<PrimitiveContainer>::TYPE_NAME );
+	const std::string containerPrimNodeParam =
+		containerParam + "_" + Compiler::kernelNameSufix( Traits<PrimitiveNode>::TYPE_NAME );
 
-	Compiler&				 compiler = context.getCompiler();
+	Compiler&                compiler = context.getCompiler();
 	std::vector<const char*> opts;
 
 	uint32_t resetThreadCount = primitives.getCount();
-	if constexpr ( std::is_same<Header, SceneHeader>::value )
+	if constexpr ( std::is_same_v<Header, SceneHeader> )
 	{
-		primitives.setFrames( h.m_frames );
+		primitives.setFrames( headerHost.m_frames );
 		resetThreadCount = std::max( primitives.getCount(), primitives.getFrameCount() );
 	}
 
@@ -479,7 +477,7 @@ void LbvhBuilder::update(
 		"FitBounds_" + containerPrimNodeParam,
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
-	fitBoundsKernel.setArgs( { header, primitives, boxNodes, primNodes } );
-	fitBoundsKernel.launch( context.getBranchingFactor() * h.m_boxNodeCount, stream );
+	fitBoundsKernel.setArgs( { header, primitives, primNodes, boxNodes } );
+	fitBoundsKernel.launch( context.getBranchingFactor() * headerHost.m_boxNodeCount, stream );
 }
 } // namespace hiprt

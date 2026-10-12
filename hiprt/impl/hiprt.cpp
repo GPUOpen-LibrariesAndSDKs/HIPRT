@@ -33,13 +33,14 @@ using namespace hiprt;
 
 hiprtError hiprtCreateContext( uint32_t hiprtApiVersion, const hiprtContextCreationInput& input, hiprtContext& contextOut )
 {
-	oroInitialize( ( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA, 0, g_hip_paths, g_hiprtc_paths );
+	oroInitialize(
+		( input.deviceType == hiprtDeviceAMD ) ? ORO_API_HIP : ORO_API_CUDA, 0, hiprtGetHipPaths(), hiprtGetHiprtcPaths() );
 	if ( hiprtApiVersion != HIPRT_API_VERSION ) return hiprtErrorInvalidApiVersion;
 
 	try
 	{
 		Context* ctxt = new Context( input );
-		contextOut	  = reinterpret_cast<hiprtContext>( ctxt );
+		contextOut    = reinterpret_cast<hiprtContext>( ctxt );
 	}
 	catch ( std::exception& e )
 	{
@@ -58,21 +59,21 @@ hiprtError hiprtDestroyContext( hiprtContext context )
 }
 
 hiprtError hiprtCreateGeometry(
-	hiprtContext				   context,
+	hiprtContext                   context,
 	const hiprtGeometryBuildInput& buildInput,
-	const hiprtBuildOptions		   buildOptions,
-	hiprtGeometry&				   geometryOut )
+	const hiprtBuildOptions        buildOptions,
+	hiprtGeometry&                 geometryOut )
 {
 	hiprtGeometry* geometryAddr = &geometryOut;
 	return hiprtCreateGeometries( context, 1, &buildInput, buildOptions, &geometryAddr );
 }
 
 hiprtError hiprtCreateGeometries(
-	hiprtContext				   context,
-	uint32_t					   numGeometries,
+	hiprtContext                   context,
+	uint32_t                       numGeometries,
 	const hiprtGeometryBuildInput* buildInputsIn,
-	const hiprtBuildOptions		   buildOptions,
-	hiprtGeometry**				   geometriesOut )
+	const hiprtBuildOptions        buildOptions,
+	hiprtGeometry**                geometriesOut )
 {
 	if ( !context || numGeometries == 0 || buildInputsIn == nullptr || geometriesOut == nullptr )
 		return hiprtErrorInvalidParameter;
@@ -130,32 +131,42 @@ hiprtError hiprtDestroyGeometries( hiprtContext context, uint32_t numGeometries,
 }
 
 hiprtError hiprtBuildGeometry(
-	hiprtContext				   context,
-	hiprtBuildOperation			   buildOperation,
+	hiprtContext                   context,
+	hiprtBuildOperation            buildOperation,
 	const hiprtGeometryBuildInput& buildInput,
-	const hiprtBuildOptions		   buildOptions,
-	hiprtDevicePtr				   temporaryBuffer,
-	hiprtApiStream				   stream,
-	hiprtGeometry				   geometryOut )
+	const hiprtBuildOptions        buildOptions,
+	hiprtDevicePtr                 temporaryBuffer,
+	hiprtApiStream                 stream,
+	hiprtGeometry                  geometryOut )
 {
 	return hiprtBuildGeometries( context, buildOperation, 1, &buildInput, buildOptions, temporaryBuffer, stream, &geometryOut );
 }
 
 hiprtError hiprtBuildGeometries(
-	hiprtContext				   context,
-	hiprtBuildOperation			   buildOperation,
-	uint32_t					   numGeometries,
+	hiprtContext                   context,
+	hiprtBuildOperation            buildOperation,
+	uint32_t                       numGeometries,
 	const hiprtGeometryBuildInput* buildInputsIn,
-	const hiprtBuildOptions		   buildOptions,
-	hiprtDevicePtr				   temporaryBuffer,
-	hiprtApiStream				   stream,
-	hiprtGeometry*				   geometriesOut )
+	const hiprtBuildOptions        buildOptions,
+	hiprtDevicePtr                 temporaryBuffer,
+	hiprtApiStream                 stream,
+	hiprtGeometry*                 geometriesOut )
 {
 	if ( !context || numGeometries == 0 || buildInputsIn == nullptr || geometriesOut == nullptr )
 		return hiprtErrorInvalidParameter;
 
+	if ( reinterpret_cast<uintptr_t>( temporaryBuffer ) % DefaultAlignment != 0 )
+	{
+		std::string msg = Utility::format(
+			"The temporary buffer is not properly aligned (expected alignment: %u, actual address: %p)",
+			DefaultAlignment,
+			temporaryBuffer );
+		reinterpret_cast<Context*>( context )->logError( msg.c_str() );
+		return hiprtErrorInvalidParameter;
+	}
+
 	// TODO: use std::span after we switch to c++20
-	std::vector<hiprtDevicePtr>			 buffers;
+	std::vector<hiprtDevicePtr>          buffers;
 	std::vector<hiprtGeometryBuildInput> buildInputs;
 	for ( uint32_t i = 0; i < numGeometries; ++i )
 	{
@@ -196,11 +207,11 @@ hiprtError hiprtGetGeometryBuildTemporaryBufferSize(
 }
 
 hiprtError hiprtGetGeometriesBuildTemporaryBufferSize(
-	hiprtContext				   context,
-	uint32_t					   numGeometries,
+	hiprtContext                   context,
+	uint32_t                       numGeometries,
 	const hiprtGeometryBuildInput* buildInputsIn,
-	const hiprtBuildOptions		   buildOptions,
-	size_t&						   sizeOut )
+	const hiprtBuildOptions        buildOptions,
+	size_t&                        sizeOut )
 {
 	if ( !context || numGeometries == 0 || buildInputsIn == nullptr ) return hiprtErrorInvalidParameter;
 
@@ -230,10 +241,10 @@ hiprtCompactGeometry( hiprtContext context, hiprtApiStream stream, hiprtGeometry
 }
 
 hiprtError hiprtCompactGeometries(
-	hiprtContext	context,
-	uint32_t		numGeometries,
-	hiprtApiStream	stream,
-	hiprtGeometry*	geometriesIn,
+	hiprtContext    context,
+	uint32_t        numGeometries,
+	hiprtApiStream  stream,
+	hiprtGeometry*  geometriesIn,
 	hiprtGeometry** geometriesOut )
 {
 	if ( !context || numGeometries == 0 || geometriesIn == nullptr || geometriesOut == nullptr )
@@ -270,11 +281,11 @@ hiprtError hiprtCreateScene(
 }
 
 hiprtError hiprtCreateScenes(
-	hiprtContext				context,
-	uint32_t					numScenes,
+	hiprtContext                context,
+	uint32_t                    numScenes,
 	const hiprtSceneBuildInput* buildInputsIn,
-	const hiprtBuildOptions		buildOptions,
-	hiprtScene**				scenesOut )
+	const hiprtBuildOptions     buildOptions,
+	hiprtScene**                scenesOut )
 {
 	if ( !context || numScenes == 0 || buildInputsIn == nullptr || scenesOut == nullptr ) return hiprtErrorInvalidParameter;
 
@@ -327,31 +338,41 @@ hiprtError hiprtDestroyScenes( hiprtContext context, uint32_t numScenes, hiprtSc
 }
 
 hiprtError hiprtBuildScene(
-	hiprtContext				context,
-	hiprtBuildOperation			buildOperation,
+	hiprtContext                context,
+	hiprtBuildOperation         buildOperation,
 	const hiprtSceneBuildInput& buildInput,
-	const hiprtBuildOptions		buildOptions,
-	hiprtDevicePtr				temporaryBuffer,
-	hiprtApiStream				stream,
-	hiprtScene					sceneOut )
+	const hiprtBuildOptions     buildOptions,
+	hiprtDevicePtr              temporaryBuffer,
+	hiprtApiStream              stream,
+	hiprtScene                  sceneOut )
 {
 	return hiprtBuildScenes( context, buildOperation, 1, &buildInput, buildOptions, temporaryBuffer, stream, &sceneOut );
 }
 
 hiprtError hiprtBuildScenes(
-	hiprtContext				context,
-	hiprtBuildOperation			buildOperation,
-	uint32_t					numScenes,
+	hiprtContext                context,
+	hiprtBuildOperation         buildOperation,
+	uint32_t                    numScenes,
 	const hiprtSceneBuildInput* buildInputsIn,
-	const hiprtBuildOptions		buildOptions,
-	hiprtDevicePtr				temporaryBuffer,
-	hiprtApiStream				stream,
-	hiprtScene*					scenesOut )
+	const hiprtBuildOptions     buildOptions,
+	hiprtDevicePtr              temporaryBuffer,
+	hiprtApiStream              stream,
+	hiprtScene*                 scenesOut )
 {
 	if ( !context || numScenes == 0 || buildInputsIn == nullptr || scenesOut == nullptr ) return hiprtErrorInvalidParameter;
 
+	if ( reinterpret_cast<uintptr_t>( temporaryBuffer ) % DefaultAlignment != 0 )
+	{
+		std::string msg = Utility::format(
+			"The temporary buffer is not properly aligned (expected alignment: %u, actual address: %p)",
+			DefaultAlignment,
+			temporaryBuffer );
+		reinterpret_cast<Context*>( context )->logError( msg.c_str() );
+		return hiprtErrorInvalidParameter;
+	}
+
 	// TODO: use std::span after we switch to c++20
-	std::vector<hiprtDevicePtr>		  buffers;
+	std::vector<hiprtDevicePtr>       buffers;
 	std::vector<hiprtSceneBuildInput> buildInputs;
 	for ( uint32_t i = 0; i < numScenes; ++i )
 	{
@@ -392,11 +413,11 @@ hiprtError hiprtGetSceneBuildTemporaryBufferSize(
 }
 
 hiprtError hiprtGetScenesBuildTemporaryBufferSize(
-	hiprtContext				context,
-	uint32_t					numScenes,
+	hiprtContext                context,
+	uint32_t                    numScenes,
 	const hiprtSceneBuildInput* buildInputsIn,
-	const hiprtBuildOptions		buildOptions,
-	size_t&						sizeOut )
+	const hiprtBuildOptions     buildOptions,
+	size_t&                     sizeOut )
 {
 	if ( !context || numScenes == 0 || buildInputsIn == nullptr ) return hiprtErrorInvalidParameter;
 
@@ -621,25 +642,25 @@ hiprtError hiprtExportSceneAabb( hiprtContext context, hiprtScene scene, float3&
 }
 
 hiprtError hiprtBuildTraceKernels(
-	hiprtContext	  context,
-	uint32_t		  numFunctions,
-	const char**	  funcNamesIn,
-	const char*		  src,
-	const char*		  moduleName,
-	uint32_t		  numHeaders,
-	const char**	  headersIn,
-	const char**	  includeNamesIn,
-	uint32_t		  numOptions,
-	const char**	  optionsIn,
-	uint32_t		  numGeomTypes,
-	uint32_t		  numRayTypes,
+	hiprtContext      context,
+	uint32_t          numFunctions,
+	const char**      funcNamesIn,
+	const char*       src,
+	const char*       moduleName,
+	uint32_t          numHeaders,
+	const char**      headersIn,
+	const char**      includeNamesIn,
+	uint32_t          numOptions,
+	const char**      optionsIn,
+	uint32_t          numGeomTypes,
+	uint32_t          numRayTypes,
 	hiprtFuncNameSet* funcNameSetsIn,
 	hiprtApiFunction* functionsOut,
-	hiprtApiModule*	  moduleOut,
-	bool			  cache )
+	hiprtApiModule*   moduleOut,
+	bool              cache )
 {
 	if ( !context || moduleName == nullptr || src == nullptr ||
-		 ( ( funcNamesIn == nullptr || functionsOut == nullptr || numFunctions == 0 ) && moduleOut == nullptr ) )
+	     ( ( funcNamesIn == nullptr || functionsOut == nullptr || numFunctions == 0 ) && moduleOut == nullptr ) )
 		return hiprtErrorInvalidParameter;
 
 	try
@@ -669,7 +690,7 @@ hiprtError hiprtBuildTraceKernels(
 		}
 
 		std::vector<oroFunction> functions;
-		oroModule				 module = nullptr;
+		oroModule                module = nullptr;
 		reinterpret_cast<Context*>( context )->buildKernels(
 			funcNames,
 			src,
@@ -699,20 +720,20 @@ hiprtError hiprtBuildTraceKernels(
 }
 
 hiprtError hiprtBuildTraceKernelsFromBitcode(
-	hiprtContext	  context,
-	uint32_t		  numFunctions,
-	const char**	  functionNames,
-	const char*		  moduleName,
-	const char*		  bitcodeBinary,
-	size_t			  bitcodeBinarySize,
-	uint32_t		  numGeomTypes,
-	uint32_t		  numRayTypes,
+	hiprtContext      context,
+	uint32_t          numFunctions,
+	const char**      functionNames,
+	const char*       moduleName,
+	const char*       bitcodeBinary,
+	size_t            bitcodeBinarySize,
+	uint32_t          numGeomTypes,
+	uint32_t          numRayTypes,
 	hiprtFuncNameSet* functionNameSets,
 	hiprtApiFunction* functionsOut,
-	bool			  cache )
+	bool              cache )
 {
 	if ( !context || numFunctions == 0 || functionNames == nullptr || functionsOut == nullptr || moduleName == nullptr ||
-		 bitcodeBinary == nullptr || bitcodeBinarySize == 0 )
+	     bitcodeBinary == nullptr || bitcodeBinarySize == 0 )
 		return hiprtErrorInvalidParameter;
 
 	try
@@ -728,7 +749,7 @@ hiprtError hiprtBuildTraceKernelsFromBitcode(
 			for ( uint32_t i = 0; i < numGeomTypes * numRayTypes; ++i )
 				funcNameSets.push_back( functionNameSets[i] );
 		}
-		std::string_view		 binary( bitcodeBinary, bitcodeBinarySize );
+		std::string_view         binary( bitcodeBinary, bitcodeBinarySize );
 		std::vector<oroFunction> functions;
 		reinterpret_cast<Context*>( context )->buildKernelsFromBitcode(
 			funcNames, moduleName, binary, numGeomTypes, numRayTypes, funcNameSets, functions, cache );

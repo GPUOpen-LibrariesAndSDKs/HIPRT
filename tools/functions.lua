@@ -156,7 +156,7 @@ function get_hip_sdk_verion()
 	local version
 	for line in io.lines (tmp_file) do
 		print (line)
-		version =  string.sub(line, string.find(line, "%d.%d"))
+		version =  string.sub(line, string.find(line, "%d+.%d+"))
 		break
 	end
 	os.remove (tmp_file)

@@ -25,11 +25,11 @@
 #pragma once
 #include <hiprt/hiprt_common.h>
 #include <hiprt/hiprt_types.h>
-#include <hiprt/impl/BvhNode.h>
+#include <hiprt/impl/BvhCommon.h>
 
 namespace hiprt
 {
-HIPRT_HOST_DEVICE HIPRT_INLINE uint3 tryPairTriangles( const uint3& a, const uint3& b )
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE uint3 tryPairTriangles( const uint3& a, const uint3& b )
 {
 	uint3 lb = uint3{ 3, 3, 3 };
 
@@ -49,239 +49,240 @@ HIPRT_HOST_DEVICE HIPRT_INLINE uint3 tryPairTriangles( const uint3& a, const uin
 	return uint3{ InvalidValue, InvalidValue, InvalidValue };
 }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE uint3 shiftLeft( const uint3& a ) { return uint3{ a.y, a.z, a.x }; }
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE uint3 shiftLeft( const uint3& a ) { return uint3{ a.y, a.z, a.x }; }
 
-HIPRT_HOST_DEVICE HIPRT_INLINE uint3 shiftRight( const uint3& a ) { return uint3{ a.z, a.x, a.y }; }
+[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE uint3 shiftRight( const uint3& a ) { return uint3{ a.z, a.x, a.y }; }
 
 class TriangleMesh
 {
   public:
-	HIPRT_HOST_DEVICE TriangleMesh( const hiprtTriangleMeshPrimitive& mesh )
+	HIPRT_HOST_DEVICE HIPRT_INLINE explicit TriangleMesh( const hiprtTriangleMeshPrimitive& mesh )
 		: m_vertexCount( mesh.vertexCount ), m_vertexStride( mesh.vertexStride ), m_triangleCount( mesh.triangleCount ),
 		  m_triangleStride( mesh.triangleStride ), m_pairCount( mesh.trianglePairCount )
 	{
-		m_vertices		  = reinterpret_cast<const uint8_t*>( mesh.vertices );
+		m_vertices        = reinterpret_cast<const uint8_t*>( mesh.vertices );
 		m_triangleIndices = reinterpret_cast<const uint8_t*>( mesh.triangleIndices );
-		m_pairIndices	  = reinterpret_cast<const uint2*>( mesh.trianglePairIndices );
+		m_pairIndices     = reinterpret_cast<const uint2*>( mesh.trianglePairIndices );
 		if ( m_triangleCount == 0 || m_triangleIndices == nullptr ) m_triangleCount = m_vertexCount / 3;
 	}
 
-	HIPRT_HOST_DEVICE float3 fetchVertex( const uint32_t index ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 fetchVertex( const uint32_t index ) const
 	{
 		const float* vertexPtr = reinterpret_cast<const float*>( m_vertices + index * m_vertexStride );
 		return float3{ vertexPtr[0], vertexPtr[1], vertexPtr[2] };
 	}
 
-	HIPRT_HOST_DEVICE uint3 fetchTriangleIndices( const uint32_t index ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE uint3 fetchTriangleIndices( const uint32_t index ) const
 	{
 		if ( m_triangleIndices == nullptr ) return uint3{ 3 * index + 0, 3 * index + 1, 3 * index + 2 };
 		const uint32_t* trianglePtr = reinterpret_cast<const uint32_t*>( m_triangleIndices + index * m_triangleStride );
 		return uint3{ trianglePtr[0], trianglePtr[1], trianglePtr[2] };
 	}
 
-	HIPRT_HOST_DEVICE uint2 fetchTrianglePairIndices( const uint32_t index ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Triangle fetchTriangle( const uint32_t index ) const
+	{
+		const uint3 triangleIndices = fetchTriangleIndices( index );
+		Triangle    triangle;
+		triangle.m_vertices[0] = fetchVertex( triangleIndices.x );
+		triangle.m_vertices[1] = fetchVertex( triangleIndices.y );
+		triangle.m_vertices[2] = fetchVertex( triangleIndices.z );
+		return triangle;
+	}
+
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE uint2 fetchTrianglePairIndices( const uint32_t index ) const
 	{
 		uint2 pairIndices = make_uint2( index );
 		if ( m_pairCount > 0 ) pairIndices = m_pairIndices[index];
 		return pairIndices;
 	}
 
-	HIPRT_HOST_DEVICE TrianglePairNode fetchTrianglePairNode( const uint2 pairIndices ) const
+	template <typename PrimitiveNode>
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE PrimitiveNode fetchPrimNode( const uint32_t index ) const
 	{
-		uint3 indices0 = fetchTriangleIndices( pairIndices.x );
-		uint3 indices1;
+		return fetchPrimNode<PrimitiveNode>( fetchTrianglePairIndices( index ) );
+	}
 
-		uint32_t flags = DefaultTriangleFlags;
-		if ( pairIndices.x != pairIndices.y )
+	template <typename PrimitiveNode>
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE PrimitiveNode fetchPrimNode( const uint2 pairIndices ) const
+	{
+		if constexpr ( is_same_v<PrimitiveNode, rtip11::TrianglePairNode> )
 		{
-			indices1			= fetchTriangleIndices( pairIndices.y );
-			uint3 vertexMapping = tryPairTriangles( indices1, indices0 );
+			uint3 indices0 = fetchTriangleIndices( pairIndices.x );
+			uint3 indices1;
 
-			// align the first triangle to [1,2]
-			uint3 flags0 = { 1, 2, 0 };
-			if ( vertexMapping.y == 3 )
+			uint32_t flags = DefaultTriangleFlags;
+			if ( pairIndices.x != pairIndices.y )
 			{
-				vertexMapping = shiftLeft( vertexMapping );
-				indices0	  = shiftLeft( indices0 );
-				flags0		  = shiftRight( flags0 );
-			}
-			else if ( vertexMapping.z == 3 )
-			{
-				vertexMapping = shiftRight( vertexMapping );
-				indices0	  = shiftRight( indices0 );
-				flags0		  = shiftLeft( flags0 );
-			}
-			// vertexMapping.x == 3
+				indices1            = fetchTriangleIndices( pairIndices.y );
+				uint3 vertexMapping = tryPairTriangles( indices1, indices0 );
 
-			// [2 1 0] -- L --> [0 2 1] -- flip --> [0 1 2]
-			// [0 2 1] -- R --> [1 0 2] -- flip --> [0 1 2]
-			// [1 0 2] -- flip --> [0 1 2]
-			bool flip =
-				!( ( vertexMapping.y == 0 && vertexMapping.z == 2 ) || ( vertexMapping.y == 2 && vertexMapping.z == 1 ) ||
-				   ( vertexMapping.y == 1 && vertexMapping.z == 0 ) );
+				// align the first triangle to [1,2]
+				uint3 flags0 = { 1, 2, 0 };
+				if ( vertexMapping.y == 3 )
+				{
+					vertexMapping = shiftLeft( vertexMapping );
+					indices0      = shiftLeft( indices0 );
+					flags0        = shiftRight( flags0 );
+				}
+				else if ( vertexMapping.z == 3 )
+				{
+					vertexMapping = shiftRight( vertexMapping );
+					indices0      = shiftRight( indices0 );
+					flags0        = shiftLeft( flags0 );
+				}
+				// vertexMapping.x == 3
 
-			// align the second triangle to [1,2]
-			uint3 flags1 = flip ? uint3{ 2, 1, 0 } : uint3{ 0, 1, 2 };
-			if ( ( vertexMapping.y == 2 && vertexMapping.z == 1 ) || ( vertexMapping.y == 1 && vertexMapping.z == 2 ) )
-			{
-				// [2 0 1] -- L --> [0 1 2]
-				// [2 1 0] -- L --> [1 0 2] -- flip --> [0 1 2]
-				indices1 = shiftLeft( indices1 );
-				flags1	 = shiftRight( flags1 );
-			}
-			else if ( ( vertexMapping.y == 2 && vertexMapping.z == 0 ) || ( vertexMapping.y == 0 && vertexMapping.z == 2 ) )
-			{
-				// [1 2 0] -- R --> [0 1 2]
+				// [2 1 0] -- L --> [0 2 1] -- flip --> [0 1 2]
 				// [0 2 1] -- R --> [1 0 2] -- flip --> [0 1 2]
-				indices1 = shiftRight( indices1 );
-				flags1	 = shiftLeft( flags1 );
+				// [1 0 2] -- flip --> [0 1 2]
+				bool flip =
+					!( ( vertexMapping.y == 0 && vertexMapping.z == 2 ) || ( vertexMapping.y == 2 && vertexMapping.z == 1 ) ||
+				       ( vertexMapping.y == 1 && vertexMapping.z == 0 ) );
+
+				// align the second triangle to [1,2]
+				uint3 flags1 = flip ? uint3{ 2, 1, 0 } : uint3{ 0, 1, 2 };
+				if ( ( vertexMapping.y == 2 && vertexMapping.z == 1 ) || ( vertexMapping.y == 1 && vertexMapping.z == 2 ) )
+				{
+					// [2 0 1] -- L --> [0 1 2]
+					// [2 1 0] -- L --> [1 0 2] -- flip --> [0 1 2]
+					indices1 = shiftLeft( indices1 );
+					flags1   = shiftRight( flags1 );
+				}
+				else if ( ( vertexMapping.y == 2 && vertexMapping.z == 0 ) || ( vertexMapping.y == 0 && vertexMapping.z == 2 ) )
+				{
+					// [1 2 0] -- R --> [0 1 2]
+					// [0 2 1] -- R --> [1 0 2] -- flip --> [0 1 2]
+					indices1 = shiftRight( indices1 );
+					flags1   = shiftLeft( flags1 );
+				}
+
+				// triangle flags
+				flags = ( flip << 13 ) | ( flags1.y << 10 ) | ( flags1.x << 8 ) | ( flags0.y << 2 ) | ( flags0.x << 0 );
 			}
 
-			// triangle flags
-			flags = ( flip << 13 ) | ( flags1.y << 10 ) | ( flags1.x << 8 ) | ( flags0.y << 2 ) | ( flags0.x << 0 );
+			rtip11::TrianglePairNode triPairNode;
+			triPairNode.m_flags      = flags;
+			triPairNode.m_primIndex0 = pairIndices.x;
+			triPairNode.m_primIndex1 = pairIndices.y;
+
+			triPairNode.m_triPair.m_v0 = fetchVertex( indices0.x );
+			triPairNode.m_triPair.m_v1 = fetchVertex( indices0.y );
+			triPairNode.m_triPair.m_v2 = fetchVertex( indices0.z );
+			triPairNode.m_triPair.m_v3 = triPairNode.m_triPair.m_v2;
+
+			if ( pairIndices.x != pairIndices.y ) triPairNode.m_triPair.m_v3 = fetchVertex( indices1.z );
+
+			return triPairNode;
 		}
-
-		TrianglePairNode triPairNode;
-		triPairNode.m_flags		 = flags;
-		triPairNode.m_primIndex0 = pairIndices.x;
-		triPairNode.m_primIndex1 = pairIndices.y;
-
-		triPairNode.m_triPair.m_v0 = fetchVertex( indices0.x );
-		triPairNode.m_triPair.m_v1 = fetchVertex( indices0.y );
-		triPairNode.m_triPair.m_v2 = fetchVertex( indices0.z );
-		triPairNode.m_triPair.m_v3 = triPairNode.m_triPair.m_v2;
-
-		if ( pairIndices.x != pairIndices.y ) triPairNode.m_triPair.m_v3 = fetchVertex( indices1.z );
-
-		return triPairNode;
-	}
-
-	HIPRT_HOST_DEVICE TrianglePairNode fetchTrianglePairNode( const uint32_t index ) const
-	{
-		return fetchTrianglePairNode( fetchTrianglePairIndices( index ) );
-	}
-
-	HIPRT_HOST_DEVICE TrianglePacketNode fetchTrianglePacketNode( const uint2 pairIndices ) const
-	{
-		uint3 indices0 = fetchTriangleIndices( pairIndices.x );
-
-		float3 vertex0 = fetchVertex( indices0.x );
-		float3 vertex1 = fetchVertex( indices0.y );
-		float3 vertex2 = fetchVertex( indices0.z );
-		float3 vertex3 = vertex2;
-
-		uint3 vertexMapping{};
-		if ( pairIndices.x != pairIndices.y )
+		else if constexpr ( is_same_v<PrimitiveNode, rtip31::TrianglePacketNode> )
 		{
-			uint3 indices1 = fetchTriangleIndices( pairIndices.y );
-			vertexMapping  = tryPairTriangles( indices0, indices1 );
+			uint3 indices0 = fetchTriangleIndices( pairIndices.x );
 
-			uint32_t vertexIndex = 0;
-			if ( vertexMapping.x == 3 ) vertexIndex = indices1.x;
-			if ( vertexMapping.y == 3 ) vertexIndex = indices1.y;
-			if ( vertexMapping.z == 3 ) vertexIndex = indices1.z;
+			float3 vertex0 = fetchVertex( indices0.x );
+			float3 vertex1 = fetchVertex( indices0.y );
+			float3 vertex2 = fetchVertex( indices0.z );
+			float3 vertex3 = vertex2;
 
-			vertex3 = fetchVertex( vertexIndex );
+			uint3 vertexMapping{};
+			if ( pairIndices.x != pairIndices.y )
+			{
+				uint3 indices1 = fetchTriangleIndices( pairIndices.y );
+				vertexMapping  = tryPairTriangles( indices0, indices1 );
+
+				uint32_t vertexIndex = 0;
+				if ( vertexMapping.x == 3 ) vertexIndex = indices1.x;
+				if ( vertexMapping.y == 3 ) vertexIndex = indices1.y;
+				if ( vertexMapping.z == 3 ) vertexIndex = indices1.z;
+
+				vertex3 = fetchVertex( vertexIndex );
+			}
+
+			rtip31::TrianglePacketData   data( pairIndices.x, pairIndices.y, 4 );
+			rtip31::TrianglePacketHeader hdr = data.buildHeader();
+			rtip31::TrianglePacketNode   triPacketNode{};
+			triPacketNode.writeHeader( hdr );
+			triPacketNode.writePrimIndex( 0, 0, hdr, pairIndices.x );
+			triPacketNode.writePrimIndex( 0, 1, hdr, pairIndices.y );
+			triPacketNode.writeDescriptor( 0, { 0, 1, 2 }, vertexMapping, true );
+			triPacketNode.writeVertex( 0, vertex0 );
+			triPacketNode.writeVertex( 1, vertex1 );
+			triPacketNode.writeVertex( 2, vertex2 );
+			triPacketNode.writeVertex( 3, vertex3 );
+
+			return triPacketNode;
 		}
-
-		TrianglePacketData	 data( pairIndices.x, pairIndices.y, 4 );
-		TrianglePacketHeader hdr = data.buildHeader();
-		TrianglePacketNode	 triPacketNode{};
-		triPacketNode.writeHeader( hdr );
-		triPacketNode.writePrimIndex( 0, 0, hdr, pairIndices.x );
-		triPacketNode.writePrimIndex( 0, 1, hdr, pairIndices.y );
-		triPacketNode.writeDescriptor( 0, { 0, 1, 2 }, vertexMapping, true );
-		triPacketNode.writeVertex( 0, vertex0 );
-		triPacketNode.writeVertex( 1, vertex1 );
-		triPacketNode.writeVertex( 2, vertex2 );
-		triPacketNode.writeVertex( 3, vertex3 );
-
-		return triPacketNode;
-	}
-
-	HIPRT_HOST_DEVICE TrianglePacketNode fetchTrianglePacketNode( const uint32_t index ) const
-	{
-		return fetchTrianglePacketNode( fetchTrianglePairIndices( index ) );
-	}
-
-	template <typename TriangleNode>
-	HIPRT_HOST_DEVICE TriangleNode fetchPrimNode( const uint32_t index ) const
-	{
-		if constexpr ( is_same<TriangleNode, TrianglePairNode>::value )
-			return fetchTrianglePairNode( index );
 		else
-			return fetchTrianglePacketNode( index );
+		{
+			HIPRT_STATIC_ASSERT( isTriangleNode<PrimitiveNode>() );
+		}
 	}
 
-	template <typename TriangleNode>
-	HIPRT_HOST_DEVICE TriangleNode fetchPrimNode( const uint2 pairIndices ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Aabb fetchAabb( const uint32_t index ) const
 	{
-		if constexpr ( is_same<TriangleNode, TrianglePairNode>::value )
-			return fetchTrianglePairNode( pairIndices );
-		else
-			return fetchTrianglePacketNode( pairIndices );
+		const uint2 pairIndices = fetchTrianglePairIndices( index );
+		Aabb        box         = fetchTriangle( pairIndices.x ).aabb();
+		if ( pairIndices.x != pairIndices.y ) box.grow( fetchTriangle( pairIndices.y ).aabb() );
+		return box;
 	}
 
-#if defined( __KERNELCC__ )
-	HIPRT_HOST_DEVICE TriangleNode fetchPrimNode( const uint32_t index ) const { return fetchPrimNode<TriangleNode>( index ); }
-
-	HIPRT_HOST_DEVICE TriangleNode fetchPrimNode( const uint2 pairIndices ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 fetchCenter( const uint32_t index ) const
 	{
-		return fetchPrimNode<TriangleNode>( pairIndices );
+		return fetchAabb( index ).center();
 	}
-#endif
 
-	HIPRT_HOST_DEVICE Aabb fetchAabb( const uint32_t index ) const { return fetchTrianglePairNode( index ).aabb(); }
-
-	HIPRT_HOST_DEVICE float3 fetchCenter( const uint32_t index ) const { return fetchAabb( index ).center(); }
-
-	HIPRT_HOST_DEVICE uint32_t getCount() const { return m_pairCount > 0 ? m_pairCount : m_triangleCount; }
-
-	HIPRT_HOST_DEVICE void setPairs( const uint32_t pairCount, const uint2* pairIndices )
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE uint32_t getCount() const
 	{
-		m_pairCount	  = pairCount;
+		return m_pairCount > 0 ? m_pairCount : m_triangleCount;
+	}
+
+	HIPRT_HOST_DEVICE HIPRT_INLINE void setPairs( const uint32_t pairCount, const uint2* pairIndices )
+	{
+		m_pairCount   = pairCount;
 		m_pairIndices = pairIndices;
 	}
 
-	HIPRT_HOST_DEVICE bool pairable() const { return m_triangleIndices != nullptr && m_triangleCount > 2 && m_pairCount == 0; }
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE bool pairable() const
+	{
+		return m_triangleIndices != nullptr && m_triangleCount > 2 && m_pairCount == 0;
+	}
 
-	HIPRT_HOST_DEVICE void
+	HIPRT_HOST_DEVICE HIPRT_INLINE void
 	split( const uint32_t index, const uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
 	{
 		uint2 pairIndices = fetchTrianglePairIndices( index );
 
 		Aabb leftBox0, rightBox0;
 		{
-			Triangle	tri;
+			Triangle    tri;
 			const uint3 indices = fetchTriangleIndices( pairIndices.x );
-			tri.m_v0			= fetchVertex( indices.x );
-			tri.m_v1			= fetchVertex( indices.y );
-			tri.m_v2			= fetchVertex( indices.z );
+			tri.m_vertices[0]   = fetchVertex( indices.x );
+			tri.m_vertices[1]   = fetchVertex( indices.y );
+			tri.m_vertices[2]   = fetchVertex( indices.z );
 			tri.split( axis, position, box, leftBox0, rightBox0 );
 		}
 
 		Aabb leftBox1, rightBox1;
 		{
-			Triangle	tri;
+			Triangle    tri;
 			const uint3 indices = fetchTriangleIndices( pairIndices.y );
-			tri.m_v0			= fetchVertex( indices.x );
-			tri.m_v1			= fetchVertex( indices.y );
-			tri.m_v2			= fetchVertex( indices.z );
+			tri.m_vertices[0]   = fetchVertex( indices.x );
+			tri.m_vertices[1]   = fetchVertex( indices.y );
+			tri.m_vertices[2]   = fetchVertex( indices.z );
 			tri.split( axis, position, box, leftBox1, rightBox1 );
 		}
 
-		leftBox	 = Aabb( leftBox0, leftBox1 );
+		leftBox  = Aabb( leftBox0, leftBox1 );
 		rightBox = Aabb( rightBox0, rightBox1 );
 	}
 
   private:
-	const uint8_t* m_vertices;
-	uint32_t	   m_vertexCount;
-	uint32_t	   m_vertexStride;
-	const uint8_t* m_triangleIndices;
-	uint32_t	   m_triangleCount;
-	uint32_t	   m_triangleStride;
+	const uint8_t* m_vertices = nullptr;
+	const uint32_t m_vertexCount{};
+	const uint32_t m_vertexStride{};
+	const uint8_t* m_triangleIndices = nullptr;
+	uint32_t       m_triangleCount{};
+	const uint32_t m_triangleStride{};
 	const uint2*   m_pairIndices = nullptr;
-	uint32_t	   m_pairCount	 = 0u;
+	uint32_t       m_pairCount{};
 };
 } // namespace hiprt

@@ -24,29 +24,28 @@
 
 #include <atomic>
 
-// from FireRender
-template <class T, int CHUNK_BITS>
+template <class T, int ChunkBits>
 class PoolAllocator
 {
   public:
 	enum
 	{
-		CHUNK_ITEMS = 1 << CHUNK_BITS,
-		CHUNK_MASK	= CHUNK_ITEMS - 1,
-		ITEM_MASK	= ~CHUNK_MASK,
+		ChunkItems = 1 << ChunkBits,
+		ChunkMask  = ChunkItems - 1,
+		ItemMask   = ~ChunkMask,
 	};
 
 	struct Chunk
 	{
-		T					  items[CHUNK_ITEMS];
-		uint32_t			  index = 0;
-		std::atomic<uint32_t> head	= 0;
+		T                     m_items[ChunkItems];
+		uint32_t              m_index = 0;
+		std::atomic<uint32_t> m_head  = 0;
 	};
 
 	PoolAllocator()
 	{
 		Chunk* chunk = new Chunk();
-		m_ptr		 = chunk;
+		m_ptr        = chunk;
 		m_chunks.push_back( chunk );
 	}
 
@@ -61,28 +60,28 @@ class PoolAllocator
 
 	void allocate( uint32_t* handle, T** ptr )
 	{
-		for ( ;; )
+		while ( true )
 		{
 			Chunk* chunk = m_ptr.load();
-			if ( CHUNK_ITEMS <= chunk->head.load() )
+			if ( ChunkItems <= chunk->m_head.load() )
 			{
 				// the chunk is full but other thread should be allocating a new chunk.
 				continue;
 			}
 
-			uint32_t itemIndex = chunk->head++;
-			if ( itemIndex < CHUNK_ITEMS )
+			const uint32_t itemIndex = chunk->m_head++;
+			if ( itemIndex < ChunkItems )
 			{
 				// allocation succeeded
-				*handle = ( chunk->index << CHUNK_BITS ) | itemIndex;
-				*ptr	= chunk->items + itemIndex;
+				*handle = ( chunk->m_index << ChunkBits ) | itemIndex;
+				*ptr    = chunk->m_items + itemIndex;
 
 				if ( itemIndex + 1 ==
-					 CHUNK_ITEMS ) // run out of chunk. let's allocate a new chunk. only one thread can allocate it.
+				     ChunkItems ) // run out of chunk. let's allocate a new chunk. only one thread can allocate it.
 				{
-					Chunk* newChunk = new Chunk();
-					newChunk->index = chunk->index + 1;
-					newChunk->head	= 0;
+					Chunk* newChunk   = new Chunk();
+					newChunk->m_index = chunk->m_index + 1;
+					newChunk->m_head  = 0;
 					m_chunks.push_back( newChunk );
 					m_ptr = newChunk;
 				}
@@ -92,26 +91,25 @@ class PoolAllocator
 	}
 
 	// these methods conflicts with allocate
-	T* item( uint32_t handle )
+	[[nodiscard]] T* item( const uint32_t handle )
 	{
-		uint32_t m			= CHUNK_MASK;
-		uint32_t chunkIndex = ( handle & ITEM_MASK ) >> CHUNK_BITS;
-		uint32_t itemIndex	= handle & CHUNK_MASK;
-		return m_chunks[chunkIndex]->items + itemIndex;
+		const uint32_t chunkIndex = ( handle & ItemMask ) >> ChunkBits;
+		const uint32_t itemIndex  = handle & ChunkMask;
+		return m_chunks[chunkIndex]->m_items + itemIndex;
 	}
 
-	const T* item( uint32_t handle ) const
+	[[nodiscard]] const T* item( uint32_t handle ) const
 	{
-		using ME = PoolAllocator<T, CHUNK_BITS>;
+		using ME = PoolAllocator<T, ChunkBits>;
 		return const_cast<ME*>( this )->item( handle );
 	}
 
-	int		 chunkCount() const { return m_chunks.size(); }
-	T*		 chunk( int i ) const { return m_chunks[i]->items; }
-	uint32_t chunkBytes() const { return CHUNK_ITEMS * sizeof( T ); }
-	uint32_t count() const
+	[[nodiscard]] int      chunkCount() const { return m_chunks.size(); }
+	[[nodiscard]] T*       chunk( const uint32_t i ) const { return m_chunks[i]->m_items; }
+	[[nodiscard]] uint32_t chunkBytes() const { return ChunkItems * sizeof( T ); }
+	[[nodiscard]] uint32_t count() const
 	{
-		return static_cast<uint32_t>( ( m_chunks.size() - 1 ) * CHUNK_ITEMS + m_ptr.load()->head.load() );
+		return static_cast<uint32_t>( ( m_chunks.size() - 1 ) * ChunkItems + m_ptr.load()->m_head.load() );
 	}
 
   private:

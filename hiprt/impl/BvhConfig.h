@@ -30,23 +30,21 @@ namespace hiprt
 // Cost
 static constexpr bool LogBvhCost = false;
 // BVH
-static constexpr uint32_t BvhBuilderReductionBlockSize	= 256u;
+static constexpr uint32_t BvhBuilderReductionBlockSize  = 256u;
 static constexpr uint32_t BvhBuilderCompactionBlockSize = 1024;
-static constexpr uint32_t BatchBuilderMaxBlockSize		= MaxBatchBuildMaxPrimCount;
-static constexpr uint32_t MaxFatLeafSize				= 4u;
-static constexpr uint32_t LanesPerLeafPacketTask		= 4u;
-static constexpr float	  ObbEpsilon					= 1.0e-4f;
-static constexpr float	  ObbSurfaceAreaAlpha			= 1.1f;
+static constexpr uint32_t BatchBuilderMaxBlockSize      = MaxBatchBuildMaxPrimCount;
+static constexpr float    ObbEpsilon                    = 1.0e-4f;
+static constexpr float    ObbSurfaceAreaAlpha           = 1.1f;
 // LBVH
 static constexpr uint32_t LbvhEmitBlockSize = 512u;
 // PLOC
 static constexpr uint32_t PlocMainBlockSize = 1024u;
-static constexpr uint32_t PlocRadius		= 8u;
+static constexpr uint32_t PlocRadius        = 8u;
 // SBVH
 static constexpr uint32_t SbvhMinBinCount = 8u;
 static constexpr uint32_t SbvhMaxBinCount = 32u;
-static constexpr float	  SbvhAlpha		  = 1.5f;
-static constexpr float	  SbvhBeta		  = 1.0e-4f;
-static constexpr float	  SbvhGamma		  = 1.0e-3f;
-static constexpr float	  SbvhEpsilon	  = 1.0e-2f;
+static constexpr float    SbvhAlpha       = 1.5f;
+static constexpr float    SbvhBeta        = 1.0e-4f;
+static constexpr float    SbvhGamma       = 1.0e-3f;
+static constexpr float    SbvhEpsilon     = 1.0e-2f;
 }; // namespace hiprt

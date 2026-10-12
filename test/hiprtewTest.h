@@ -130,6 +130,6 @@ class hiprtewTest : public ::testing::Test
 
   protected:
 	hiprtContextCreationInput m_ctxtInput;
-	oroCtx					  m_oroCtx;
-	oroDevice				  m_oroDevice;
+	oroCtx                    m_oroCtx;
+	oroDevice                 m_oroDevice;
 };

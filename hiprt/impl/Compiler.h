@@ -39,105 +39,110 @@ class Compiler
 
 	void init();
 
-	Kernel getKernel(
-		Context&					 context,
-		const std::filesystem::path& moduleName,
-		const std::string&			 funcName,
-		std::vector<const char*>&	 options,
-		uint32_t					 numHeaders	  = 0,
-		const char**				 headers	  = nullptr,
-		const char**				 includeNames = nullptr );
+	[[nodiscard]] Kernel getKernel(
+		const Context&                  context,
+		const std::filesystem::path&    moduleName,
+		const std::string&              funcName,
+		const std::vector<const char*>& options,
+		const uint32_t                  numHeaders   = 0,
+		const char**                    headers      = nullptr,
+		const char**                    includeNames = nullptr );
 
 	void buildProgram(
 		const std::vector<const char*>& funcNames,
-		const std::string&				src,
-		const std::filesystem::path&	moduleName,
-		std::vector<const char*>&		headers,
-		std::vector<const char*>&		includeNames,
-		std::vector<const char*>&		options,
-		orortcProgram&					progOut );
+		const std::string&              src,
+		const std::filesystem::path&    moduleName,
+		std::vector<const char*>&       headers,
+		std::vector<const char*>&       includeNames,
+		const std::vector<const char*>& options,
+		orortcProgram&                  progOut );
 
 	void buildKernels(
-		Context&							 context,
-		const std::vector<const char*>&		 funcNames,
-		const std::string&					 src,
-		const std::filesystem::path&		 moduleName,
-		std::vector<const char*>&			 headers,
-		std::vector<const char*>&			 includeNames,
-		std::vector<const char*>&			 options,
-		uint32_t							 numGeomTypes,
-		uint32_t							 numRayTypes,
+		const Context&                       context,
+		const std::vector<const char*>&      funcNames,
+		const std::string&                   src,
+		const std::filesystem::path&         moduleName,
+		std::vector<const char*>&            headers,
+		std::vector<const char*>&            includeNames,
+		const std::vector<const char*>&      options,
+		const uint32_t                       numGeomTypes,
+		const uint32_t                       numRayTypes,
 		const std::vector<hiprtFuncNameSet>& funcNameSets,
-		std::vector<oroFunction>&			 functions,
-		oroModule&							 module,
-		bool								 extended,
-		bool								 cache );
+		std::vector<oroFunction>&            functions,
+		oroModule&                           module,
+		const bool                           extended,
+		const bool                           cache );
 
 	void buildKernelsFromBitcode(
-		Context&							 context,
-		const std::vector<const char*>&		 funcNames,
-		const std::filesystem::path&		 moduleName,
-		const std::string_view				 bitcodeBinary,
-		uint32_t							 numGeomTypes,
-		uint32_t							 numRayTypes,
+		const Context&                       context,
+		const std::vector<const char*>&      funcNames,
+		const std::filesystem::path&         moduleName,
+		const std::string_view               bitcodeBinary,
+		const uint32_t                       numGeomTypes,
+		const uint32_t                       numRayTypes,
 		const std::vector<hiprtFuncNameSet>& funcNameSets,
-		std::vector<oroFunction>&			 functions,
-		bool								 cache );
+		std::vector<oroFunction>&            functions,
+		const bool                           cache );
 
 	void setCacheDir( const std::filesystem::path& path );
 
-	bool isRtip31Supported() const { return m_rtip31Support; }
+	[[nodiscard]] bool isRtip31Supported() const { return m_rtip31Support; }
 
-	static std::string kernelNameSufix( const std::string& traits );
+	[[nodiscard]] static std::string kernelNameSufix( const std::string& traits );
 
   private:
-	static std::string readSourceCode(
+	[[nodiscard]] static std::string readSourceCode(
 		const std::filesystem::path& path, std::optional<std::vector<std::filesystem::path>> includes = std::nullopt );
 
-	static std::filesystem::path getBitcodePath( bool amd );
-	static std::filesystem::path getFatbinPath( bool amd );
+	[[nodiscard]] static std::filesystem::path getBitcodePath( const bool amd );
+	[[nodiscard]] static std::filesystem::path getFatbinPath( const bool amd );
 
-	static bool isCachedFileUpToDate( const std::filesystem::path& cachedFile, const std::filesystem::path& moduleName );
+	[[nodiscard]] static bool
+	isCachedFileUpToDate( const std::filesystem::path& cachedFile, const std::filesystem::path& moduleName );
 
 	void addCustomFuncsSwitchCase(
-		std::string&								 extSrc,
+		std::string&                                 extSrc,
 		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
-		uint32_t									 numGeomTypes = 0,
-		uint32_t									 numRayTypes  = 1 );
+		const uint32_t                               numGeomTypes = 0,
+		const uint32_t                               numRayTypes  = 1 );
 
-	void addCommonOpts( Context& context, std::vector<const char*>& opts, bool extended );
+	void addCommonOpts( const Context& context, std::vector<const char*>& opts, const bool extended );
 
-	std::string getCacheFilename(
-		Context&									 context,
-		const std::string&							 src,
-		const std::filesystem::path&				 moduleName,
-		std::optional<std::vector<const char*>>		 options	  = std::nullopt,
+	[[nodiscard]] std::string getCacheFilename(
+		const Context&                               context,
+		const std::string&                           src,
+		const std::filesystem::path&                 moduleName,
+		std::optional<std::vector<const char*>>      options      = std::nullopt,
 		std::optional<std::vector<hiprtFuncNameSet>> funcNameSets = std::nullopt,
-		uint32_t									 numGeomTypes = 0,
-		uint32_t									 numRayTypes  = 1 );
+		const uint32_t                               numGeomTypes = 0,
+		const uint32_t                               numRayTypes  = 1 );
 
-	std::string loadCacheFileToBinary( const std::string& cacheName, const std::string& deviceName );
+	[[nodiscard]] std::string loadCacheFileToBinary( const std::string& cacheName, const std::string& deviceName );
 
 	void cacheBinaryToFile( const std::string& binary, const std::string& cacheName, const std::string& deviceName );
 
-	oroFunction getFunctionFromPrecompiledBinary( const std::string& funcName );
+	[[nodiscard]] oroFunction getFunctionFromPrecompiledBinary( const std::string& funcName );
 
-	std::string buildFunctionTableBitcode(
-		Context& context, uint32_t numGeomTypes, uint32_t numRayTypes, const std::vector<hiprtFuncNameSet>& funcNameSets );
+	[[nodiscard]] std::string buildFunctionTableBitcode(
+		const Context&                       context,
+		const uint32_t                       numGeomTypes,
+		const uint32_t                       numRayTypes,
+		const std::vector<hiprtFuncNameSet>& funcNameSets );
 
 	std::filesystem::path m_cacheDirectory = "cache";
 
 	bool m_rtip31Support = false;
 
 	std::string m_rtipStr;
+	std::string m_offloadArchStr;
 
-	std::mutex					  m_kernelMutex;
+	std::mutex                    m_kernelMutex;
 	std::map<std::string, Kernel> m_kernelCache;
 
-	std::mutex						 m_moduleMutex;
+	std::mutex                       m_moduleMutex;
 	std::map<std::string, oroModule> m_moduleCache;
 
-	std::mutex						   m_binMutex;
+	std::mutex                         m_binMutex;
 	std::map<std::string, std::string> m_binCache;
 };
 } // namespace hiprt

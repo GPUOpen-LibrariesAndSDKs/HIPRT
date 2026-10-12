@@ -52,19 +52,19 @@ HIPRT_DEVICE void* operator new[]( size_t size, void* ptr ) noexcept { return pt
 #endif
 
 HIPRT_DEVICE bool intersectFunc(
-	uint32_t					geomType,
-	uint32_t					rayType,
+	const uint32_t              geomType,
+	const uint32_t              rayType,
 	const hiprtFuncTableHeader& tableHeader,
-	const hiprtRay&				ray,
-	void*						payload,
-	hiprtHit&					hit );
+	const hiprtRay&             ray,
+	void*                       payload,
+	hiprtHit&                   hit );
 HIPRT_DEVICE bool filterFunc(
-	uint32_t					geomType,
-	uint32_t					rayType,
+	const uint32_t              geomType,
+	const uint32_t              rayType,
 	const hiprtFuncTableHeader& tableHeader,
-	const hiprtRay&				ray,
-	void*						payload,
-	const hiprtHit&				hit );
+	const hiprtRay&             ray,
+	void*                       payload,
+	const hiprtHit&             hit );
 
 namespace hiprt
 {
@@ -74,7 +74,7 @@ enum
 	Triangle1Processed = 2,
 };
 
-HIPRT_DEVICE HIPRT_INLINE float3 rcp( const float3 a )
+HIPRT_DEVICE HIPRT_INLINE float3 rcp( const float3& a )
 {
 #if HIPRT_RTIP >= 11
 	return float3{ __ocml_native_recip_f32( a.x ), __ocml_native_recip_f32( a.y ), __ocml_native_recip_f32( a.z ) };
@@ -84,50 +84,39 @@ HIPRT_DEVICE HIPRT_INLINE float3 rcp( const float3 a )
 }
 
 template <typename StackEntry, uint32_t StackSize>
-class PrivateStack
+HIPRT_DEVICE HIPRT_INLINE PrivateStack<StackEntry, StackSize>::PrivateStack() : m_top( 0u )
 {
-  public:
-	HIPRT_DEVICE PrivateStack() : m_top( 0u ) {}
+}
 
-	HIPRT_DEVICE StackEntry pop() { return m_stackBuffer[--m_top]; }
-	HIPRT_DEVICE void		push( StackEntry val ) { m_stackBuffer[m_top++] = val; }
-	HIPRT_DEVICE bool		empty() const { return m_top == 0u; }
-	HIPRT_DEVICE uint32_t	vacancy() const { return StackSize - m_top; }
-	HIPRT_DEVICE void		reset() { m_top = 0u; }
-
-  private:
-	StackEntry m_stackBuffer[StackSize];
-	uint32_t   m_top;
-};
-
-template <typename StackEntry, bool DynamicAssignment>
-class GlobalStack
+template <typename StackEntry, uint32_t StackSize>
+HIPRT_DEVICE HIPRT_INLINE StackEntry PrivateStack<StackEntry, StackSize>::pop()
 {
-  public:
-	static constexpr uint32_t Stride	= hiprt::WarpSize;
-	static constexpr uint32_t LogStride = hiprt::Log2( Stride );
+	return m_stackBuffer[--m_top];
+}
 
-	HIPRT_DEVICE
-	GlobalStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer );
+template <typename StackEntry, uint32_t StackSize>
+HIPRT_DEVICE HIPRT_INLINE void PrivateStack<StackEntry, StackSize>::push( const StackEntry val )
+{
+	m_stackBuffer[m_top++] = val;
+}
 
-	HIPRT_DEVICE ~GlobalStack();
+template <typename StackEntry, uint32_t StackSize>
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE bool PrivateStack<StackEntry, StackSize>::empty() const
+{
+	return m_top == 0u;
+}
 
-	HIPRT_DEVICE StackEntry pop();
-	HIPRT_DEVICE void		push( StackEntry val );
-	HIPRT_DEVICE uint32_t	vacancy() const;
-	HIPRT_DEVICE bool		empty() const;
-	HIPRT_DEVICE void		reset();
+template <typename StackEntry, uint32_t StackSize>
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE uint32_t PrivateStack<StackEntry, StackSize>::vacancy() const
+{
+	return StackSize - m_top;
+}
 
-  private:
-	uint32_t*	m_globalStackLock;
-	StackEntry* m_globalStackBuffer;
-	StackEntry* m_sharedStackBuffer;
-	uint32_t	m_globalStackSize;
-	uint32_t	m_sharedStackSize;
-	int32_t		m_globalIndex;
-	int32_t		m_sharedIndex;
-	uint32_t	m_sharedCount;
-};
+template <typename StackEntry, uint32_t StackSize>
+HIPRT_DEVICE HIPRT_INLINE void PrivateStack<StackEntry, StackSize>::reset()
+{
+	m_top = 0u;
+}
 
 template <typename StackEntry, bool DynamicAssignment>
 HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::GlobalStack(
@@ -138,17 +127,17 @@ HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::GlobalStack(
 	const uint32_t laneIndex   = threadIndex & ( Stride - 1 );
 
 	const uint32_t sharedStackOffset = laneIndex + warpIndex * Stride * sharedStackBuffer.stackSize;
-	m_sharedStackBuffer				 = reinterpret_cast<StackEntry*>( sharedStackBuffer.stackData ) + sharedStackOffset;
-	m_sharedStackSize				 = sharedStackBuffer.stackSize;
+	m_sharedStackBuffer              = reinterpret_cast<StackEntry*>( sharedStackBuffer.stackData ) + sharedStackOffset;
+	m_sharedStackSize                = sharedStackBuffer.stackSize;
 	if constexpr ( DynamicAssignment )
 	{
-		const uint32_t warpsPerBlock	= hiprt::DivideRoundUp( blockDim.x * blockDim.y, Stride );
-		const uint32_t activeWarps		= globalStackBuffer.stackCount >> LogStride;
+		const uint32_t warpsPerBlock    = hiprt::DivideRoundUp( blockDim.x * blockDim.y, Stride );
+		const uint32_t activeWarps      = globalStackBuffer.stackCount >> LogStride;
 		const uint32_t firstThreadIndex = __ffsll( static_cast<unsigned long long>( hiprt::ballot( true ) ) ) - 1;
 
-		uint32_t  warpHash			= InvalidValue;
+		uint32_t  warpHash          = InvalidValue;
 		uint32_t  warpHashCandidate = ( warpIndex + ( blockIdx.x + blockIdx.y * gridDim.x ) * warpsPerBlock ) % activeWarps;
-		uint32_t* globalStackLocks	= reinterpret_cast<uint32_t*>( globalStackBuffer.stackData );
+		uint32_t* globalStackLocks  = reinterpret_cast<uint32_t*>( globalStackBuffer.stackData );
 		while ( warpHash == InvalidValue )
 		{
 			if ( laneIndex == firstThreadIndex )
@@ -156,14 +145,14 @@ HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::GlobalStack(
 				if ( atomicCAS( &globalStackLocks[warpHashCandidate], 0, 1 ) == 0 ) warpHash = warpHashCandidate;
 			}
 			warpHashCandidate = ( warpHashCandidate + 1 ) % activeWarps;
-			warpHash		  = shfl( warpHash, firstThreadIndex );
+			warpHash          = shfl( warpHash, firstThreadIndex );
 		}
 		__threadfence();
 		m_globalStackLock = &globalStackLocks[warpHash];
 
 		const uint32_t globalStackOffset = activeWarps + laneIndex + ( warpHash << LogStride ) * globalStackBuffer.stackSize;
-		m_globalStackBuffer				 = reinterpret_cast<StackEntry*>( globalStackBuffer.stackData ) + globalStackOffset;
-		m_globalStackSize				 = globalStackBuffer.stackSize;
+		m_globalStackBuffer              = reinterpret_cast<StackEntry*>( globalStackBuffer.stackData ) + globalStackOffset;
+		m_globalStackSize                = globalStackBuffer.stackSize;
 	}
 	else
 	{
@@ -171,18 +160,18 @@ HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::GlobalStack(
 			laneIndex + ( warpIndex * Stride + ( blockIdx.x + blockIdx.y * gridDim.x ) * ( blockDim.x * blockDim.y ) ) *
 							globalStackBuffer.stackSize;
 		m_globalStackBuffer = reinterpret_cast<StackEntry*>( globalStackBuffer.stackData ) + globalStackOffset;
-		m_globalStackSize	= globalStackBuffer.stackSize;
+		m_globalStackSize   = globalStackBuffer.stackSize;
 	}
 }
 
 template <typename StackEntry, bool DynamicAssignment>
-HIPRT_DEVICE GlobalStack<StackEntry, DynamicAssignment>::~GlobalStack()
+HIPRT_DEVICE HIPRT_INLINE GlobalStack<StackEntry, DynamicAssignment>::~GlobalStack()
 {
 	if constexpr ( DynamicAssignment )
 	{
 		__threadfence();
-		const uint32_t threadIndex		= threadIdx.x + threadIdx.y * blockDim.x;
-		const uint32_t laneIndex		= threadIndex & ( Stride - 1 );
+		const uint32_t threadIndex      = threadIdx.x + threadIdx.y * blockDim.x;
+		const uint32_t laneIndex        = threadIndex & ( Stride - 1 );
 		const uint32_t firstThreadIndex = __ffsll( static_cast<unsigned long long>( hiprt::ballot( true ) ) ) - 1;
 		if ( laneIndex == firstThreadIndex ) atomicExch( m_globalStackLock, 0 );
 	}
@@ -247,120 +236,84 @@ HIPRT_DEVICE HIPRT_INLINE void GlobalStack<StackEntry, DynamicAssignment>::reset
 }
 
 template <typename Stack, hiprtTraversalType TraversalType>
-class TraversalBase
+HIPRT_DEVICE HIPRT_INLINE TraversalBase<Stack, TraversalType>::TraversalBase(
+	const hiprtRay&          ray,
+	Stack&                   stack,
+	const hiprtTraversalHint hint,
+	void*                    payload,
+	const hiprtFuncTable     funcTable,
+	const uint32_t           rayType )
+	: m_ray( ray ), m_stack( stack ), m_payload( payload ), m_nodeIndex( RootIndex ), m_rayType( rayType ), m_hint( hint )
 {
-  public:
-	HIPRT_DEVICE TraversalBase(
-		const hiprtRay& ray, Stack& stack, hiprtTraversalHint hint, void* payload, hiprtFuncTable funcTable, uint32_t rayType )
-		: m_ray( ray ), m_stack( stack ), m_payload( payload ), m_nodeIndex( RootIndex ), m_rayType( rayType ), m_hint( hint )
-	{
-		if ( funcTable != nullptr ) m_tableHeader = *reinterpret_cast<hiprtFuncTableHeader*>( funcTable );
+	if ( funcTable != nullptr ) m_tableHeader = *reinterpret_cast<const hiprtFuncTableHeader*>( funcTable );
 #if HIPRT_RTIP >= 11
-		packDescriptor( static_cast<uint32_t>( hint ), Rtip >= 31 );
+	packDescriptor( static_cast<uint32_t>( hint ), Rtip >= 31 );
 #endif
-	}
+}
 
-#if HIPRT_RTIP >= 11
-	HIPRT_DEVICE void packDescriptor( uint32_t boxSortHeuristic = 0u, bool compressed = false );
-#endif
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_state; }
-
-	HIPRT_DEVICE bool testInternalNode( const hiprtRay& ray, const float3& invD, BoxNode* nodes, uint32_t& nodeIndex );
-
-	HIPRT_DEVICE bool testTriangleNode(
-		const hiprtRay& ray,
-		const float3&	invD,
-		TriangleNode*	nodes,
-		uint32_t		geomType,
-		uint32_t&		leafIndex,
-		uint32_t&		triangleMask,
-		hiprtHit&		hit );
-
-	HIPRT_DEVICE bool testTriangle(
-		const hiprtRay& ray, const float3& invD, TrianglePairNode* nodes, uint32_t leafAddr, uint32_t leafType, hiprtHit& hit );
-
-	HIPRT_DEVICE uint32_t testTrianglePair(
-		const hiprtRay&		ray,
-		TrianglePacketNode* nodes,
-		uint32_t			leafAddr,
-		uint32_t			triPairIndex,
-		hiprtHit&			hit0,
-		hiprtHit&			hit1,
-		bool&				nodeEnd,
-		bool&				rangeEnd );
-
-  protected:
-	hiprtRay			 m_ray;
-	hiprtFuncTableHeader m_tableHeader = { 0, 1, nullptr };
-	uint4				 m_descriptor;
-	Stack&				 m_stack;
-	BoxNode*			 m_boxNodes;
-	void*				 m_payload;
-	uint32_t			 m_nodeIndex;
-	uint32_t			 m_rayType;
-	uint32_t			 m_triangleMask = 0;
-	hiprtTraversalState	 m_state		= hiprtTraversalStateInit;
-	hiprtTraversalHint	 m_hint			= hiprtTraversalHintDefault;
-};
+template <typename Stack, hiprtTraversalType TraversalType>
+HIPRT_DEVICE HIPRT_INLINE hiprtTraversalState TraversalBase<Stack, TraversalType>::getCurrentState() const
+{
+	return m_state;
+}
 
 #if HIPRT_RTIP >= 11
 template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE void TraversalBase<Stack, TraversalType>::packDescriptor( uint32_t boxSortHeuristic, bool compressed )
+HIPRT_DEVICE HIPRT_INLINE void
+TraversalBase<Stack, TraversalType>::packDescriptor( const uint32_t boxSortHeuristic, const bool compressed )
 {
-	boxSortHeuristic &= 0x3;
-	uint64_t baseAddress		  = 0x0;
-	uint64_t size				  = 0x3ffffffffffull;
-	uint32_t boxGrowUlp			  = 0x6;
-	uint32_t boxSortEnable		  = 0x1;
-	uint32_t triangleReturnMode	  = 0x1;
-	uint32_t type				  = 0x8;
+	uint64_t baseAddress          = 0x0;
+	uint64_t size                 = 0x3ffffffffffull;
+	uint32_t boxGrowUlp           = 0x6;
+	uint32_t boxSortEnable        = 0x1;
+	uint32_t triangleReturnMode   = 0x1;
+	uint32_t type                 = 0x8;
 	uint32_t compressFormatEnable = 0x0;
-	uint32_t instanceEnable		  = 0x0;
-	uint32_t sortTrianglesFirst	  = 0x0;
-	uint32_t wideSortEnable		  = 0x0;
+	uint32_t instanceEnable       = 0x0;
+	uint32_t sortTrianglesFirst   = 0x0;
+	uint32_t wideSortEnable       = 0x0;
 	if ( compressed )
 	{
 		compressFormatEnable = 0x1;
-		instanceEnable		 = 0x1;
-		sortTrianglesFirst	 = 0x1;
-		wideSortEnable		 = 0x1;
+		instanceEnable       = 0x1;
+		sortTrianglesFirst   = 0x1;
+		wideSortEnable       = 0x1;
 	}
 	m_descriptor.x = baseAddress & 0xffffffff;
-	m_descriptor.y = ( baseAddress >> 32ull ) | ( boxSortEnable << 31u ) | ( boxGrowUlp << 23u ) | ( boxSortHeuristic << 21u ) |
-					 ( sortTrianglesFirst << 20u );
+	m_descriptor.y = ( baseAddress >> 32ull ) | ( boxSortEnable << 31u ) | ( boxGrowUlp << 23u ) |
+	                 ( ( boxSortHeuristic & 0x3 ) << 21u ) | ( sortTrianglesFirst << 20u );
 	m_descriptor.z = size & 0xffffffff;
 	m_descriptor.w = ( size >> 32ull ) | ( triangleReturnMode << 24u ) | ( type << 28u ) | ( instanceEnable << 22u ) |
-					 ( wideSortEnable << 21u ) | ( compressFormatEnable << 19u );
+	                 ( wideSortEnable << 21u ) | ( compressFormatEnable << 19u );
 }
 #endif
 
 template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testInternalNode(
-	const hiprtRay& ray, [[maybe_unused]] const float3& invD, BoxNode* nodes, uint32_t& nodeIndex )
+HIPRT_DEVICE HIPRT_INLINE bool TraversalBase<Stack, TraversalType>::testInternalNode(
+	const hiprtRay& ray, [[maybe_unused]] const float3& invD, const BoxNode* nodes, uint32_t& nodeIndex )
 {
 #if HIPRT_RTIP < 11
-	BoxNode node = nodes[getNodeAddr( nodeIndex )];
-	float2	s0	 = node.m_box0.intersect( ray.origin, invD, ray.maxT );
-	float2	s1	 = node.m_box1.intersect( ray.origin, invD, ray.maxT );
-	float2	s2	 = node.m_box2.intersect( ray.origin, invD, ray.maxT );
-	float2	s3	 = node.m_box3.intersect( ray.origin, invD, ray.maxT );
+	const BoxNode node = nodes[getNodeAddr( nodeIndex )];
+	float2        s0   = node.m_childBoxes[0].intersect( ray.origin, invD, ray.maxT );
+	float2        s1   = node.m_childBoxes[1].intersect( ray.origin, invD, ray.maxT );
+	float2        s2   = node.m_childBoxes[2].intersect( ray.origin, invD, ray.maxT );
+	float2        s3   = node.m_childBoxes[3].intersect( ray.origin, invD, ray.maxT );
 
 	uint32_t result[4];
-	result[0] = s0.x <= s0.y ? node.m_childIndex0 : InvalidValue;
-	result[1] = s1.x <= s1.y ? node.m_childIndex1 : InvalidValue;
-	result[2] = s2.x <= s2.y ? node.m_childIndex2 : InvalidValue;
-	result[3] = s3.x <= s3.y ? node.m_childIndex3 : InvalidValue;
+	result[0] = s0.x <= s0.y ? node.m_childIndices[0] : InvalidValue;
+	result[1] = s1.x <= s1.y ? node.m_childIndices[1] : InvalidValue;
+	result[2] = s2.x <= s2.y ? node.m_childIndices[2] : InvalidValue;
+	result[3] = s3.x <= s3.y ? node.m_childIndices[3] : InvalidValue;
 
 #define SORT( childIndexA, childIndexB, distA, distB )                                     \
 	if ( ( childIndexB != InvalidValue && distB < distA ) || childIndexA == InvalidValue ) \
 	{                                                                                      \
-		float	 t0 = distA;                                                               \
-		uint32_t t1 = childIndexA;                                                         \
-		childIndexA = childIndexB;                                                         \
-		distA		= distB;                                                               \
-		childIndexB = t1;                                                                  \
-		distB		= t0;                                                                  \
+		const float    t0 = distA;                                                         \
+		const uint32_t t1 = childIndexA;                                                   \
+		childIndexA       = childIndexB;                                                   \
+		distA             = distB;                                                         \
+		childIndexB       = t1;                                                            \
+		distB             = t0;                                                            \
 	}
 
 	SORT( result[0], result[2], s0.x, s2.x )
@@ -371,16 +324,16 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testInternalNode(
 #undef SORT
 #elif HIPRT_RTIP >= 31
 	hip_float3 dummy0, dummy1;
-	auto	   result = __builtin_amdgcn_image_bvh8_intersect_ray(
-		  encodeBaseAddr( nodes ),
-		  ray.maxT,
-		  0xff,
-		  { ray.origin.x, ray.origin.y, ray.origin.z },
-		  { ray.direction.x, ray.direction.y, ray.direction.z },
-		  nodeIndex,
-		  { m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w },
-		  &dummy0,
-		  &dummy1 );
+	auto       result = __builtin_amdgcn_image_bvh8_intersect_ray(
+        encodeBaseAddr( nodes ),
+        ray.maxT,
+        0xff,
+        { ray.origin.x, ray.origin.y, ray.origin.z },
+        { ray.direction.x, ray.direction.y, ray.direction.z },
+        nodeIndex,
+        { m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w },
+        &dummy0,
+        &dummy1 );
 #else
 	auto result = __builtin_amdgcn_image_bvh_intersect_ray_l(
 		encodeBaseAddr( nodes, nodeIndex ),
@@ -391,14 +344,14 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testInternalNode(
 		{ m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w } );
 #endif
 
-	if ( m_stack.vacancy() < BranchingFactor - 1 )
+	if ( m_stack.vacancy() < BoxNode::BranchingFactor - 1 )
 	{
 		m_state = hiprtTraversalStateStackOverflow;
 		return true;
 	}
 
-#pragma unroll
-	for ( uint32_t i = BranchingFactor - 1; i >= 1; --i )
+	HIPRT_UNROLL
+	for ( uint32_t i = BoxNode::BranchingFactor - 1; i >= 1; --i )
 		if ( result[i] != InvalidValue ) m_stack.push( result[i] );
 
 	if ( result[0] != InvalidValue )
@@ -411,31 +364,43 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testInternalNode(
 }
 
 template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
-	const hiprtRay&				   ray,
+HIPRT_DEVICE HIPRT_INLINE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
+	const hiprtRay&                ray,
 	[[maybe_unused]] const float3& invD,
-	TriangleNode*				   nodes,
-	uint32_t					   geomType,
-	uint32_t&					   leafIndex,
-	[[maybe_unused]] uint32_t&	   triangleMask,
-	hiprtHit&					   hit )
+	const TriangleNode*            nodes,
+	const uint32_t                 geomType,
+	uint32_t&                      leafIndex,
+	[[maybe_unused]] uint32_t&     triangleMask,
+	hiprtHit&                      hit )
 {
-	bool	 hasHit	  = false;
+	bool     hasHit   = false;
 	uint32_t leafAddr = getNodeAddr( leafIndex );
 
 	const bool useFilter = geomType != InvalidValue && m_tableHeader.funcDataSets != nullptr;
 
-	if constexpr ( is_same<TriangleNode, TrianglePacketNode>::value ) // RTIP 3.1
+	if constexpr ( is_same_v<TriangleNode, rtip31::TrianglePacketNode> ) // RTIP 3.1
 	{
-		TrianglePacketNode* packetNodes	 = reinterpret_cast<TrianglePacketNode*>( nodes );
-		hiprtHit			secondHit	 = hit;
-		uint32_t			triPairIndex = typeToTriPairIndex( getNodeType( leafIndex ) );
+		const rtip31::TrianglePacketNode* packetNodes  = reinterpret_cast<const rtip31::TrianglePacketNode*>( nodes );
+		hiprtHit                          secondHit    = hit;
+		uint32_t                          triPairIndex = typeToTriPairIndex( getNodeType( leafIndex ) );
+
+		// testTrianglePair() deliberately leaves the normals unset: fetching one decodes a whole triangle out
+		// of the compressed packet (a descriptor read plus three unaligned vertex reads), far too expensive to
+		// pay for every candidate hit. Remember which triangle won instead and decode it once, at the end.
+		// A user filter may inspect hit.normal, so in that case it is still materialized up front.
+		uint32_t normalAddr = InvalidValue;
+		uint32_t normalPair = 0u;
+		uint32_t normalTri  = 0u;
+
 		if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 		{
 			while ( true )
 			{
-				bool	 nodeEnd  = false;
-				bool	 rangeEnd = false;
+				const uint32_t pairAddr  = leafAddr;
+				const uint32_t pairIndex = triPairIndex;
+
+				bool     nodeEnd  = false;
+				bool     rangeEnd = false;
 				uint32_t hitMask =
 					this->testTrianglePair( ray, packetNodes, leafAddr, triPairIndex, hit, secondHit, nodeEnd, rangeEnd );
 
@@ -443,6 +408,8 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				bool secondHasHit = hitMask & 2;
 				if ( useFilter )
 				{
+					if ( firstHasHit ) hit.normal = packetNodes[pairAddr].getNormal( pairIndex, 0 );
+					if ( secondHasHit ) secondHit.normal = packetNodes[pairAddr].getNormal( pairIndex, 1 );
 					if ( firstHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
 						firstHasHit = false;
 					if ( secondHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, secondHit ) )
@@ -452,6 +419,12 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				if ( ( triangleMask & Triangle0Processed ) == 0 )
 				{
 					hasHit = firstHasHit;
+					if ( hasHit )
+					{
+						normalAddr = pairAddr;
+						normalPair = pairIndex;
+						normalTri  = 0u;
+					}
 					triangleMask |= Triangle0Processed;
 				}
 
@@ -459,11 +432,16 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				{
 					if ( secondHasHit )
 					{
-						hit.t	   = secondHit.t;
-						hit.normal = secondHit.normal;
+						hit.t      = secondHit.t;
 						hit.primID = secondHit.primID;
-						hit.uv	   = secondHit.uv;
-						hasHit	   = true;
+						hit.uv     = secondHit.uv;
+						// Only a filter materializes secondHit.normal; otherwise the winning
+						// triangle is decoded once at the end of the function.
+						if ( useFilter ) hit.normal = secondHit.normal;
+						hasHit     = true;
+						normalAddr = pairAddr;
+						normalPair = pairIndex;
+						normalTri  = 1u;
 					}
 					triangleMask |= Triangle1Processed;
 				}
@@ -494,12 +472,15 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 		}
 		else
 		{
-			hit.t			  = ray.maxT;
+			hit.t             = ray.maxT;
 			hiprtHit firstHit = hit;
 			while ( true )
 			{
-				bool	 nodeEnd  = false;
-				bool	 rangeEnd = false;
+				const uint32_t pairAddr  = leafAddr;
+				const uint32_t pairIndex = triPairIndex;
+
+				bool     nodeEnd  = false;
+				bool     rangeEnd = false;
 				uint32_t hitMask =
 					this->testTrianglePair( ray, packetNodes, leafAddr, triPairIndex, firstHit, secondHit, nodeEnd, rangeEnd );
 
@@ -507,6 +488,8 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				bool secondHasHit = hitMask & 2;
 				if ( useFilter )
 				{
+					if ( firstHasHit ) firstHit.normal = packetNodes[pairAddr].getNormal( pairIndex, 0 );
+					if ( secondHasHit ) secondHit.normal = packetNodes[pairAddr].getNormal( pairIndex, 1 );
 					if ( firstHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, firstHit ) )
 						firstHasHit = false;
 					if ( secondHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, secondHit ) )
@@ -515,20 +498,30 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 
 				if ( firstHasHit && ( !hasHit || hit.t > firstHit.t ) )
 				{
-					hit.t	   = firstHit.t;
-					hit.normal = firstHit.normal;
+					hit.t      = firstHit.t;
 					hit.primID = firstHit.primID;
-					hit.uv	   = firstHit.uv;
-					hasHit	   = true;
+					hit.uv     = firstHit.uv;
+					// Only a filter materializes firstHit.normal; otherwise the winning
+					// triangle is decoded once at the end of the function.
+					if ( useFilter ) hit.normal = firstHit.normal;
+					hasHit     = true;
+					normalAddr = pairAddr;
+					normalPair = pairIndex;
+					normalTri  = 0u;
 				}
 
 				if ( secondHasHit && ( !hasHit || hit.t > secondHit.t ) )
 				{
-					hit.t	   = secondHit.t;
-					hit.normal = secondHit.normal;
+					hit.t      = secondHit.t;
 					hit.primID = secondHit.primID;
-					hit.uv	   = secondHit.uv;
-					hasHit	   = true;
+					hit.uv     = secondHit.uv;
+					// Only a filter materializes secondHit.normal; otherwise the winning
+					// triangle is decoded once at the end of the function.
+					if ( useFilter ) hit.normal = secondHit.normal;
+					hasHit     = true;
+					normalAddr = pairAddr;
+					normalPair = pairIndex;
+					normalTri  = 1u;
 				}
 
 				if ( rangeEnd ) break;
@@ -541,10 +534,13 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 				}
 			}
 		}
+
+		// Decode the winning triangle once. Under a user filter the normal is already in place.
+		if ( hasHit && !useFilter ) hit.normal = packetNodes[normalAddr].getNormal( normalPair, normalTri );
 	}
 	else
 	{
-		TrianglePairNode* pairNodes = reinterpret_cast<TrianglePairNode*>( nodes );
+		const rtip11::TrianglePairNode* pairNodes = reinterpret_cast<const rtip11::TrianglePairNode*>( nodes );
 
 		if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 		{
@@ -572,18 +568,18 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 			if ( useFilter && hasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
 				hasHit = false;
 
-			hiprtHit secondHit	  = hit;
-			bool	 secondHasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType + 1, secondHit );
+			hiprtHit secondHit    = hit;
+			bool     secondHasHit = this->testTriangle( ray, invD, pairNodes, leafAddr, TriangleType + 1, secondHit );
 			if ( useFilter && secondHasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, secondHit ) )
 				secondHasHit = false;
 
 			if ( secondHasHit && ( !hasHit || hit.t > secondHit.t ) )
 			{
-				hit.t	   = secondHit.t;
+				hit.t      = secondHit.t;
 				hit.normal = secondHit.normal;
 				hit.primID = secondHit.primID;
-				hit.uv	   = secondHit.uv;
-				hasHit	   = true;
+				hit.uv     = secondHit.uv;
+				hasHit     = true;
 			}
 		}
 	}
@@ -591,15 +587,15 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangleNode(
 }
 
 template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangle(
-	const hiprtRay&				   ray,
-	[[maybe_unused]] const float3& invD,
-	TrianglePairNode*			   nodes,
-	uint32_t					   leafAddr,
-	uint32_t					   leafType,
-	hiprtHit&					   hit )
+HIPRT_DEVICE HIPRT_INLINE bool TraversalBase<Stack, TraversalType>::testTriangle(
+	const hiprtRay&                 ray,
+	[[maybe_unused]] const float3&  invD,
+	const rtip11::TrianglePairNode* nodes,
+	const uint32_t                  leafAddr,
+	const uint32_t                  leafType,
+	hiprtHit&                       hit )
 {
-	const TrianglePairNode& node = nodes[leafAddr];
+	const rtip11::TrianglePairNode& node = nodes[leafAddr];
 	if ( node.getPrimIndex( 0 ) == node.getPrimIndex( 1 ) && leafType == TriangleType + 1 ) return false;
 	bool hasHit = false;
 #if HIPRT_RTIP < 11
@@ -619,11 +615,11 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangle(
 		{ invD.x, invD.y, invD.z, 0.0f },
 		{ m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w } );
 	float invDenom = __ocml_native_recip_f32( __int_as_float( result[1] ) );
-	float t		   = __int_as_float( result[0] ) * invDenom;
-	hasHit		   = ray.minT <= t && t <= ray.maxT;
+	float t        = __int_as_float( result[0] ) * invDenom;
+	hasHit         = ray.minT <= t && t <= ray.maxT;
 	if ( hasHit )
 	{
-		hit.t	   = t;
+		hit.t      = t;
 		hit.uv.x   = __int_as_float( result[2] ) * invDenom;
 		hit.uv.y   = __int_as_float( result[3] ) * invDenom;
 		hit.primID = leafType & 1 ? node.getPrimIndex( 1 ) : node.getPrimIndex( 0 );
@@ -634,179 +630,120 @@ HIPRT_DEVICE bool TraversalBase<Stack, TraversalType>::testTriangle(
 }
 
 template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE uint32_t TraversalBase<Stack, TraversalType>::testTrianglePair(
-	const hiprtRay&		ray,
-	TrianglePacketNode* nodes,
-	uint32_t			leafAddr,
-	uint32_t			triPairIndex,
-	hiprtHit&			hit0,
-	hiprtHit&			hit1,
-	bool&				nodeEnd,
-	bool&				rangeEnd )
+HIPRT_DEVICE HIPRT_INLINE uint32_t TraversalBase<Stack, TraversalType>::testTrianglePair(
+	[[maybe_unused]] const hiprtRay&                   ray,
+	[[maybe_unused]] const rtip31::TrianglePacketNode* nodes,
+	[[maybe_unused]] const uint32_t                    leafAddr,
+	[[maybe_unused]] const uint32_t                    triPairIndex,
+	[[maybe_unused]] hiprtHit&                         hit0,
+	[[maybe_unused]] hiprtHit&                         hit1,
+	bool&                                              nodeEnd,
+	bool&                                              rangeEnd )
 {
 #if HIPRT_RTIP >= 31
-	const TrianglePacketNode& node = nodes[leafAddr];
-
 	hip_float3 dummy0, dummy1;
-	auto	   result = __builtin_amdgcn_image_bvh8_intersect_ray(
-		  encodeBaseAddr( nodes ),
-		  ray.maxT,
-		  0xff,
-		  { ray.origin.x, ray.origin.y, ray.origin.z },
-		  { ray.direction.x, ray.direction.y, ray.direction.z },
-		  encodeNodeIndex( leafAddr, triPairIndexToType( triPairIndex ) ),
-		  { m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w },
-		  &dummy0,
-		  &dummy1 );
+	auto       result = __builtin_amdgcn_image_bvh8_intersect_ray(
+        encodeBaseAddr( nodes ),
+        ray.maxT,
+        0xff,
+        { ray.origin.x, ray.origin.y, ray.origin.z },
+        { ray.direction.x, ray.direction.y, ray.direction.z },
+        encodeNodeIndex( leafAddr, triPairIndexToType( triPairIndex ) ),
+        { m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w },
+        &dummy0,
+        &dummy1 );
 
 	uint32_t hitMask = 0;
 	{
-		float t		 = __int_as_float( result[0] );
+		float t      = __int_as_float( result[0] );
 		bool  hasHit = ray.minT <= t && t <= ray.maxT;
 		hitMask |= hasHit ? 1 : 0;
 		if ( hasHit )
 		{
-			hit0.t		= t;
-			hit0.uv.x	= __int_as_float( result[1] );
-			hit0.uv.y	= __int_as_float( result[2] );
+			hit0.t      = t;
+			hit0.uv.x   = __int_as_float( result[1] );
+			hit0.uv.y   = __int_as_float( result[2] );
 			hit0.primID = result[3] >> 1;
-			hit0.normal = node.getNormal( triPairIndex, 0 );
 		}
 	}
 
 	{
-		float t		 = __int_as_float( result[4] );
+		float t      = __int_as_float( result[4] );
 		bool  hasHit = ray.minT <= t && t <= ray.maxT;
 		hitMask |= hasHit ? 2 : 0;
 		if ( hasHit )
 		{
-			hit1.t		= t;
-			hit1.uv.x	= __int_as_float( result[5] );
-			hit1.uv.y	= __int_as_float( result[6] );
+			hit1.t      = t;
+			hit1.uv.x   = __int_as_float( result[5] );
+			hit1.uv.y   = __int_as_float( result[6] );
 			hit1.primID = result[7] >> 1;
-			hit1.normal = node.getNormal( triPairIndex, 1 );
 		}
 	}
 
-	nodeEnd	 = ( result[8] & 3 ) == 1;
+	nodeEnd  = ( result[8] & 3 ) == 1;
 	rangeEnd = ( result[8] & 3 ) == 3;
 
 	return hitMask;
+#else
+	// Triangle packets only exist on RTIP 3.1, and testTriangleNode() discards this call on older
+	// targets, so we never get here. Report both ends anyway: the callers loop until rangeEnd, so
+	// returning 0 on its own would spin.
+	nodeEnd  = true;
+	rangeEnd = true;
+	return 0;
 #endif
 }
 
 template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalType>
-class GeomTraversal : public TraversalBase<Stack, TraversalType>
-{
-  public:
-	HIPRT_DEVICE
-	GeomTraversal(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		Stack&			   stack,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0u );
-
-	HIPRT_DEVICE bool
-	testLeafNode( const hiprtRay& ray, const float3& invD, uint32_t& leafIndex, uint32_t& triangleMask, hiprtHit& hit );
-
-	HIPRT_DEVICE hiprtHit getNextHit();
-
-  protected:
-	using TraversalBase<Stack, TraversalType>::m_ray;
-	using TraversalBase<Stack, TraversalType>::m_tableHeader;
-	using TraversalBase<Stack, TraversalType>::m_state;
-	using TraversalBase<Stack, TraversalType>::m_stack;
-	using TraversalBase<Stack, TraversalType>::m_boxNodes;
-	using TraversalBase<Stack, TraversalType>::m_payload;
-	using TraversalBase<Stack, TraversalType>::m_nodeIndex;
-	using TraversalBase<Stack, TraversalType>::m_triangleMask;
-	using TraversalBase<Stack, TraversalType>::m_rayType;
-#if HIPRT_RTIP >= 11
-	using TraversalBase<Stack, TraversalType>::m_descriptor;
-#endif
-
-	PrimitiveNode* m_primNodes;
-	uint32_t	   m_geomType;
-	uint32_t	   m_leafIndex;
-};
-
-template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalType>
-HIPRT_DEVICE GeomTraversal<Stack, PrimitiveNode, TraversalType>::GeomTraversal(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	Stack&			   stack,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
+HIPRT_DEVICE HIPRT_INLINE GeomTraversal<Stack, PrimitiveNode, TraversalType>::GeomTraversal(
+	const hiprtGeometry      geometry,
+	const hiprtRay&          ray,
+	Stack&                   stack,
+	const hiprtTraversalHint hint,
+	void*                    payload,
+	hiprtFuncTable           funcTable,
+	const uint32_t           rayType )
 	: TraversalBase<Stack, TraversalType>( ray, stack, hint, payload, funcTable, rayType ), m_leafIndex( InvalidValue )
 {
-	GeomHeader* geomHeader = reinterpret_cast<GeomHeader*>( geom );
-	m_boxNodes			   = geomHeader->m_boxNodes;
-	m_primNodes			   = reinterpret_cast<PrimitiveNode*>( geomHeader->m_primNodes );
-	m_geomType			   = geomHeader->m_geomType;
-	m_stack.reset();
+	const GeomHeader* geomHeader = reinterpret_cast<const GeomHeader*>( geometry );
+	this->m_boxNodes             = geomHeader->m_boxNodes;
+	m_primNodes                  = reinterpret_cast<PrimitiveNode*>( geomHeader->m_primNodes );
+	m_geomType                   = geomHeader->m_geomType;
+	this->m_stack.reset();
 }
 
 template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool GeomTraversal<Stack, PrimitiveNode, TraversalType>::testLeafNode(
-	const hiprtRay&				   ray,
-	[[maybe_unused]] const float3& invD,
-	uint32_t&					   leafIndex,
-	[[maybe_unused]] uint32_t&	   triangleMask,
-	hiprtHit&					   hit )
+HIPRT_DEVICE HIPRT_INLINE hiprtHit GeomTraversal<Stack, PrimitiveNode, TraversalType>::getNextHit()
 {
-	bool hasHit = false;
-	if constexpr ( is_same<PrimitiveNode, TriangleNode>::value )
-	{
-		hasHit = this->testTriangleNode( ray, invD, m_primNodes, m_geomType, leafIndex, triangleMask, hit );
-	}
-	else
-	{
-		const bool useFilter = m_geomType != InvalidValue && m_tableHeader.funcDataSets != nullptr;
-		hit.primID			 = m_primNodes[getNodeAddr( leafIndex )].m_primIndex;
-		hasHit				 = intersectFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
-		if ( useFilter && hasHit && filterFunc( m_geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) )
-			hasHit = false;
-		if ( !hasHit ) hit.primID = InvalidValue;
-	}
-	return hasHit;
-}
-
-template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalType>
-HIPRT_DEVICE hiprtHit GeomTraversal<Stack, PrimitiveNode, TraversalType>::getNextHit()
-{
-	hiprtRay ray = m_ray;
-	float3	 invD;
-	if constexpr ( Rtip < 31 ) invD = rcp( m_ray.direction );
+	hiprtRay ray = this->m_ray;
+	float3   invD;
+	if constexpr ( Rtip < 31 ) invD = rcp( this->m_ray.direction );
 
 	if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 	{
-		if ( m_leafIndex == InvalidValue && isLeafNode( m_nodeIndex ) )
+		if ( m_leafIndex == InvalidValue && isLeafNode( this->m_nodeIndex ) )
 		{
-			m_leafIndex = m_nodeIndex;
-			m_nodeIndex = m_stack.pop();
+			m_leafIndex       = this->m_nodeIndex;
+			this->m_nodeIndex = this->m_stack.pop();
 		}
 	}
 	hiprtHit result;
 
-	if ( m_stack.empty() ) m_stack.push( InvalidValue );
+	if ( this->m_stack.empty() ) this->m_stack.push( InvalidValue );
 
-	while ( m_nodeIndex != InvalidValue || m_leafIndex != InvalidValue )
+	while ( this->m_nodeIndex != InvalidValue || m_leafIndex != InvalidValue )
 	{
-		while ( isInternalNode( m_nodeIndex ) )
+		while ( isInternalNode( this->m_nodeIndex ) )
 		{
-			if ( !this->testInternalNode( ray, invD, m_boxNodes, m_nodeIndex ) ) m_nodeIndex = m_stack.pop();
+			if ( !this->testInternalNode( ray, invD, this->m_boxNodes, this->m_nodeIndex ) )
+				this->m_nodeIndex = this->m_stack.pop();
 
-			if ( m_state == hiprtTraversalStateStackOverflow ) return hiprtHit();
+			if ( this->m_state == hiprtTraversalStateStackOverflow ) return hiprtHit();
 
-			if ( isLeafNode( m_nodeIndex ) && m_leafIndex == InvalidValue )
+			if ( isLeafNode( this->m_nodeIndex ) && m_leafIndex == InvalidValue )
 			{
-				m_leafIndex = m_nodeIndex;
-				m_nodeIndex = m_stack.pop();
+				m_leafIndex       = this->m_nodeIndex;
+				this->m_nodeIndex = this->m_stack.pop();
 			}
 
 			if ( !hiprt::any( m_leafIndex == InvalidValue ) ) break;
@@ -815,141 +752,89 @@ HIPRT_DEVICE hiprtHit GeomTraversal<Stack, PrimitiveNode, TraversalType>::getNex
 		while ( m_leafIndex != InvalidValue )
 		{
 			hiprtHit hit;
-			if ( testLeafNode( ray, invD, m_leafIndex, m_triangleMask, hit ) )
+			if ( testLeafNode( ray, invD, m_leafIndex, this->m_triangleMask, hit ) )
 			{
 				if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
 				{
-					if ( getNodeType( m_leafIndex ) == CustomType || m_triangleMask == InvalidValue )
+					if ( getNodeType( m_leafIndex ) == CustomType || this->m_triangleMask == InvalidValue )
 					{
-						m_triangleMask = 0;
-						m_leafIndex	   = InvalidValue;
+						this->m_triangleMask = 0;
+						m_leafIndex          = InvalidValue;
 					}
-					m_state = hiprtTraversalStateHit;
+					this->m_state = hiprtTraversalStateHit;
 					return hit;
 				}
 				else
 				{
-					result	 = hit;
+					result   = hit;
 					ray.maxT = hit.t;
 				}
 			}
 
-			m_triangleMask = 0;
-			m_leafIndex	   = InvalidValue;
-			if ( isLeafNode( m_nodeIndex ) )
+			this->m_triangleMask = 0;
+			m_leafIndex          = InvalidValue;
+			if ( isLeafNode( this->m_nodeIndex ) )
 			{
-				m_leafIndex = m_nodeIndex;
-				m_nodeIndex = m_stack.pop();
+				m_leafIndex       = this->m_nodeIndex;
+				this->m_nodeIndex = this->m_stack.pop();
 			}
 		}
 	}
 
-	if ( m_state != hiprtTraversalStateStackOverflow ) m_state = hiprtTraversalStateFinished;
+	if ( this->m_state != hiprtTraversalStateStackOverflow ) this->m_state = hiprtTraversalStateFinished;
 
 	return result;
 }
 
-template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
-class SceneTraversal : public TraversalBase<Stack, TraversalType>
+template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalType>
+HIPRT_DEVICE HIPRT_INLINE bool GeomTraversal<Stack, PrimitiveNode, TraversalType>::testLeafNode(
+	const hiprtRay&                ray,
+	[[maybe_unused]] const float3& invD,
+	uint32_t&                      leafIndex,
+	[[maybe_unused]] uint32_t&     triangleMask,
+	hiprtHit&                      hit )
 {
-  public:
-	HIPRT_DEVICE SceneTraversal(
-		hiprtScene		   scene,
-		const hiprtRay&	   ray,
-		Stack&			   stack,
-		InstanceStack&	   instanceStack,
-		hiprtRayMask	   mask		 = InvalidValue,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0,
-		float			   time		 = 0.0f );
-
-	HIPRT_DEVICE const uint32_t& instanceId() const
+	bool hasHit = false;
+	if constexpr ( is_same_v<PrimitiveNode, TriangleNode> )
 	{
-		if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
-			return m_instanceIds[m_level];
-		else
-			return m_instanceId;
+		hasHit = this->testTriangleNode( ray, invD, m_primNodes, m_geomType, leafIndex, triangleMask, hit );
 	}
-
-	HIPRT_DEVICE uint32_t& instanceId()
+	else
 	{
-		if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
-			return m_instanceIds[m_level];
-		else
-			return m_instanceId;
+		const bool useFilter = m_geomType != InvalidValue && this->m_tableHeader.funcDataSets != nullptr;
+		hit.primID           = m_primNodes[getNodeAddr( leafIndex )].m_primIndex;
+		hasHit = intersectFunc( m_geomType >> 1, this->m_rayType, this->m_tableHeader, ray, this->m_payload, hit );
+		if ( useFilter && hasHit &&
+		     filterFunc( m_geomType >> 1, this->m_rayType, this->m_tableHeader, ray, this->m_payload, hit ) )
+			hasHit = false;
+		if ( !hasHit ) hit.primID = InvalidValue;
 	}
-
-	HIPRT_DEVICE bool transformRay( uint32_t nodeIndex, hiprtRay& ray, float3& invD );
-
-	HIPRT_DEVICE void restoreRay( hiprtRay& ray, float3& invD ) const;
-
-	HIPRT_DEVICE bool testLeafNode(
-		void*			primNodes,
-		const hiprtRay& ray,
-		const float3&	invD,
-		uint32_t&		leafIndex,
-		uint32_t&		triangleMask,
-		uint32_t		geomType,
-		hiprtHit&		hit );
-
-	HIPRT_DEVICE hiprtHit getNextHit();
-
-  protected:
-	using TraversalBase<Stack, TraversalType>::m_tableHeader;
-	using TraversalBase<Stack, TraversalType>::m_ray;
-	using TraversalBase<Stack, TraversalType>::m_state;
-	using TraversalBase<Stack, TraversalType>::m_stack;
-	using TraversalBase<Stack, TraversalType>::m_boxNodes;
-	using TraversalBase<Stack, TraversalType>::m_payload;
-	using TraversalBase<Stack, TraversalType>::m_nodeIndex;
-	using TraversalBase<Stack, TraversalType>::m_triangleMask;
-	using TraversalBase<Stack, TraversalType>::m_rayType;
-	using TraversalBase<Stack, TraversalType>::m_hint;
-#if HIPRT_RTIP >= 11
-	using TraversalBase<Stack, TraversalType>::m_descriptor;
-#endif
-
-	union
-	{
-		uint32_t m_instanceId;
-		uint32_t m_instanceIds[MaxInstanceLevels];
-	};
-
-	InstanceStack& m_instanceStack;
-	SceneHeader*   m_scene;
-	InstanceNode*  m_instanceNodes;
-	Frame*		   m_frames;
-	hiprtRayMask   m_mask;
-	uint32_t	   m_level;
-	uint32_t	   m_instanceIndex;
-	float		   m_time;
-};
+	return hasHit;
+}
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE SceneTraversal<Stack, InstanceStack, TraversalType>::SceneTraversal(
-	hiprtScene		   scene,
-	const hiprtRay&	   ray,
-	Stack&			   stack,
-	InstanceStack&	   instanceStack,
-	hiprtRayMask	   mask,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType,
-	float			   time )
-	: TraversalBase<Stack, TraversalType>( ray, stack, hint, payload, funcTable, rayType ), m_instanceStack( instanceStack ), m_mask( mask ),
-	  m_level( 0u ), m_time( time )
+HIPRT_DEVICE HIPRT_INLINE SceneTraversal<Stack, InstanceStack, TraversalType>::SceneTraversal(
+	const hiprtScene         scene,
+	const hiprtRay&          ray,
+	Stack&                   stack,
+	InstanceStack&           instanceStack,
+	const hiprtRayMask       mask,
+	const hiprtTraversalHint hint,
+	void*                    payload,
+	hiprtFuncTable           funcTable,
+	const uint32_t           rayType,
+	const float              time )
+	: TraversalBase<Stack, TraversalType>( ray, stack, hint, payload, funcTable, rayType ), m_instanceStack( instanceStack ),
+	  m_mask( mask ), m_level( 0u ), m_time( time )
 {
-	SceneHeader* sceneHeader = reinterpret_cast<SceneHeader*>( scene );
-	m_boxNodes				 = sceneHeader->m_boxNodes;
-	m_instanceNodes			 = sceneHeader->m_primNodes;
-	m_frames				 = sceneHeader->m_frames;
-	m_stack.reset();
+	const SceneHeader* sceneHeader = reinterpret_cast<const SceneHeader*>( scene );
+	this->m_boxNodes               = sceneHeader->m_boxNodes;
+	m_instanceNodes                = sceneHeader->m_primNodes;
+	m_frames                       = sceneHeader->m_frames;
+	this->m_stack.reset();
 	m_instanceIndex = InvalidValue;
-	instanceId()	= InvalidValue;
-	if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
+	instanceId()    = InvalidValue;
+	if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
 	{
 		m_instanceStack.reset();
 		m_scene = sceneHeader;
@@ -957,8 +842,180 @@ HIPRT_DEVICE SceneTraversal<Stack, InstanceStack, TraversalType>::SceneTraversal
 }
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::transformRay(
-	uint32_t nodeIndex, hiprtRay& ray, [[maybe_unused]] float3& invD )
+HIPRT_DEVICE HIPRT_INLINE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNextHit()
+{
+	const BoxNode* nodes     = this->m_boxNodes;
+	const void*    primNodes = nullptr;
+	uint32_t       geomType  = InvalidValue;
+
+	hiprtRay ray = this->m_ray;
+	float3   invD;
+	if constexpr ( Rtip < 31 )
+	{
+		if ( instanceId() == InvalidValue ) invD = rcp( this->m_ray.direction );
+	}
+
+	if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
+	{
+		if ( instanceId() != InvalidValue )
+		{
+			transformRay( m_instanceIndex, ray, invD );
+			nodes     = m_instanceNodes[getNodeAddr( m_instanceIndex )].getHeader<GeomHeader>()->m_boxNodes;
+			primNodes = m_instanceNodes[getNodeAddr( m_instanceIndex )].getHeader<GeomHeader>()->m_primNodes;
+			geomType  = m_instanceNodes[getNodeAddr( m_instanceIndex )].getHeader<GeomHeader>()->m_geomType;
+		}
+	}
+
+	hiprtHit result;
+
+	if ( this->m_stack.empty() ) this->m_stack.push( InvalidValue );
+
+	while ( this->m_nodeIndex != InvalidValue && this->m_state != hiprtTraversalStateStackOverflow )
+	{
+		if ( isInternalNode( this->m_nodeIndex ) )
+		{
+			if ( this->testInternalNode( ray, invD, nodes, this->m_nodeIndex ) ) continue;
+		}
+		else
+		{
+			if ( instanceId() != InvalidValue )
+			{
+				hiprtHit hit;
+				if ( testLeafNode( primNodes, ray, invD, geomType, this->m_nodeIndex, this->m_triangleMask, hit ) )
+				{
+					if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
+					{
+						this->m_state = hiprtTraversalStateHit;
+						if ( getNodeType( this->m_nodeIndex ) == CustomType || this->m_triangleMask == InvalidValue )
+						{
+							this->m_triangleMask = 0;
+							this->m_nodeIndex    = this->m_stack.pop();
+
+							while ( this->m_nodeIndex == InvalidValue && !this->m_stack.empty() )
+							{
+								if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
+								{
+									if ( instanceId() == InvalidValue )
+									{
+										hiprtInstanceStackEntry instanceEntry = m_instanceStack.pop();
+										this->m_ray                           = instanceEntry.ray;
+										m_scene = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
+										m_level--;
+
+										this->m_boxNodes = m_scene->m_boxNodes;
+										m_instanceNodes  = m_scene->m_primNodes;
+										m_frames         = m_scene->m_frames;
+									}
+								}
+
+								instanceId()      = InvalidValue;
+								this->m_nodeIndex = this->m_stack.pop();
+							}
+						}
+						return hit;
+					}
+					else
+					{
+						ray.maxT = hit.t;
+						result   = hit;
+					}
+				}
+			}
+			else
+			{
+				const uint32_t instanceAddr = getNodeAddr( this->m_nodeIndex );
+				if ( ( m_instanceNodes[instanceAddr].m_mask & m_mask ) && transformRay( this->m_nodeIndex, ray, invD ) )
+				{
+					if ( this->m_stack.vacancy() < 1 )
+					{
+						this->m_state = hiprtTraversalStateStackOverflow;
+						continue;
+					}
+
+					m_instanceIndex = this->m_nodeIndex;
+					instanceId()    = m_instanceNodes[instanceAddr].m_primIndex;
+
+					this->m_nodeIndex = RootIndex;
+					this->m_stack.push( InvalidValue );
+
+					if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
+					{
+						if ( m_instanceNodes[instanceAddr].m_type == hiprtInstanceTypeScene )
+						{
+							m_instanceStack.push(
+								{ this->m_ray, reinterpret_cast<hiprtScene>( const_cast<SceneHeader*>( m_scene ) ) } );
+							this->m_ray = ray;
+							m_scene     = m_instanceNodes[instanceAddr].getHeader<SceneHeader>();
+							m_level++;
+							instanceId() = InvalidValue;
+
+							this->m_boxNodes = m_scene->m_boxNodes;
+							m_instanceNodes  = m_scene->m_primNodes;
+							m_frames         = m_scene->m_frames;
+
+							nodes = this->m_boxNodes;
+							continue;
+						}
+					}
+					nodes     = m_instanceNodes[instanceAddr].getHeader<GeomHeader>()->m_boxNodes;
+					primNodes = m_instanceNodes[instanceAddr].getHeader<GeomHeader>()->m_primNodes;
+					geomType  = m_instanceNodes[instanceAddr].getHeader<GeomHeader>()->m_geomType;
+					continue;
+				}
+			}
+		}
+
+		this->m_triangleMask = 0;
+		this->m_nodeIndex    = this->m_stack.pop();
+		while ( this->m_nodeIndex == InvalidValue && !this->m_stack.empty() )
+		{
+			if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
+			{
+				if ( instanceId() == InvalidValue )
+				{
+					hiprtInstanceStackEntry instanceEntry = m_instanceStack.pop();
+					this->m_ray                           = instanceEntry.ray;
+					m_scene                               = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
+					m_level--;
+
+					this->m_boxNodes = m_scene->m_boxNodes;
+					m_instanceNodes  = m_scene->m_primNodes;
+					m_frames         = m_scene->m_frames;
+				}
+			}
+			instanceId()      = InvalidValue;
+			this->m_nodeIndex = this->m_stack.pop();
+			nodes             = this->m_boxNodes;
+			restoreRay( ray, invD );
+		}
+	}
+
+	if ( this->m_state != hiprtTraversalStateStackOverflow ) this->m_state = hiprtTraversalStateFinished;
+
+	return result;
+}
+
+template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
+HIPRT_DEVICE HIPRT_INLINE const uint32_t& SceneTraversal<Stack, InstanceStack, TraversalType>::instanceId() const
+{
+	if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
+		return m_instanceIds[m_level];
+	else
+		return m_instanceId;
+}
+
+template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
+HIPRT_DEVICE HIPRT_INLINE uint32_t& SceneTraversal<Stack, InstanceStack, TraversalType>::instanceId()
+{
+	if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
+		return m_instanceIds[m_level];
+	else
+		return m_instanceId;
+}
+
+template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
+HIPRT_DEVICE HIPRT_INLINE bool SceneTraversal<Stack, InstanceStack, TraversalType>::transformRay(
+	const uint32_t nodeIndex, hiprtRay& ray, [[maybe_unused]] float3& invD )
 {
 	const InstanceNode& instanceNode = m_instanceNodes[getNodeAddr( nodeIndex )];
 	if ( instanceNode.m_identity == 0 )
@@ -967,20 +1024,20 @@ HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::transform
 		{
 #if HIPRT_RTIP >= 31
 			hip_float3 origin, direction;
-			auto	   result = __builtin_amdgcn_image_bvh8_intersect_ray(
-				  encodeBaseAddr( m_instanceNodes ),
-				  ray.maxT,
-				  0xff,
-				  { ray.origin.x, ray.origin.y, ray.origin.z },
-				  { ray.direction.x, ray.direction.y, ray.direction.z },
-				  nodeIndex,
-				  { m_descriptor.x, m_descriptor.y, m_descriptor.z, m_descriptor.w },
-				  &origin,
-				  &direction );
+			auto       result = __builtin_amdgcn_image_bvh8_intersect_ray(
+                encodeBaseAddr( m_instanceNodes ),
+                ray.maxT,
+                0xff,
+                { ray.origin.x, ray.origin.y, ray.origin.z },
+                { ray.direction.x, ray.direction.y, ray.direction.z },
+                nodeIndex,
+                { this->m_descriptor.x, this->m_descriptor.y, this->m_descriptor.z, this->m_descriptor.w },
+                &origin,
+                &direction );
 
 			if ( result[7] == InvalidValue ) return false;
 
-			ray.origin	  = { origin.x, origin.y, origin.z };
+			ray.origin    = { origin.x, origin.y, origin.z };
 			ray.direction = { direction.x, direction.y, direction.z };
 #else
 			ray = instanceNode.transformRay( ray );
@@ -988,7 +1045,7 @@ HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::transform
 		}
 		else
 		{
-			Transform tr( m_frames, instanceNode.m_transform.frameIndex, instanceNode.m_transform.frameCount );
+			const Transform tr( m_frames, instanceNode.m_transform.frameIndex, instanceNode.m_transform.frameCount );
 			ray = tr.transformRay( ray, m_time );
 		}
 		if constexpr ( Rtip < 31 ) invD = rcp( ray.direction );
@@ -998,27 +1055,28 @@ HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::transform
 }
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE void SceneTraversal<Stack, InstanceStack, TraversalType>::restoreRay( hiprtRay& ray, float3& invD ) const
+HIPRT_DEVICE HIPRT_INLINE void
+SceneTraversal<Stack, InstanceStack, TraversalType>::restoreRay( hiprtRay& ray, float3& invD ) const
 {
-	ray.origin	  = m_ray.origin;
-	ray.direction = m_ray.direction;
-	if constexpr ( Rtip < 31 ) invD = rcp( m_ray.direction );
+	ray.origin    = this->m_ray.origin;
+	ray.direction = this->m_ray.direction;
+	if constexpr ( Rtip < 31 ) invD = rcp( this->m_ray.direction );
 }
 
 template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::testLeafNode(
-	void*						   primNodes,
-	const hiprtRay&				   ray,
+HIPRT_DEVICE HIPRT_INLINE bool SceneTraversal<Stack, InstanceStack, TraversalType>::testLeafNode(
+	const void*                    primNodes,
+	const hiprtRay&                ray,
 	[[maybe_unused]] const float3& invD,
-	uint32_t&					   leafIndex,
-	[[maybe_unused]] uint32_t&	   triangleMask,
-	uint32_t					   geomType,
-	hiprtHit&					   hit )
+	const uint32_t                 geomType,
+	uint32_t&                      leafIndex,
+	[[maybe_unused]] uint32_t&     triangleMask,
+	hiprtHit&                      hit )
 {
 	bool hasHit = false;
-	if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
+	if constexpr ( !is_same_v<InstanceStack, hiprtEmptyInstanceStack> )
 	{
-#pragma unroll
+		HIPRT_UNROLL
 		for ( uint32_t i = 0; i < MaxInstanceLevels; ++i )
 		{
 			if ( i <= m_level )
@@ -1034,968 +1092,149 @@ HIPRT_DEVICE bool SceneTraversal<Stack, InstanceStack, TraversalType>::testLeafN
 
 	if ( geomType & 1 )
 	{
-		TriangleNode* nodes = reinterpret_cast<TriangleNode*>( primNodes );
-		hasHit				= this->testTriangleNode( ray, invD, nodes, geomType, leafIndex, triangleMask, hit );
+		const TriangleNode* nodes = reinterpret_cast<const TriangleNode*>( primNodes );
+		hasHit                    = this->testTriangleNode( ray, invD, nodes, geomType, leafIndex, triangleMask, hit );
 	}
 	else
 	{
-		const bool	useFilter = geomType != InvalidValue && m_tableHeader.funcDataSets != nullptr;
-		CustomNode* nodes	  = reinterpret_cast<CustomNode*>( primNodes );
-		hit.primID			  = nodes[getNodeAddr( leafIndex )].m_primIndex;
-		hasHit				  = intersectFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit );
-		if ( useFilter && hasHit && filterFunc( geomType >> 1, m_rayType, m_tableHeader, ray, m_payload, hit ) ) hasHit = false;
+		const bool        useFilter = geomType != InvalidValue && this->m_tableHeader.funcDataSets != nullptr;
+		const CustomNode* nodes     = reinterpret_cast<const CustomNode*>( primNodes );
+		hit.primID                  = nodes[getNodeAddr( leafIndex )].m_primIndex;
+		hasHit = intersectFunc( geomType >> 1, this->m_rayType, this->m_tableHeader, ray, this->m_payload, hit );
+		if ( useFilter && hasHit &&
+		     filterFunc( geomType >> 1, this->m_rayType, this->m_tableHeader, ray, this->m_payload, hit ) )
+			hasHit = false;
 		if ( !hasHit ) hit.primID = InvalidValue;
 	}
 
 	return hasHit;
 }
 
-template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE hiprtHit SceneTraversal<Stack, InstanceStack, TraversalType>::getNextHit()
+template <typename PrimitiveNode, hiprtTraversalType TraversalType>
+HIPRT_DEVICE HIPRT_INLINE GeomTraversalPrivateStack<PrimitiveNode, TraversalType>::GeomTraversalPrivateStack(
+	hiprtGeometry            geom,
+	const hiprtRay&          ray,
+	const hiprtTraversalHint hint,
+	void*                    payload,
+	hiprtFuncTable           funcTable,
+	const uint32_t           rayType )
+	: m_traversal( geom, ray, this->m_stack, hint, payload, funcTable, rayType )
 {
-	BoxNode* nodes	   = m_boxNodes;
-	void*	 primNodes = nullptr;
-	uint32_t geomType  = InvalidValue;
-
-	hiprtRay ray = m_ray;
-	float3	 invD;
-	if constexpr ( Rtip < 31 )
-	{
-		if ( instanceId() == InvalidValue ) invD = rcp( m_ray.direction );
-	}
-
-	if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
-	{
-		if ( instanceId() != InvalidValue )
-		{
-			transformRay( m_instanceIndex, ray, invD );
-			nodes	  = m_instanceNodes[getNodeAddr( m_instanceIndex )].m_geometry->m_boxNodes;
-			primNodes = m_instanceNodes[getNodeAddr( m_instanceIndex )].m_geometry->m_primNodes;
-			geomType  = m_instanceNodes[getNodeAddr( m_instanceIndex )].m_geometry->m_geomType;
-		}
-	}
-
-	hiprtHit result;
-
-	if ( m_stack.empty() ) m_stack.push( InvalidValue );
-
-	while ( m_nodeIndex != InvalidValue && m_state != hiprtTraversalStateStackOverflow )
-	{
-		if ( isInternalNode( m_nodeIndex ) )
-		{
-			if ( this->testInternalNode( ray, invD, nodes, m_nodeIndex ) ) continue;
-		}
-		else
-		{
-			if ( instanceId() != InvalidValue )
-			{
-				hiprtHit hit;
-				if ( testLeafNode( primNodes, ray, invD, m_nodeIndex, m_triangleMask, geomType, hit ) )
-				{
-					if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
-					{
-						m_state = hiprtTraversalStateHit;
-						if ( getNodeType( m_nodeIndex ) == CustomType || m_triangleMask == InvalidValue )
-						{
-							m_triangleMask = 0;
-							m_nodeIndex	   = m_stack.pop();
-
-							while ( m_nodeIndex == InvalidValue && !m_stack.empty() )
-							{
-								if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
-								{
-									if ( instanceId() == InvalidValue )
-									{
-										hiprtInstanceStackEntry instanceEntry = m_instanceStack.pop();
-										m_ray								  = instanceEntry.ray;
-										m_scene = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
-										m_level--;
-
-										m_boxNodes		= m_scene->m_boxNodes;
-										m_instanceNodes = m_scene->m_primNodes;
-										m_frames		= m_scene->m_frames;
-									}
-								}
-
-								instanceId() = InvalidValue;
-								m_nodeIndex	 = m_stack.pop();
-							}
-						}
-						return hit;
-					}
-					else
-					{
-						ray.maxT = hit.t;
-						result	 = hit;
-					}
-				}
-			}
-			else
-			{
-				const uint32_t instanceAddr = getNodeAddr( m_nodeIndex );
-				if ( ( m_instanceNodes[instanceAddr].m_mask & m_mask ) && transformRay( m_nodeIndex, ray, invD ) )
-				{
-					if ( m_stack.vacancy() < 1 )
-					{
-						m_state = hiprtTraversalStateStackOverflow;
-						continue;
-					}
-
-					m_instanceIndex = m_nodeIndex;
-					instanceId()	= m_instanceNodes[instanceAddr].m_primIndex;
-
-					m_nodeIndex = RootIndex;
-					m_stack.push( InvalidValue );
-
-					if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
-					{
-						if ( m_instanceNodes[instanceAddr].m_type == hiprtInstanceTypeScene )
-						{
-							m_instanceStack.push( { m_ray, reinterpret_cast<hiprtScene>( m_scene ) } );
-							m_ray	= ray;
-							m_scene = m_instanceNodes[instanceAddr].m_scene;
-							m_level++;
-							instanceId() = InvalidValue;
-
-							m_boxNodes		= m_scene->m_boxNodes;
-							m_instanceNodes = m_scene->m_primNodes;
-							m_frames		= m_scene->m_frames;
-
-							nodes = m_boxNodes;
-							continue;
-						}
-					}
-					nodes	  = m_instanceNodes[instanceAddr].m_geometry->m_boxNodes;
-					primNodes = m_instanceNodes[instanceAddr].m_geometry->m_primNodes;
-					geomType  = m_instanceNodes[instanceAddr].m_geometry->m_geomType;
-					continue;
-				}
-			}
-		}
-
-		m_triangleMask = 0;
-		m_nodeIndex	   = m_stack.pop();
-		while ( m_nodeIndex == InvalidValue && !m_stack.empty() )
-		{
-			if constexpr ( !is_same<InstanceStack, hiprtEmptyInstanceStack>::value )
-			{
-				if ( instanceId() == InvalidValue )
-				{
-					hiprtInstanceStackEntry instanceEntry = m_instanceStack.pop();
-					m_ray								  = instanceEntry.ray;
-					m_scene								  = reinterpret_cast<SceneHeader*>( instanceEntry.scene );
-					m_level--;
-
-					m_boxNodes		= m_scene->m_boxNodes;
-					m_instanceNodes = m_scene->m_primNodes;
-					m_frames		= m_scene->m_frames;
-				}
-			}
-			instanceId() = InvalidValue;
-			m_nodeIndex	 = m_stack.pop();
-			nodes		 = m_boxNodes;
-			restoreRay( ray, invD );
-		}
-	}
-
-	if ( m_state != hiprtTraversalStateStackOverflow ) m_state = hiprtTraversalStateFinished;
-
-	return result;
 }
 
 template <typename PrimitiveNode, hiprtTraversalType TraversalType>
-class GeomTraversalPrivateStack
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE hiprtHit GeomTraversalPrivateStack<PrimitiveNode, TraversalType>::getNextHit()
 {
-  public:
-	using Stack = hiprtPrivateStack;
+	return m_traversal.getNextHit();
+}
 
-	HIPRT_DEVICE GeomTraversalPrivateStack(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 )
-		: m_traversal( geom, ray, m_stack, hint, payload, funcTable, rayType )
-	{
-	}
-
-	HIPRT_DEVICE hiprtHit getNextHit() { return m_traversal.getNextHit(); }
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_traversal.getCurrentState(); }
-
-  private:
-	Stack											   m_stack;
-	GeomTraversal<Stack, PrimitiveNode, TraversalType> m_traversal;
-};
+template <typename PrimitiveNode, hiprtTraversalType TraversalType>
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE hiprtTraversalState
+GeomTraversalPrivateStack<PrimitiveNode, TraversalType>::getCurrentState() const
+{
+	return m_traversal.getCurrentState();
+}
 
 template <hiprtTraversalType TraversalType>
-class SceneTraversalPrivateStack
+HIPRT_DEVICE HIPRT_INLINE SceneTraversalPrivateStack<TraversalType>::SceneTraversalPrivateStack(
+	hiprtScene               scene,
+	const hiprtRay&          ray,
+	const hiprtRayMask       mask,
+	const hiprtTraversalHint hint,
+	void*                    payload,
+	hiprtFuncTable           funcTable,
+	const uint32_t           rayType,
+	const float              time )
+	: m_traversal( scene, ray, this->m_stack, m_instanceStack, mask, hint, payload, funcTable, rayType, time )
 {
-  public:
-	using Stack			= hiprtPrivateStack;
-	using InstanceStack = hiprtPrivateInstanceStack;
+}
 
-	HIPRT_DEVICE SceneTraversalPrivateStack(
-		hiprtScene		   scene,
-		const hiprtRay&	   ray,
-		hiprtRayMask	   mask		 = hiprtFullRayMask,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0,
-		float			   time		 = 0.0f )
-		: m_traversal( scene, ray, m_stack, m_instanceStack, mask, hint, payload, funcTable, rayType, time )
-	{
-	}
+template <hiprtTraversalType TraversalType>
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE hiprtHit SceneTraversalPrivateStack<TraversalType>::getNextHit()
+{
+	return m_traversal.getNextHit();
+}
 
-	HIPRT_DEVICE hiprtHit getNextHit() { return m_traversal.getNextHit(); }
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_traversal.getCurrentState(); }
-
-  private:
-	Stack												m_stack;
-	InstanceStack										m_instanceStack;
-	SceneTraversal<Stack, InstanceStack, TraversalType> m_traversal;
-};
+template <hiprtTraversalType TraversalType>
+[[nodiscard]] HIPRT_DEVICE HIPRT_INLINE hiprtTraversalState SceneTraversalPrivateStack<TraversalType>::getCurrentState() const
+{
+	return m_traversal.getCurrentState();
+}
 } // namespace hiprt
 
-// Impl classes
-template <typename StackEntry, uint32_t StackSize>
-class hiprtPrivateStack_impl
+// transformation getters for two-level BVHs
+HIPRT_DEVICE hiprtFrameSRT hiprtGetObjectToWorldFrameSRT( const hiprtScene scene, const uint32_t instanceID, const float time )
 {
-  public:
-	HIPRT_DEVICE hiprtPrivateStack_impl() : m_stack() {}
-	~hiprtPrivateStack_impl() = default;
-	HIPRT_DEVICE StackEntry pop() { return m_stack.pop(); }
-	HIPRT_DEVICE void		push( StackEntry val ) { m_stack.push( val ); }
-	HIPRT_DEVICE bool		empty() const { return m_stack.empty(); }
-	HIPRT_DEVICE uint32_t	vacancy() const { return m_stack.vacancy(); }
-	HIPRT_DEVICE void		reset() { m_stack.reset(); }
-
-  private:
-	hiprt::PrivateStack<StackEntry, StackSize> m_stack;
-};
-
-template <typename StackEntry, bool DynamicAssignment>
-class hiprtGlobalStack_impl
-{
-  public:
-	HIPRT_DEVICE hiprtGlobalStack_impl( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer )
-		: m_stack( globalStackBuffer, sharedStackBuffer )
-	{
-	}
-	~hiprtGlobalStack_impl() = default;
-	HIPRT_DEVICE StackEntry pop() { return m_stack.pop(); }
-	HIPRT_DEVICE void		push( StackEntry val ) { m_stack.push( val ); }
-	HIPRT_DEVICE bool		empty() const { return m_stack.empty(); }
-	HIPRT_DEVICE uint32_t	vacancy() const { return m_stack.vacancy(); }
-	HIPRT_DEVICE void		reset() { m_stack.reset(); }
-
-  private:
-	hiprt::GlobalStack<StackEntry, DynamicAssignment> m_stack;
-};
-
-template <hiprtPrimitiveNodeType PrimitiveNodeType, hiprtTraversalType TraversalType>
-class hiprtGeomTraversal_impl
-{
-  public:
-	HIPRT_DEVICE hiprtGeomTraversal_impl(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 )
-		: m_traversal( geom, ray, hint, payload, funcTable, rayType )
-	{
-	}
-
-	HIPRT_DEVICE hiprtHit getNextHit() { return m_traversal.getNextHit(); }
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_traversal.getCurrentState(); }
-
-  private:
-	using NodeType =
-		typename hiprt::conditional<PrimitiveNodeType == hiprtTriangleNode, hiprt::TriangleNode, hiprt::CustomNode>::type;
-	hiprt::GeomTraversalPrivateStack<NodeType, TraversalType> m_traversal;
-};
-
-template <hiprtTraversalType TraversalType>
-class hiprtSceneTraversal_impl
-{
-  public:
-	HIPRT_DEVICE hiprtSceneTraversal_impl(
-		hiprtScene		   scene,
-		const hiprtRay&	   ray,
-		hiprtRayMask	   mask		 = hiprtFullRayMask,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0,
-		float			   time		 = 0.0f )
-		: m_traversal( scene, ray, mask, hint, payload, funcTable, rayType, time )
-	{
-	}
-
-	HIPRT_DEVICE hiprtHit getNextHit() { return m_traversal.getNextHit(); }
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_traversal.getCurrentState(); }
-
-  private:
-	hiprt::SceneTraversalPrivateStack<TraversalType> m_traversal;
-};
-
-template <typename hiprtStack, hiprtPrimitiveNodeType PrimitiveNodeType, hiprtTraversalType TraversalType>
-class hiprtGeomTraversalCustomStack_impl
-{
-  public:
-	HIPRT_DEVICE hiprtGeomTraversalCustomStack_impl(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtStack&		   stack,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 )
-		: m_traversal( geom, ray, stack, hint, payload, funcTable, rayType )
-	{
-	}
-
-	HIPRT_DEVICE hiprtHit getNextHit() { return m_traversal.getNextHit(); }
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_traversal.getCurrentState(); }
-
-  private:
-	using NodeType =
-		typename hiprt::conditional<PrimitiveNodeType == hiprtTriangleNode, hiprt::TriangleNode, hiprt::CustomNode>::type;
-	hiprt::GeomTraversal<hiprtStack, NodeType, TraversalType> m_traversal;
-};
-
-template <typename hiprtStack, typename hiprtInstanceStack, hiprtTraversalType TraversalType>
-class hiprtSceneTraversalCustomStack_impl
-{
-  public:
-	HIPRT_DEVICE hiprtSceneTraversalCustomStack_impl(
-		hiprtScene			scene,
-		const hiprtRay&		ray,
-		hiprtStack&			stack,
-		hiprtInstanceStack& instanceStack,
-		hiprtRayMask		mask	  = hiprtFullRayMask,
-		hiprtTraversalHint	hint	  = hiprtTraversalHintDefault,
-		void*				payload	  = nullptr,
-		hiprtFuncTable		funcTable = nullptr,
-		uint32_t			rayType	  = 0,
-		float				time	  = 0.0f )
-		: m_traversal( scene, ray, stack, instanceStack, mask, hint, payload, funcTable, rayType, time )
-	{
-	}
-
-	HIPRT_DEVICE hiprtHit getNextHit() { return m_traversal.getNextHit(); }
-
-	HIPRT_DEVICE hiprtTraversalState getCurrentState() { return m_traversal.getCurrentState(); }
-
-  private:
-	hiprt::SceneTraversal<hiprtStack, hiprtInstanceStack, TraversalType> m_traversal;
-};
-
-// hiprt_device classes
-
-// hiprtPrivateStack
-HIPRT_DEVICE hiprtPrivateStack::hiprtPrivateStack() : m_impl() {}
-
-HIPRT_DEVICE hiprtPrivateStack::~hiprtPrivateStack() { m_impl->~hiprtPrivateStack_impl(); }
-
-HIPRT_DEVICE uint32_t hiprtPrivateStack::pop() { return m_impl->pop(); }
-
-HIPRT_DEVICE void hiprtPrivateStack::push( uint32_t val ) { m_impl->push( val ); }
-
-HIPRT_DEVICE bool hiprtPrivateStack::empty() const { return m_impl->empty(); }
-
-HIPRT_DEVICE uint32_t hiprtPrivateStack::vacancy() const { return m_impl->vacancy(); }
-
-HIPRT_DEVICE void hiprtPrivateStack::reset() { m_impl->reset(); }
-
-// hiprtPrivateInstanceStack
-HIPRT_DEVICE hiprtPrivateInstanceStack::hiprtPrivateInstanceStack() : m_impl() {}
-
-HIPRT_DEVICE hiprtPrivateInstanceStack::~hiprtPrivateInstanceStack() { m_impl->~hiprtPrivateStack_impl(); }
-
-HIPRT_DEVICE hiprtInstanceStackEntry hiprtPrivateInstanceStack::pop() { return m_impl->pop(); }
-
-HIPRT_DEVICE void hiprtPrivateInstanceStack::push( hiprtInstanceStackEntry val ) { m_impl->push( val ); }
-
-HIPRT_DEVICE bool hiprtPrivateInstanceStack::empty() const { return m_impl->empty(); }
-
-HIPRT_DEVICE uint32_t hiprtPrivateInstanceStack::vacancy() const { return m_impl->vacancy(); }
-
-HIPRT_DEVICE void hiprtPrivateInstanceStack::reset() { m_impl->reset(); }
-
-// hiprtGlobalStack
-HIPRT_DEVICE
-hiprtGlobalStack::hiprtGlobalStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer )
-	: m_impl( globalStackBuffer, sharedStackBuffer )
-{
-}
-
-HIPRT_DEVICE hiprtGlobalStack::~hiprtGlobalStack() { m_impl->~hiprtGlobalStack_impl(); }
-
-HIPRT_DEVICE uint32_t hiprtGlobalStack::pop() { return m_impl->pop(); }
-
-HIPRT_DEVICE void hiprtGlobalStack::push( uint32_t val ) { m_impl->push( val ); }
-
-HIPRT_DEVICE bool hiprtGlobalStack::empty() const { return m_impl->empty(); }
-
-HIPRT_DEVICE uint32_t hiprtGlobalStack::vacancy() const { return m_impl->vacancy(); }
-
-HIPRT_DEVICE void hiprtGlobalStack::reset() { m_impl->reset(); }
-
-// hiprtGlobalInstanceStack
-HIPRT_DEVICE
-hiprtGlobalInstanceStack::hiprtGlobalInstanceStack(
-	hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer )
-	: m_impl( globalStackBuffer, sharedStackBuffer )
-{
-}
-
-HIPRT_DEVICE hiprtGlobalInstanceStack::~hiprtGlobalInstanceStack() { m_impl->~hiprtGlobalStack_impl(); }
-
-HIPRT_DEVICE hiprtInstanceStackEntry hiprtGlobalInstanceStack::pop() { return m_impl->pop(); }
-
-HIPRT_DEVICE void hiprtGlobalInstanceStack::push( hiprtInstanceStackEntry val ) { m_impl->push( val ); }
-
-HIPRT_DEVICE bool hiprtGlobalInstanceStack::empty() const { return m_impl->empty(); }
-
-HIPRT_DEVICE uint32_t hiprtGlobalInstanceStack::vacancy() const { return m_impl->vacancy(); }
-
-HIPRT_DEVICE void hiprtGlobalInstanceStack::reset() { m_impl->reset(); }
-
-// hiprtDynamicStack
-HIPRT_DEVICE
-hiprtDynamicStack::hiprtDynamicStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer )
-	: m_impl( globalStackBuffer, sharedStackBuffer )
-{
-}
-
-HIPRT_DEVICE hiprtDynamicStack::~hiprtDynamicStack() { m_impl->~hiprtGlobalStack_impl(); }
-
-HIPRT_DEVICE uint32_t hiprtDynamicStack::pop() { return m_impl->pop(); }
-
-HIPRT_DEVICE void hiprtDynamicStack::push( uint32_t val ) { m_impl->push( val ); }
-
-HIPRT_DEVICE bool hiprtDynamicStack::empty() const { return m_impl->empty(); }
-
-HIPRT_DEVICE uint32_t hiprtDynamicStack::vacancy() const { return m_impl->vacancy(); }
-
-HIPRT_DEVICE void hiprtDynamicStack::reset() { m_impl->reset(); }
-
-// hiprtDynamicInstanceStack
-HIPRT_DEVICE
-hiprtDynamicInstanceStack::hiprtDynamicInstanceStack(
-	hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer )
-	: m_impl( globalStackBuffer, sharedStackBuffer )
-{
-}
-
-HIPRT_DEVICE hiprtDynamicInstanceStack::~hiprtDynamicInstanceStack() { m_impl->~hiprtGlobalStack_impl(); }
-
-HIPRT_DEVICE hiprtInstanceStackEntry hiprtDynamicInstanceStack::pop() { return m_impl->pop(); }
-
-HIPRT_DEVICE void hiprtDynamicInstanceStack::push( hiprtInstanceStackEntry val ) { m_impl->push( val ); }
-
-HIPRT_DEVICE bool hiprtDynamicInstanceStack::empty() const { return m_impl->empty(); }
-
-HIPRT_DEVICE uint32_t hiprtDynamicInstanceStack::vacancy() const { return m_impl->vacancy(); }
-
-HIPRT_DEVICE void hiprtDynamicInstanceStack::reset() { m_impl->reset(); }
-
-// hiprtGeomTraversalClosest
-HIPRT_DEVICE hiprtGeomTraversalClosest::hiprtGeomTraversalClosest(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, hint, payload, funcTable, rayType )
-{
-}
-
-HIPRT_DEVICE hiprtHit hiprtGeomTraversalClosest::getNextHit() { return m_impl->getNextHit(); }
-
-HIPRT_DEVICE hiprtTraversalState hiprtGeomTraversalClosest::getCurrentState() { return m_impl->getCurrentState(); }
-
-// hiprtGeomTraversalAnyHit
-HIPRT_DEVICE hiprtGeomTraversalAnyHit::hiprtGeomTraversalAnyHit(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, hint, payload, funcTable, rayType )
-{
-}
-
-HIPRT_DEVICE hiprtHit hiprtGeomTraversalAnyHit::getNextHit() { return m_impl->getNextHit(); }
-
-HIPRT_DEVICE hiprtTraversalState hiprtGeomTraversalAnyHit::getCurrentState() { return m_impl->getCurrentState(); }
-
-// hiprtGeomCustomTraversalClosest
-HIPRT_DEVICE hiprtGeomCustomTraversalClosest::hiprtGeomCustomTraversalClosest(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, hint, payload, funcTable, rayType )
-{
-}
-
-HIPRT_DEVICE hiprtHit hiprtGeomCustomTraversalClosest::getNextHit() { return m_impl->getNextHit(); }
-
-HIPRT_DEVICE hiprtTraversalState hiprtGeomCustomTraversalClosest::getCurrentState() { return m_impl->getCurrentState(); }
-
-// hiprtGeomCustomTraversalAnyHit
-HIPRT_DEVICE hiprtGeomCustomTraversalAnyHit::hiprtGeomCustomTraversalAnyHit(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, hint, payload, funcTable, rayType )
-{
-}
-
-HIPRT_DEVICE hiprtHit hiprtGeomCustomTraversalAnyHit::getNextHit() { return m_impl->getNextHit(); }
-
-HIPRT_DEVICE hiprtTraversalState hiprtGeomCustomTraversalAnyHit::getCurrentState() { return m_impl->getCurrentState(); }
-
-// hiprtSceneTraversalClosest
-HIPRT_DEVICE hiprtSceneTraversalClosest::hiprtSceneTraversalClosest(
-	hiprtScene		   scene,
-	const hiprtRay&	   ray,
-	hiprtRayMask	   mask,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType,
-	float			   time )
-	: m_impl( scene, ray, mask, hint, payload, funcTable, rayType, time )
-{
-}
-
-HIPRT_DEVICE hiprtHit hiprtSceneTraversalClosest::getNextHit() { return m_impl->getNextHit(); }
-
-HIPRT_DEVICE hiprtTraversalState hiprtSceneTraversalClosest::getCurrentState() { return m_impl->getCurrentState(); }
-
-// hiprtSceneTraversalAnyHit
-HIPRT_DEVICE hiprtSceneTraversalAnyHit::hiprtSceneTraversalAnyHit(
-	hiprtScene		   scene,
-	const hiprtRay&	   ray,
-	hiprtRayMask	   mask,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType,
-	float			   time )
-	: m_impl( scene, ray, mask, hint, payload, funcTable, rayType, time )
-{
-}
-
-HIPRT_DEVICE hiprtHit hiprtSceneTraversalAnyHit::getNextHit() { return m_impl->getNextHit(); }
-
-HIPRT_DEVICE hiprtTraversalState hiprtSceneTraversalAnyHit::getCurrentState() { return m_impl->getCurrentState(); }
-
-// hiprtGeomTraversalClosestCustomStack
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtGeomTraversalClosestCustomStack<hiprtStack>::hiprtGeomTraversalClosestCustomStack(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtStack&		   stack,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, stack, hint, payload, funcTable, rayType )
-{
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtHit hiprtGeomTraversalClosestCustomStack<hiprtStack>::getNextHit()
-{
-	return m_impl->getNextHit();
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtTraversalState hiprtGeomTraversalClosestCustomStack<hiprtStack>::getCurrentState()
-{
-	return m_impl->getCurrentState();
-}
-
-// hiprtGeomTraversalAnyHitCustomStack
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtGeomTraversalAnyHitCustomStack<hiprtStack>::hiprtGeomTraversalAnyHitCustomStack(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtStack&		   stack,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, stack, hint, payload, funcTable, rayType )
-{
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtHit hiprtGeomTraversalAnyHitCustomStack<hiprtStack>::getNextHit()
-{
-	return m_impl->getNextHit();
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtTraversalState hiprtGeomTraversalAnyHitCustomStack<hiprtStack>::getCurrentState()
-{
-	return m_impl->getCurrentState();
-}
-
-// hiprtGeomCustomTraversalClosestCustomStack
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtGeomCustomTraversalClosestCustomStack<hiprtStack>::hiprtGeomCustomTraversalClosestCustomStack(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtStack&		   stack,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, stack, hint, payload, funcTable, rayType )
-{
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtHit hiprtGeomCustomTraversalClosestCustomStack<hiprtStack>::getNextHit()
-{
-	return m_impl->getNextHit();
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtTraversalState hiprtGeomCustomTraversalClosestCustomStack<hiprtStack>::getCurrentState()
-{
-	return m_impl->getCurrentState();
-}
-
-// hiprtGeomCustomTraversalAnyHitCustomStack
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtGeomCustomTraversalAnyHitCustomStack<hiprtStack>::hiprtGeomCustomTraversalAnyHitCustomStack(
-	hiprtGeometry	   geom,
-	const hiprtRay&	   ray,
-	hiprtStack&		   stack,
-	hiprtTraversalHint hint,
-	void*			   payload,
-	hiprtFuncTable	   funcTable,
-	uint32_t		   rayType )
-	: m_impl( geom, ray, stack, hint, payload, funcTable, rayType )
-{
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtHit hiprtGeomCustomTraversalAnyHitCustomStack<hiprtStack>::getNextHit()
-{
-	return m_impl->getNextHit();
-}
-
-template <typename hiprtStack>
-HIPRT_DEVICE hiprtTraversalState hiprtGeomCustomTraversalAnyHitCustomStack<hiprtStack>::getCurrentState()
-{
-	return m_impl->getCurrentState();
-}
-
-// hiprtSceneTraversalClosestCustomStack
-template <typename hiprtStack, typename hiprtInstanceStack>
-HIPRT_DEVICE hiprtSceneTraversalClosestCustomStack<hiprtStack, hiprtInstanceStack>::hiprtSceneTraversalClosestCustomStack(
-	hiprtScene			scene,
-	const hiprtRay&		ray,
-	hiprtStack&			stack,
-	hiprtInstanceStack& instanceStack,
-	hiprtRayMask		mask,
-	hiprtTraversalHint	hint,
-	void*				payload,
-	hiprtFuncTable		funcTable,
-	uint32_t			rayType,
-	float				time )
-	: m_impl( scene, ray, stack, instanceStack, mask, hint, payload, funcTable, rayType, time )
-{
-}
-
-// hiprtSceneTraversalClosestCustomStack
-template <typename hiprtStack, typename hiprtInstanceStack>
-HIPRT_DEVICE hiprtHit hiprtSceneTraversalClosestCustomStack<hiprtStack, hiprtInstanceStack>::getNextHit()
-{
-	return m_impl->getNextHit();
-}
-
-template <typename hiprtStack, typename hiprtInstanceStack>
-HIPRT_DEVICE hiprtTraversalState hiprtSceneTraversalClosestCustomStack<hiprtStack, hiprtInstanceStack>::getCurrentState()
-{
-	return m_impl->getCurrentState();
-}
-
-// hiprtSceneTraversalAnyHitCustomStack
-template <typename hiprtStack, typename hiprtInstanceStack>
-HIPRT_DEVICE hiprtSceneTraversalAnyHitCustomStack<hiprtStack, hiprtInstanceStack>::hiprtSceneTraversalAnyHitCustomStack(
-	hiprtScene			scene,
-	const hiprtRay&		ray,
-	hiprtStack&			stack,
-	hiprtInstanceStack& instanceStack,
-	hiprtRayMask		mask,
-	hiprtTraversalHint	hint,
-	void*				payload,
-	hiprtFuncTable		funcTable,
-	uint32_t			rayType,
-	float				time )
-	: m_impl( scene, ray, stack, instanceStack, mask, hint, payload, funcTable, rayType, time )
-{
-}
-
-template <typename hiprtStack, typename hiprtInstanceStack>
-HIPRT_DEVICE hiprtHit hiprtSceneTraversalAnyHitCustomStack<hiprtStack, hiprtInstanceStack>::getNextHit()
-{
-	return m_impl->getNextHit();
-}
-
-template <typename hiprtStack, typename hiprtInstanceStack>
-HIPRT_DEVICE hiprtTraversalState hiprtSceneTraversalAnyHitCustomStack<hiprtStack, hiprtInstanceStack>::getCurrentState()
-{
-	return m_impl->getCurrentState();
-}
-
-HIPRT_DEVICE float3 hiprtPointObjectToWorld( const float3& point, hiprtScene scene, uint32_t instanceID, float time )
-{
-	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	const hiprt::Transform	  tr(
-		   sceneHeader->m_frames,
-		   sceneHeader->m_instances[instanceID].m_frameIndex,
-		   sceneHeader->m_instances[instanceID].m_frameCount );
-	hiprt::Frame frame = tr.interpolateFrames( time );
-	return frame.transform( point );
-}
-
-HIPRT_DEVICE float3 hiprtPointWorldToObject( const float3& point, hiprtScene scene, uint32_t instanceID, float time )
-{
-	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	const hiprt::Transform	  tr(
-		   sceneHeader->m_frames,
-		   sceneHeader->m_instances[instanceID].m_frameIndex,
-		   sceneHeader->m_instances[instanceID].m_frameCount );
-	hiprt::Frame frame = tr.interpolateFrames( time );
-	return frame.invTransform( point );
-}
-
-HIPRT_DEVICE float3 hiprtVectorObjectToWorld( const float3& vector, hiprtScene scene, uint32_t instanceID, float time )
-{
-	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	const hiprt::Transform	  tr(
-		   sceneHeader->m_frames,
-		   sceneHeader->m_instances[instanceID].m_frameIndex,
-		   sceneHeader->m_instances[instanceID].m_frameCount );
-	hiprt::Frame frame = tr.interpolateFrames( time );
-	return frame.transformVector( vector );
-}
-
-HIPRT_DEVICE float3 hiprtVectorWorldToObject( const float3& vector, hiprtScene scene, uint32_t instanceID, float time )
-{
-	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	const hiprt::Transform	  tr(
-		   sceneHeader->m_frames,
-		   sceneHeader->m_instances[instanceID].m_frameIndex,
-		   sceneHeader->m_instances[instanceID].m_frameCount );
-	hiprt::Frame frame = tr.interpolateFrames( time );
-	return frame.invTransformVector( vector );
-}
-
-HIPRT_DEVICE float3 hiprtPointObjectToWorld(
-	const float3& point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time )
-{
-	hiprt::SceneHeader* sceneHeaders[hiprtMaxInstanceLevels];
-	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	float3				p			= point;
-
-	uint32_t depth = 0;
-#pragma unroll
-	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
-	{
-		sceneHeaders[i] = sceneHeader;
-		const auto& instance = sceneHeader->m_instances[instanceIDs[i]];
-		++depth;
-		if ( instance.m_type != hiprtInstanceTypeScene ) break;
-		sceneHeader = instance.m_scene;
-	}
-
-#pragma unroll
-	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
-	{
-		int32_t j = depth - 1 - i;
-		if ( j >= 0 )
-		{
-			sceneHeader				  = sceneHeaders[j];
-			const auto&		 instance = sceneHeader->m_instances[instanceIDs[j]];
-			hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
-			hiprt::Frame	 frame	  = tr.interpolateFrames( time );
-			p						  = frame.transform( p );
-		}
-	}
-
-	return p;
-}
-
-HIPRT_DEVICE float3 hiprtPointWorldToObject(
-	const float3& point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time )
-{
-	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	float3				p			= point;
-
-#pragma unroll
-	for ( int32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
-	{
-		const auto&		 instance = sceneHeader->m_instances[instanceIDs[i]];
-		hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
-		hiprt::Frame	 frame	  = tr.interpolateFrames( time );
-		p						  = frame.invTransform( p );
-		if ( instance.m_type != hiprtInstanceTypeScene ) break;
-		sceneHeader = instance.m_scene;
-	}
-
-	return p;
-}
-
-HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
-	const float3& vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time )
-{
-	hiprt::SceneHeader* sceneHeaders[hiprtMaxInstanceLevels];
-	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	float3				v			= vector;
-
-	uint32_t depth = 0;
-#pragma unroll
-	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
-	{
-		sceneHeaders[i] = sceneHeader;
-		const auto& instance = sceneHeader->m_instances[instanceIDs[i]];
-		++depth;
-		if ( instance.m_type != hiprtInstanceTypeScene ) break;
-		sceneHeader = instance.m_scene;
-	}
-
-#pragma unroll
-	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
-	{
-		int32_t j = depth - 1 - i;
-		if ( j >= 0 )
-		{
-			sceneHeader				  = sceneHeaders[j];
-			const auto&		 instance = sceneHeader->m_instances[instanceIDs[j]];
-			hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
-			hiprt::Frame	 frame	  = tr.interpolateFrames( time );
-			v						  = frame.transformVector( v );
-		}
-	}
-
-	return v;
-}
-
-HIPRT_DEVICE float3 hiprtVectorWorldToObject(
-	const float3& vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time )
-{
-	hiprt::SceneHeader* sceneHeader = reinterpret_cast<hiprt::SceneHeader*>( scene );
-	float3				v			= vector;
-
-#pragma unroll
-	for ( int32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
-	{
-		const auto&		 instance = sceneHeader->m_instances[instanceIDs[i]];
-		hiprt::Transform tr		  = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
-		hiprt::Frame	 frame	  = tr.interpolateFrames( time );
-		v						  = frame.invTransformVector( v );
-		if ( instance.m_type != hiprtInstanceTypeScene ) break;
-		sceneHeader = instance.m_scene;
-	}
-
-	return v;
-}
-
-// transformation getters
-HIPRT_DEVICE hiprtFrameSRT hiprtGetObjectToWorldFrameSRT( hiprtScene scene, uint32_t instanceID, float time )
-{
-    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
-    const hiprt::Transform    tr(
-           sceneHeader->m_frames,
-           sceneHeader->m_instances[instanceID].m_frameIndex,
-           sceneHeader->m_instances[instanceID].m_frameCount );
-    const hiprt::Frame frame = tr.interpolateFrames( time );
-
-	hiprt::SRTFrame srtFrame;
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
+
+	hiprt::SRTFrame srtFrame{};
 #if defined( HIPRT_MATRIX_FRAME )
-	hiprtFrameMatrix mf;
-	memcpy( mf.matrix, frame.m_matrix, sizeof( mf.matrix ) );
-	mf.time = frame.m_time;
-	srtFrame = hiprt::SRTFrame( mf );
+	hiprtFrameMatrix matrixFrame{};
+	memcpy( matrixFrame.matrix, frame.m_matrix, sizeof( matrixFrame.matrix ) );
+	srtFrame = hiprt::SRTFrame( matrixFrame );
 #else
 	srtFrame = frame;
 #endif
 
-    hiprtFrameSRT result;
-    result.rotation    = hiprt::qtToAxisAngle( srtFrame.m_rotation );
-    result.scale       = srtFrame.m_scale;
-    result.translation = srtFrame.m_translation;
-    result.time        = srtFrame.m_time;
-    return result;
+	hiprtFrameSRT result{};
+	result.rotation    = hiprt::qtToAxisAngle( srtFrame.m_rotation );
+	result.scale       = srtFrame.m_scale;
+	result.shear       = srtFrame.m_shear;
+	result.translation = srtFrame.m_translation;
+	result.time        = time;
+
+	return result;
 }
 
-HIPRT_DEVICE hiprtFrameSRT hiprtGetWorldToObjectFrameSRT( hiprtScene scene, uint32_t instanceID, float time )
+HIPRT_DEVICE hiprtFrameSRT hiprtGetWorldToObjectFrameSRT( const hiprtScene scene, const uint32_t instanceID, const float time )
 {
-    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
-    const hiprt::Transform    tr(
-           sceneHeader->m_frames,
-           sceneHeader->m_instances[instanceID].m_frameIndex,
-           sceneHeader->m_instances[instanceID].m_frameCount );
-    const hiprt::Frame frame = tr.interpolateFrames( time );
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
 
-    float matrixInv[3][4];
-    hiprt::computeInvTransformMatrix( frame, matrixInv );
+	float matrixInv[3][4];
+	hiprt::computeInvTransformMatrix( frame, matrixInv );
 
-    hiprtFrameMatrix mf;
-    memcpy( mf.matrix, matrixInv, sizeof( matrixInv ) );
-    mf.time = frame.m_time;
+	hiprtFrameMatrix matrixFrame{};
+	memcpy( matrixFrame.matrix, matrixInv, sizeof( matrixInv ) );
 
-    const hiprt::SRTFrame invSrtFrame( mf );
+	const hiprt::SRTFrame invSrtFrame( matrixFrame );
 
-    hiprtFrameSRT result;
-    result.rotation    = hiprt::qtToAxisAngle( invSrtFrame.m_rotation );
-    result.scale       = invSrtFrame.m_scale;
-    result.translation = invSrtFrame.m_translation;
-    result.time        = invSrtFrame.m_time;
-    return result;
+	hiprtFrameSRT result{};
+	result.rotation    = hiprt::qtToAxisAngle( invSrtFrame.m_rotation );
+	result.scale       = invSrtFrame.m_scale;
+	result.shear       = invSrtFrame.m_shear;
+	result.translation = invSrtFrame.m_translation;
+	result.time        = time;
+
+	return result;
 }
 
-HIPRT_DEVICE hiprtFrameMatrix hiprtGetObjectToWorldFrameMatrix( hiprtScene scene, uint32_t instanceID, float time )
+HIPRT_DEVICE hiprtFrameMatrix
+hiprtGetObjectToWorldFrameMatrix( const hiprtScene scene, const uint32_t instanceID, const float time )
 {
-    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
-    const hiprt::Transform    tr(
-           sceneHeader->m_frames,
-           sceneHeader->m_instances[instanceID].m_frameIndex,
-           sceneHeader->m_instances[instanceID].m_frameCount );
-    const hiprt::Frame frame = tr.interpolateFrames( time );
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
 
-	hiprtFrameMatrix result;
+	hiprtFrameMatrix result{};
 #if defined( HIPRT_MATRIX_FRAME )
 	memcpy( result.matrix, frame.m_matrix, sizeof( result.matrix ) );
-	result.time = frame.m_time;
 #else
 	float Q[3][3];
 	hiprt::qtToRotationMatrix( frame.m_rotation, Q );
+	HIPRT_UNROLL
 	for ( uint32_t i = 0; i < 3; ++i )
 	{
 		result.matrix[i][0] = Q[i][0] * frame.m_scale.x;
@@ -2005,188 +1244,344 @@ HIPRT_DEVICE hiprtFrameMatrix hiprtGetObjectToWorldFrameMatrix( hiprtScene scene
 	result.matrix[0][3] = frame.m_translation.x;
 	result.matrix[1][3] = frame.m_translation.y;
 	result.matrix[2][3] = frame.m_translation.z;
-	result.time         = frame.m_time;
 #endif
-    return result;
+	result.time = time;
+
+	return result;
 }
 
-HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix( hiprtScene scene, uint32_t instanceID, float time )
+HIPRT_DEVICE hiprtFrameMatrix
+hiprtGetWorldToObjectFrameMatrix( const hiprtScene scene, const uint32_t instanceID, const float time )
 {
-    const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
-    const hiprt::Transform    tr(
-           sceneHeader->m_frames,
-           sceneHeader->m_instances[instanceID].m_frameIndex,
-           sceneHeader->m_instances[instanceID].m_frameCount );
-    const hiprt::Frame frame = tr.interpolateFrames( time );
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
 
-    float matrixInv[3][4];
-    hiprt::computeInvTransformMatrix( frame, matrixInv );
+	float matrixInv[3][4];
+	hiprt::computeInvTransformMatrix( frame, matrixInv );
 
-    hiprtFrameMatrix result;
-    memcpy( result.matrix, matrixInv, sizeof( result.matrix ) );
-    result.time = frame.m_time;
-    return result;
+	hiprtFrameMatrix result{};
+	memcpy( result.matrix, matrixInv, sizeof( result.matrix ) );
+	result.time = time;
+	return result;
 }
 
-// explicit template instatiation
-template class hiprtPrivateStack_impl<uint32_t, hiprtPrivateStack::StackSize>;
-template class hiprtGlobalStack_impl<uint32_t, false>;
-template class hiprtGlobalStack_impl<uint32_t, true>;
+// transformation getters for MLAS
+HIPRT_DEVICE hiprtFrameSRT hiprtGetObjectToWorldFrameSRT(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprtFrameMatrix matrixFrame = hiprtGetObjectToWorldFrameMatrix( scene, instanceIDs, time );
+	hiprt::SRTFrame        srtFrame    = hiprt::SRTFrame( matrixFrame );
 
-template class hiprtPrivateStack_impl<hiprtInstanceStackEntry, hiprtPrivateInstanceStack::StackSize>;
-template class hiprtGlobalStack_impl<hiprtInstanceStackEntry, false>;
-template class hiprtGlobalStack_impl<hiprtInstanceStackEntry, true>;
+	hiprtFrameSRT result{};
+	result.rotation    = hiprt::qtToAxisAngle( srtFrame.m_rotation );
+	result.scale       = srtFrame.m_scale;
+	result.shear       = srtFrame.m_shear;
+	result.translation = srtFrame.m_translation;
+	result.time        = time;
 
-template class hiprtGeomTraversal_impl<hiprtTriangleNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversal_impl<hiprtTriangleNode, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtGeomTraversal_impl<hiprtCustomNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversal_impl<hiprtCustomNode, hiprtTraversalTerminateAtAnyHit>;
+	return result;
+}
 
-template class hiprtSceneTraversal_impl<hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversal_impl<hiprtTraversalTerminateAtAnyHit>;
+HIPRT_DEVICE hiprtFrameSRT hiprtGetWorldToObjectFrameSRT(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprtFrameMatrix matrixFrame = hiprtGetWorldToObjectFrameMatrix( scene, instanceIDs, time );
+	hiprt::SRTFrame        srtFrame    = hiprt::SRTFrame( matrixFrame );
 
-template class hiprtGeomTraversalCustomStack_impl<hiprtPrivateStack, hiprtTriangleNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtPrivateStack, hiprtCustomNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtPrivateStack, hiprtTriangleNode, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtPrivateStack, hiprtCustomNode, hiprtTraversalTerminateAtAnyHit>;
+	hiprtFrameSRT result{};
+	result.rotation    = hiprt::qtToAxisAngle( srtFrame.m_rotation );
+	result.scale       = srtFrame.m_scale;
+	result.shear       = srtFrame.m_shear;
+	result.translation = srtFrame.m_translation;
+	result.time        = time;
 
-template class hiprtGeomTraversalCustomStack_impl<hiprtGlobalStack, hiprtTriangleNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtGlobalStack, hiprtCustomNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtGlobalStack, hiprtTriangleNode, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtGlobalStack, hiprtCustomNode, hiprtTraversalTerminateAtAnyHit>;
+	return result;
+}
 
-template class hiprtGeomTraversalCustomStack_impl<hiprtDynamicStack, hiprtTriangleNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtDynamicStack, hiprtCustomNode, hiprtTraversalTerminateAtClosestHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtDynamicStack, hiprtTriangleNode, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtGeomTraversalCustomStack_impl<hiprtDynamicStack, hiprtCustomNode, hiprtTraversalTerminateAtAnyHit>;
+HIPRT_DEVICE hiprtFrameMatrix hiprtGetObjectToWorldFrameMatrix(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
 
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtEmptyInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<hiprtPrivateStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtGlobalStack,
-	hiprtEmptyInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<hiprtGlobalStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtEmptyInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<hiprtDynamicStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+	hiprt::MatrixFrame matrixFrame{}; // default constructor sets identity
+	HIPRT_UNROLL
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		const hiprt::Transform tr = hiprt::Transform(
+			sceneHeader->m_frames,
+			sceneHeader->m_instances[instanceIDs[i]].m_frameIndex,
+			sceneHeader->m_instances[instanceIDs[i]].m_frameCount );
+		const hiprt::Frame frame = tr.interpolateFrames( time );
 
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtPrivateInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtPrivateInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtGlobalStack,
-	hiprtPrivateInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtGlobalStack,
-	hiprtPrivateInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtPrivateInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtPrivateInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
+		hiprt::MatrixFrame curMatrixFrame{};
+#if defined( HIPRT_MATRIX_FRAME )
+		curMatrixFrame = frame;
+#else
+		float Q[3][3];
+		hiprt::qtToRotationMatrix( frame.m_rotation, Q );
+		HIPRT_UNROLL
+		for ( uint32_t j = 0; j < 3; ++j )
+		{
+			curMatrixFrame.m_matrix[j][0] = Q[j][0] * frame.m_scale.x;
+			curMatrixFrame.m_matrix[j][1] = Q[j][1] * frame.m_scale.y + Q[j][0] * frame.m_shear.x;
+			curMatrixFrame.m_matrix[j][2] = Q[j][2] * frame.m_scale.z + Q[j][1] * frame.m_shear.z + Q[j][0] * frame.m_shear.y;
+		}
+		curMatrixFrame.m_matrix[0][3] = frame.m_translation.x;
+		curMatrixFrame.m_matrix[1][3] = frame.m_translation.y;
+		curMatrixFrame.m_matrix[2][3] = frame.m_translation.z;
+#endif
+		matrixFrame = hiprt::MatrixFrame::multiply( matrixFrame, curMatrixFrame );
 
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtGlobalInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtGlobalInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtGlobalStack,
-	hiprtGlobalInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<hiprtGlobalStack, hiprtGlobalInstanceStack, hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtGlobalInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtGlobalInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
+		if ( sceneHeader->m_instances[instanceIDs[i]].m_type != hiprtInstanceTypeScene ) break;
+		sceneHeader = sceneHeader->m_instances[instanceIDs[i]].m_scene;
+	}
 
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtDynamicInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtPrivateStack,
-	hiprtDynamicInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtGlobalStack,
-	hiprtDynamicInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtGlobalStack,
-	hiprtDynamicInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtDynamicInstanceStack,
-	hiprtTraversalTerminateAtClosestHit>;
-template class hiprtSceneTraversalCustomStack_impl<
-	hiprtDynamicStack,
-	hiprtDynamicInstanceStack,
-	hiprtTraversalTerminateAtAnyHit>;
+	hiprtFrameMatrix result{};
+	memcpy( result.matrix, matrixFrame.m_matrix, sizeof( result.matrix ) );
+	result.time = time;
 
-template class hiprtGeomTraversalClosestCustomStack<hiprtPrivateStack>;
-template class hiprtGeomCustomTraversalClosestCustomStack<hiprtPrivateStack>;
-template class hiprtGeomTraversalAnyHitCustomStack<hiprtPrivateStack>;
-template class hiprtGeomCustomTraversalAnyHitCustomStack<hiprtPrivateStack>;
+	return result;
+}
 
-template class hiprtGeomTraversalClosestCustomStack<hiprtGlobalStack>;
-template class hiprtGeomCustomTraversalClosestCustomStack<hiprtGlobalStack>;
-template class hiprtGeomTraversalAnyHitCustomStack<hiprtGlobalStack>;
-template class hiprtGeomCustomTraversalAnyHitCustomStack<hiprtGlobalStack>;
+HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
 
-template class hiprtGeomTraversalClosestCustomStack<hiprtDynamicStack>;
-template class hiprtGeomCustomTraversalClosestCustomStack<hiprtDynamicStack>;
-template class hiprtGeomTraversalAnyHitCustomStack<hiprtDynamicStack>;
-template class hiprtGeomCustomTraversalAnyHitCustomStack<hiprtDynamicStack>;
+	hiprt::MatrixFrame matrixFrame{}; // default constructor sets identity
+	HIPRT_UNROLL
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		const hiprt::Transform tr = hiprt::Transform(
+			sceneHeader->m_frames,
+			sceneHeader->m_instances[instanceIDs[i]].m_frameIndex,
+			sceneHeader->m_instances[instanceIDs[i]].m_frameCount );
+		const hiprt::Frame frame = tr.interpolateFrames( time );
 
-template class hiprtSceneTraversalClosestCustomStack<hiprtPrivateStack, hiprtEmptyInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtPrivateStack, hiprtEmptyInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtGlobalStack, hiprtEmptyInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtGlobalStack, hiprtEmptyInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtDynamicStack, hiprtEmptyInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtDynamicStack, hiprtEmptyInstanceStack>;
+		hiprt::MatrixFrame curMatrixFrame{};
+		hiprt::computeInvTransformMatrix( frame, curMatrixFrame.m_matrix );
+		matrixFrame = hiprt::MatrixFrame::multiply( curMatrixFrame, matrixFrame );
 
-template class hiprtSceneTraversalClosestCustomStack<hiprtPrivateStack, hiprtPrivateInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtPrivateStack, hiprtPrivateInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtGlobalStack, hiprtPrivateInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtGlobalStack, hiprtPrivateInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtDynamicStack, hiprtPrivateInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtDynamicStack, hiprtPrivateInstanceStack>;
+		if ( sceneHeader->m_instances[instanceIDs[i]].m_type != hiprtInstanceTypeScene ) break;
+		sceneHeader = sceneHeader->m_instances[instanceIDs[i]].m_scene;
+	}
 
-template class hiprtSceneTraversalClosestCustomStack<hiprtPrivateStack, hiprtGlobalInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtPrivateStack, hiprtGlobalInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtGlobalStack, hiprtGlobalInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtGlobalStack, hiprtGlobalInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtDynamicStack, hiprtGlobalInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtDynamicStack, hiprtGlobalInstanceStack>;
+	hiprtFrameMatrix result{};
+	memcpy( result.matrix, matrixFrame.m_matrix, sizeof( result.matrix ) );
+	result.time = time;
 
-template class hiprtSceneTraversalClosestCustomStack<hiprtPrivateStack, hiprtDynamicInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtPrivateStack, hiprtDynamicInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtGlobalStack, hiprtDynamicInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtGlobalStack, hiprtDynamicInstanceStack>;
-template class hiprtSceneTraversalClosestCustomStack<hiprtDynamicStack, hiprtDynamicInstanceStack>;
-template class hiprtSceneTraversalAnyHitCustomStack<hiprtDynamicStack, hiprtDynamicInstanceStack>;
+	return result;
+}
+
+// transformation of points and vectors between object space and world space
+HIPRT_DEVICE float3
+hiprtPointObjectToWorld( const float3& point, const hiprtScene scene, const uint32_t instanceID, const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
+	return frame.transform( point );
+}
+
+HIPRT_DEVICE float3
+hiprtPointWorldToObject( const float3& point, const hiprtScene scene, const uint32_t instanceID, const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
+	return frame.invTransform( point );
+}
+
+HIPRT_DEVICE float3
+hiprtVectorObjectToWorld( const float3& vector, const hiprtScene scene, const uint32_t instanceID, const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
+	return frame.transformVector( vector );
+}
+
+HIPRT_DEVICE float3
+hiprtVectorWorldToObject( const float3& vector, const hiprtScene scene, const uint32_t instanceID, const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	const hiprt::Transform    tr(
+        sceneHeader->m_frames,
+        sceneHeader->m_instances[instanceID].m_frameIndex,
+        sceneHeader->m_instances[instanceID].m_frameCount );
+	const hiprt::Frame frame = tr.interpolateFrames( time );
+	return frame.invTransformVector( vector );
+}
+
+HIPRT_DEVICE float3 hiprtPointObjectToWorld(
+	const float3& point, const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprt::SceneHeader* sceneHeaders[hiprtMaxInstanceLevels];
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	float3                    p           = point;
+
+	uint32_t depth = 0;
+	HIPRT_UNROLL
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		sceneHeaders[i]      = sceneHeader;
+		const auto& instance = sceneHeader->m_instances[instanceIDs[i]];
+		++depth;
+		if ( instance.m_type != hiprtInstanceTypeScene ) break;
+		sceneHeader = instance.m_scene;
+	}
+
+	HIPRT_UNROLL
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		const int32_t j = static_cast<int32_t>( depth ) - 1 - static_cast<int32_t>( i );
+		if ( j >= 0 )
+		{
+			sceneHeader                     = sceneHeaders[j];
+			const auto&            instance = sceneHeader->m_instances[instanceIDs[j]];
+			const hiprt::Transform tr = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
+			const hiprt::Frame     frame = tr.interpolateFrames( time );
+			p                            = frame.transform( p );
+		}
+	}
+
+	return p;
+}
+
+HIPRT_DEVICE float3 hiprtPointWorldToObject(
+	const float3& point, const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	float3                    p           = point;
+
+	HIPRT_UNROLL
+	for ( int32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		const auto&            instance = sceneHeader->m_instances[instanceIDs[i]];
+		const hiprt::Transform tr    = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
+		const hiprt::Frame     frame = tr.interpolateFrames( time );
+		p                            = frame.invTransform( p );
+		if ( instance.m_type != hiprtInstanceTypeScene ) break;
+		sceneHeader = instance.m_scene;
+	}
+
+	return p;
+}
+
+HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
+	const float3& vector, const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprt::SceneHeader* sceneHeaders[hiprtMaxInstanceLevels];
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	float3                    v           = vector;
+
+	uint32_t depth = 0;
+	HIPRT_UNROLL
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		sceneHeaders[i]      = sceneHeader;
+		const auto& instance = sceneHeader->m_instances[instanceIDs[i]];
+		++depth;
+		if ( instance.m_type != hiprtInstanceTypeScene ) break;
+		sceneHeader = instance.m_scene;
+	}
+
+	HIPRT_UNROLL
+	for ( uint32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		const int32_t j = static_cast<int32_t>( depth ) - 1 - static_cast<int32_t>( i );
+		if ( j >= 0 )
+		{
+			sceneHeader                     = sceneHeaders[j];
+			const auto&            instance = sceneHeader->m_instances[instanceIDs[j]];
+			const hiprt::Transform tr = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
+			const hiprt::Frame     frame = tr.interpolateFrames( time );
+			v                            = frame.transformVector( v );
+		}
+	}
+
+	return v;
+}
+
+HIPRT_DEVICE float3 hiprtVectorWorldToObject(
+	const float3& vector, const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time )
+{
+	const hiprt::SceneHeader* sceneHeader = reinterpret_cast<const hiprt::SceneHeader*>( scene );
+	float3                    v           = vector;
+
+	HIPRT_UNROLL
+	for ( int32_t i = 0; i < hiprtMaxInstanceLevels; ++i )
+	{
+		const auto&            instance = sceneHeader->m_instances[instanceIDs[i]];
+		const hiprt::Transform tr    = hiprt::Transform( sceneHeader->m_frames, instance.m_frameIndex, instance.m_frameCount );
+		const hiprt::Frame     frame = tr.interpolateFrames( time );
+		v                            = frame.invTransformVector( v );
+		if ( instance.m_type != hiprtInstanceTypeScene ) break;
+		sceneHeader = instance.m_scene;
+	}
+
+	return v;
+}
+
+// explicit template instatiation is required for bitcode linking
+namespace hiprt
+{
+template class PrivateStack<uint32_t, 64u>;
+template class GlobalStack<uint32_t, false>;
+template class GlobalStack<uint32_t, true>;
+
+template class PrivateStack<hiprtInstanceStackEntry, hiprtMaxInstanceLevels - 1u>;
+template class GlobalStack<hiprtInstanceStackEntry, false>;
+template class GlobalStack<hiprtInstanceStackEntry, true>;
+
+template class GeomTraversal<hiprtPrivateStack, TriangleNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversal<hiprtPrivateStack, TriangleNode, hiprtTraversalTerminateAtAnyHit>;
+template class GeomTraversal<hiprtPrivateStack, CustomNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversal<hiprtPrivateStack, CustomNode, hiprtTraversalTerminateAtAnyHit>;
+
+template class GeomTraversal<hiprtGlobalStack, TriangleNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversal<hiprtGlobalStack, TriangleNode, hiprtTraversalTerminateAtAnyHit>;
+template class GeomTraversal<hiprtGlobalStack, CustomNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversal<hiprtGlobalStack, CustomNode, hiprtTraversalTerminateAtAnyHit>;
+
+template class GeomTraversal<hiprtDynamicStack, TriangleNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversal<hiprtDynamicStack, TriangleNode, hiprtTraversalTerminateAtAnyHit>;
+template class GeomTraversal<hiprtDynamicStack, CustomNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversal<hiprtDynamicStack, CustomNode, hiprtTraversalTerminateAtAnyHit>;
+
+template class GeomTraversalPrivateStack<TriangleNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversalPrivateStack<TriangleNode, hiprtTraversalTerminateAtAnyHit>;
+template class GeomTraversalPrivateStack<CustomNode, hiprtTraversalTerminateAtClosestHit>;
+template class GeomTraversalPrivateStack<CustomNode, hiprtTraversalTerminateAtAnyHit>;
+
+template class SceneTraversal<hiprtPrivateStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversal<hiprtPrivateStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+template class SceneTraversal<hiprtPrivateStack, hiprtPrivateInstanceStack, hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversal<hiprtPrivateStack, hiprtPrivateInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+
+template class SceneTraversal<hiprtGlobalStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversal<hiprtGlobalStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+template class SceneTraversal<hiprtGlobalStack, hiprtPrivateInstanceStack, hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversal<hiprtGlobalStack, hiprtPrivateInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+
+template class SceneTraversal<hiprtDynamicStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversal<hiprtDynamicStack, hiprtEmptyInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+template class SceneTraversal<hiprtDynamicStack, hiprtPrivateInstanceStack, hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversal<hiprtDynamicStack, hiprtPrivateInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+
+template class SceneTraversalPrivateStack<hiprtTraversalTerminateAtClosestHit>;
+template class SceneTraversalPrivateStack<hiprtTraversalTerminateAtAnyHit>;
+} // namespace hiprt

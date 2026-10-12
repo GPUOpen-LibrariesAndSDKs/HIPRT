@@ -35,7 +35,7 @@ struct alignas( 16 ) Instance
 	uint32_t m_type : 1;
 	union
 	{
-		GeomHeader*	 m_geometry;
+		GeomHeader*  m_geometry;
 		SceneHeader* m_scene;
 	};
 };

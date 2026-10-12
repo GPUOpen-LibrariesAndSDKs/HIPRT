@@ -32,30 +32,30 @@
 #define SHARED_STACK_SIZE 1
 #endif
 
-__device__ float3 sampleLightVertex( const Light& light, float3 x, float3& lVtxOut, float3& lNormalOut, float& pdf, float2 xi )
+HIPRT_DEVICE HIPRT_INLINE float3 sampleLightVertex(
+	const Light& light, const float3& surfacePt, float3& lVtxOut, float3& lNormalOut, float& pdf, const float2& rnd )
 {
 
-	float3 le{};
-	lNormalOut	   = hiprt::cross( light.m_lv1 - light.m_lv0, light.m_lv2 - light.m_lv0 );
-	float area	   = sqrtf( hiprt::dot( lNormalOut, lNormalOut ) ) / 2.0f;
-	lNormalOut	   = hiprt::normalize( lNormalOut );
-	const float2 w = make_float2( 1.f - sqrtf( xi.x ), xi.y * sqrtf( xi.x ) );
-	lVtxOut		   = light.m_lv0 + w.x * ( light.m_lv1 - light.m_lv0 ) + w.y * ( light.m_lv2 - light.m_lv0 );
+	lNormalOut       = hiprt::cross( light.m_lv1 - light.m_lv0, light.m_lv2 - light.m_lv0 );
+	const float area = sqrtf( hiprt::dot( lNormalOut, lNormalOut ) ) / 2.0f;
+	lNormalOut       = hiprt::normalize( lNormalOut );
+	const float2 w   = make_float2( 1.f - sqrtf( rnd.x ), rnd.y * sqrtf( rnd.x ) );
+	lVtxOut          = light.m_lv0 + w.x * ( light.m_lv1 - light.m_lv0 ) + w.y * ( light.m_lv2 - light.m_lv0 );
 
 	// evaluate light surface integral part here for convenience
-	float3 r = lVtxOut - x;
+	const float3 r = lVtxOut - surfacePt;
 	// light surface cos term
 	float cos = fabs( hiprt::dot( lNormalOut, -hiprt::normalize( r ) ) );
 	if ( sqrtf( hiprt::dot( r, r ) ) < 0.0001f || cos < 0.0001f )
 	{
 		pdf = 0.0f;
-		return le;
+		return {};
 	}
 
 	if ( hiprt::dot( r, lNormalOut ) > 0.0f )
 	{
 		pdf = 0.0f;
-		return le;
+		return {};
 	}
 
 	// inverse of cos(theta) / r ^2 / p_i as we will be dividing by pdf
@@ -63,51 +63,52 @@ __device__ float3 sampleLightVertex( const Light& light, float3 x, float3& lVtxO
 	return light.m_le;
 }
 
-extern "C" __global__ void __launch_bounds__( 64 ) ShadowRayKernel(
-	hiprtScene			   scene,
-	uint8_t*			   image,
-	uint2				   resolution,
-	hiprtGlobalStackBuffer globalStackBuffer,
-	Camera				   camera,
-	uint32_t*			   matIndices,
-	Material*			   materials,
-	uint32_t*			   matOffsetPerInstance,
-	uint32_t*			   indices,
-	uint32_t*			   indxOffsets,
-	float3*				   normals,
-	uint32_t*			   normOffset,
-	uint32_t*			   numOfLights,
-	Light*				   lights,
-	float				   aoRadius )
+HIPRT_KERNEL void __launch_bounds__( 64 ) ShadowRayKernel(
+	hiprtScene                      scene,
+	uint8_t*                        image,
+	const uint2                     resolution,
+	hiprtGlobalStackBuffer          globalStackBuffer,
+	const Camera                    camera,
+	const uint32_t*                 matIndices,
+	const Material*                 materials,
+	const uint32_t*                 matOffsetPerInstance,
+	const uint32_t*                 indices,
+	const uint32_t*                 indxOffsets,
+	const float3*                   normals,
+	const uint32_t*                 normOffset,
+	const uint32_t*                 numOfLights,
+	const Light*                    lights,
+	[[maybe_unused]] const float    aoRadius,
+	[[maybe_unused]] hiprtFuncTable table )
 {
-	const uint32_t x	 = blockIdx.x * blockDim.x + threadIdx.x;
-	const uint32_t y	 = blockIdx.y * blockDim.y + threadIdx.y;
+	const uint32_t x     = blockIdx.x * blockDim.x + threadIdx.x;
+	const uint32_t y     = blockIdx.y * blockDim.y + threadIdx.y;
 	const uint32_t index = x + y * resolution.x;
 
 	uint32_t seed = tea<16>( x, y ).x;
 
-	__shared__ uint32_t	   sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];
+	__shared__ uint32_t    sharedStackCache[SHARED_STACK_SIZE * BLOCK_SIZE];
 	hiprtSharedStackBuffer sharedStackBuffer{ SHARED_STACK_SIZE, sharedStackCache };
 
-	Stack		  stack( globalStackBuffer, sharedStackBuffer );
+	Stack         stack( globalStackBuffer, sharedStackBuffer );
 	InstanceStack instanceStack;
 
-	hiprtRay													ray = generateRay( x, y, resolution, camera, seed, false );
+	hiprtRay                                                    ray = generateRay( x, y, resolution, camera, seed, false );
 	hiprtSceneTraversalClosestCustomStack<Stack, InstanceStack> tr( scene, ray, stack, instanceStack );
-	hiprtHit													hit = tr.getNextHit();
+	hiprtHit                                                    hit = tr.getNextHit();
 
 	uint3 color{};
 	if ( hit.hasHit() )
 	{
 		const uint32_t idxOffset = indxOffsets[hit.instanceID];
-		const uint32_t idx0		 = indices[idxOffset + ( ( hit.primID * 3 ) + 0 )];
-		const uint32_t idx1		 = indices[idxOffset + ( ( hit.primID * 3 ) + 1 )];
-		const uint32_t idx2		 = indices[idxOffset + ( ( hit.primID * 3 ) + 2 )];
+		const uint32_t idx0      = indices[idxOffset + ( ( hit.primID * 3 ) + 0 )];
+		const uint32_t idx1      = indices[idxOffset + ( ( hit.primID * 3 ) + 1 )];
+		const uint32_t idx2      = indices[idxOffset + ( ( hit.primID * 3 ) + 2 )];
 
 		const uint32_t nOffset = normOffset[hit.instanceID];
-		const float3   n0	   = normals[nOffset + idx0];
-		const float3   n1	   = normals[nOffset + idx1];
-		const float3   n2	   = normals[nOffset + idx2];
+		const float3   n0      = normals[nOffset + idx0];
+		const float3   n1      = normals[nOffset + idx1];
+		const float3   n2      = normals[nOffset + idx2];
 
 		float3 Ns = ( 1.0f - hit.uv.x - hit.uv.y ) * n0 + hit.uv.x * n1 + hit.uv.y * n2;
 		float3 Ng = hiprtVectorObjectToWorld( hit.normal, scene, hit.instanceID );
@@ -118,17 +119,17 @@ extern "C" __global__ void __launch_bounds__( 64 ) ShadowRayKernel(
 		Ns = hiprt::normalize( Ns );
 
 		const uint32_t matOffset = matOffsetPerInstance[hit.instanceID] + hit.primID;
-		const uint32_t matIndex	 = matIndices[matOffset];
+		const uint32_t matIndex  = matIndices[matOffset];
 
 		const float3 diffuseColor  = materials[matIndex].m_diffuse;
 		const float3 emissiveColor = materials[matIndex].m_emission;
-		float3		 finalColor	   = emissiveColor;
+		float3       finalColor    = emissiveColor;
 
 		const float3 surfacePt = ray.origin + hit.t * ray.direction;
 		if ( matIndex == hiprtInvalidValue || !materials[matIndex].light() )
 		{
 			constexpr uint32_t Spp = 32;
-			float3			   est{};
+			float3             est{};
 			for ( uint32_t l = 0; l < numOfLights[0]; l++ )
 			{
 				for ( uint32_t p = 0; p < Spp; p++ )
@@ -137,23 +138,23 @@ extern "C" __global__ void __launch_bounds__( 64 ) ShadowRayKernel(
 					float3 lightVtx;
 					float3 lNormal;
 					Light  light = lights[l];
-					float  pdf	 = 0.0f;
+					float  pdf   = 0.0f;
 
 					float3 le = sampleLightVertex(
 						light, surfacePt, lightVtx, lNormal, pdf, make_float2( randf( seed ), randf( seed ) ) );
 
 					float3 lightDir = lightVtx - surfacePt;
-					float3 lightPt	= lightVtx + 1.0e-3f * lNormal;
+					float3 lightPt  = lightVtx + 1.0e-3f * lNormal;
 					float3 lightVec = lightPt - surfacePt;
 
 					hiprtRay shadowRay;
-					shadowRay.origin	= surfacePt + 1.0e-3f * Ng;
+					shadowRay.origin    = surfacePt + 1.0e-3f * Ng;
 					shadowRay.direction = hiprt::normalize( lightDir );
-					shadowRay.maxT		= 0.99f * sqrtf( hiprt::dot( lightVec, lightVec ) );
+					shadowRay.maxT      = 0.99f * sqrtf( hiprt::dot( lightVec, lightVec ) );
 
 					hiprtSceneTraversalAnyHitCustomStack<Stack, InstanceStack> tr( scene, shadowRay, stack, instanceStack );
-					hiprtHit												   hitShadow	   = tr.getNextHit();
-					int														   lightVisibility = hitShadow.hasHit() ? 0 : 1;
+					hiprtHit                                                   hitShadow       = tr.getNextHit();
+					int                                                        lightVisibility = hitShadow.hasHit() ? 0 : 1;
 
 					if ( pdf != 0.0f )
 						est += lightVisibility * le * max( 0.0f, hiprt::dot( Ng, hiprt::normalize( lightDir ) ) ) / pdf;

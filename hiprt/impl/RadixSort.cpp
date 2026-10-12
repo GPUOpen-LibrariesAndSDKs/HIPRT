@@ -48,20 +48,20 @@ RadixSort::RadixSort( oroDevice device, oroStream stream, OrochiUtils& oroutils 
 }
 
 void RadixSort::sort(
-	uint32_t*	 inputKeys,
-	uint32_t*	 inputValues,
-	uint32_t*	 outputKeys,
-	uint32_t*	 outputValues,
+	uint32_t*    inputKeys,
+	uint32_t*    inputValues,
+	uint32_t*    outputKeys,
+	uint32_t*    outputValues,
 	const size_t size,
-	oroStream	 stream ) noexcept
+	oroStream    stream ) noexcept
 {
 	Oro::RadixSort::KeyValueSoA srcGpu{};
 	Oro::RadixSort::KeyValueSoA dstGpu{};
 
-	srcGpu.key	 = inputKeys;
+	srcGpu.key   = inputKeys;
 	srcGpu.value = inputValues;
 
-	dstGpu.key	 = outputKeys;
+	dstGpu.key   = outputKeys;
 	dstGpu.value = outputValues;
 
 	static constexpr auto startBit{ 0 };

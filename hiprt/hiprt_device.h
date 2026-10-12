@@ -24,12 +24,58 @@
 
 #pragma once
 
-#define HIPRT_PUBLIC_DEVICE_H
-#define HIPRT_DEVICE __device__
-
 #include <hiprt/hiprt_common.h>
 #include <hiprt/hiprt_types.h>
 #include <hiprt/hiprt_vec.h>
+
+namespace hiprt
+{
+template <typename StackEntry, uint32_t StackSize>
+class PrivateStack
+{
+  public:
+	HIPRT_DEVICE PrivateStack();
+
+	HIPRT_DEVICE StackEntry             pop();
+	HIPRT_DEVICE void                   push( const StackEntry val );
+	[[nodiscard]] HIPRT_DEVICE bool     empty() const;
+	[[nodiscard]] HIPRT_DEVICE uint32_t vacancy() const;
+	HIPRT_DEVICE void                   reset();
+
+  private:
+	StackEntry m_stackBuffer[StackSize];
+	uint32_t   m_top;
+};
+
+template <typename StackEntry, bool DynamicAssignment>
+class GlobalStack
+{
+  public:
+	static constexpr uint32_t Stride    = WarpSize;
+	static constexpr uint32_t LogStride = Log2( Stride );
+
+	HIPRT_DEVICE
+	GlobalStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer );
+
+	HIPRT_DEVICE ~GlobalStack();
+
+	HIPRT_DEVICE StackEntry             pop();
+	HIPRT_DEVICE void                   push( const StackEntry val );
+	[[nodiscard]] HIPRT_DEVICE uint32_t vacancy() const;
+	[[nodiscard]] HIPRT_DEVICE bool     empty() const;
+	HIPRT_DEVICE void                   reset();
+
+  private:
+	uint32_t*   m_globalStackLock;
+	StackEntry* m_globalStackBuffer;
+	StackEntry* m_sharedStackBuffer;
+	uint32_t    m_globalStackSize;
+	uint32_t    m_sharedStackSize;
+	int32_t     m_globalIndex;
+	int32_t     m_sharedIndex;
+	uint32_t    m_sharedCount;
+};
+} // namespace hiprt
 
 /** \brief An empty dummy instance stack.
  *
@@ -42,469 +88,385 @@ class hiprtEmptyInstanceStack
 /** \brief A stack using (slow) local memory internally.
  *
  */
-template <typename StackEntry, uint32_t StackSize>
-class hiprtPrivateStack_impl;
-
-class hiprtPrivateStack
-{
-  public:
-	static constexpr uint32_t StackSize = 64u;
-	HIPRT_DEVICE			  hiprtPrivateStack();
-	HIPRT_DEVICE ~hiprtPrivateStack();
-	HIPRT_DEVICE uint32_t pop();
-	HIPRT_DEVICE void	  push( uint32_t val );
-	HIPRT_DEVICE bool	  empty() const;
-	HIPRT_DEVICE uint32_t vacancy() const;
-	HIPRT_DEVICE void	  reset();
-
-  private:
-	hiprtPimpl<hiprtPrivateStack_impl<uint32_t, StackSize>, SizePrivateStack, AlignmentPrivateStack> m_impl;
-};
-
-/** \brief A instance stack using (slow) local memory internally.
- *
- */
-class hiprtPrivateInstanceStack
-{
-  public:
-	static constexpr uint32_t StackSize = hiprtMaxInstanceLevels - 1;
-	HIPRT_DEVICE			  hiprtPrivateInstanceStack();
-	HIPRT_DEVICE ~hiprtPrivateInstanceStack();
-	HIPRT_DEVICE hiprtInstanceStackEntry pop();
-	HIPRT_DEVICE void					 push( hiprtInstanceStackEntry val );
-	HIPRT_DEVICE bool					 empty() const;
-	HIPRT_DEVICE uint32_t				 vacancy() const;
-	HIPRT_DEVICE void					 reset();
-
-  private:
-	hiprtPimpl<
-		hiprtPrivateStack_impl<hiprtInstanceStackEntry, StackSize>,
-		SizePrivateInstanceStack,
-		AlignmentPrivateInstanceStack>
-		m_impl;
-};
+using hiprtPrivateStack         = hiprt::PrivateStack<uint32_t, 64u>;
+using hiprtPrivateInstanceStack = hiprt::PrivateStack<hiprtInstanceStackEntry, hiprtMaxInstanceLevels - 1>;
 
 /** \brief A stack using both (fast) shared memory and (slow) global memory.
  *
  * The stack uses shared memory if there is enough space.
  * Otherwise, it uses global memory as a backup.
  */
-template <typename StackEntry, bool DynamicAssignment>
-class hiprtGlobalStack_impl;
-
-class hiprtGlobalStack
-{
-  public:
-	HIPRT_DEVICE
-	hiprtGlobalStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer );
-	HIPRT_DEVICE ~hiprtGlobalStack();
-	HIPRT_DEVICE uint32_t pop();
-	HIPRT_DEVICE void	  push( uint32_t val );
-	HIPRT_DEVICE uint32_t vacancy() const;
-	HIPRT_DEVICE bool	  empty() const;
-	HIPRT_DEVICE void	  reset();
-
-  private:
-	hiprtPimpl<hiprtGlobalStack_impl<uint32_t, false>, SizeGlobalStack, AlignmentGlobalStack> m_impl;
-};
-
-/** \brief An instance stack using both (fast) shared memory and (slow) global memory.
- *
- * The stack uses shared memory if there is enough space.
- * Otherwise, it uses global memory as a backup.
- */
-class hiprtGlobalInstanceStack
-{
-  public:
-	HIPRT_DEVICE
-	hiprtGlobalInstanceStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer );
-	HIPRT_DEVICE ~hiprtGlobalInstanceStack();
-	HIPRT_DEVICE hiprtInstanceStackEntry pop();
-	HIPRT_DEVICE void					 push( hiprtInstanceStackEntry val );
-	HIPRT_DEVICE uint32_t				 vacancy() const;
-	HIPRT_DEVICE bool					 empty() const;
-	HIPRT_DEVICE void					 reset();
-
-  private:
-	hiprtPimpl<hiprtGlobalStack_impl<hiprtInstanceStackEntry, false>, SizeGlobalStack, AlignmentGlobalStack> m_impl;
-};
+using hiprtGlobalStack         = hiprt::GlobalStack<uint32_t, false>;
+using hiprtGlobalInstanceStack = hiprt::GlobalStack<hiprtInstanceStackEntry, false>;
 
 /** \brief A stack using both (fast) shared memory and (slow) global memory with dynamic assignment.
  *
  * The stack uses shared memory if there is enough space.
  * Otherwise, it uses global memory as a backup.
  */
-class hiprtDynamicStack
+using hiprtDynamicStack         = hiprt::GlobalStack<uint32_t, true>;
+using hiprtDynamicInstanceStack = hiprt::GlobalStack<hiprtInstanceStackEntry, true>;
+
+namespace hiprt
+{
+struct SRTFrame;
+struct MatrixFrame;
+struct SceneHeader;
+
+#if defined( HIPRT_MATRIX_FRAME )
+using Frame = MatrixFrame;
+#else
+using Frame        = SRTFrame;
+#endif
+
+struct CustomNode;
+
+namespace rtip11
+{
+struct TrianglePairNode;
+struct BoxNode;
+struct InstanceNode;
+}; // namespace rtip11
+
+namespace rtip31
+{
+struct TrianglePacketNode;
+struct BoxNode;
+struct InstanceNode;
+}; // namespace rtip31
+
+#if HIPRT_RTIP >= 31
+using TriangleNode = rtip31::TrianglePacketNode;
+using BoxNode      = rtip31::BoxNode;
+using InstanceNode = rtip31::InstanceNode;
+#else
+using TriangleNode = rtip11::TrianglePairNode;
+using BoxNode      = rtip11::BoxNode;
+using InstanceNode = rtip11::InstanceNode;
+#endif
+
+template <typename Stack, hiprtTraversalType TraversalType>
+class TraversalBase
+{
+  public:
+	HIPRT_DEVICE TraversalBase(
+		const hiprtRay&          ray,
+		Stack&                   stack,
+		const hiprtTraversalHint hint,
+		void*                    payload,
+		const hiprtFuncTable     funcTable,
+		const uint32_t           rayType );
+
+	[[nodiscard]] HIPRT_DEVICE hiprtTraversalState getCurrentState() const;
+
+  protected:
+#if HIPRT_RTIP >= 11
+	HIPRT_DEVICE void packDescriptor( const uint32_t boxSortHeuristic = 0u, const bool compressed = false );
+#endif
+
+	[[nodiscard]] HIPRT_DEVICE bool
+	testInternalNode( const hiprtRay& ray, const float3& invD, const BoxNode* nodes, uint32_t& nodeIndex );
+
+	[[nodiscard]] HIPRT_DEVICE bool testTriangleNode(
+		const hiprtRay&     ray,
+		const float3&       invD,
+		const TriangleNode* nodes,
+		const uint32_t      geomType,
+		uint32_t&           leafIndex,
+		uint32_t&           triangleMask,
+		hiprtHit&           hit );
+
+	[[nodiscard]] HIPRT_DEVICE bool testTriangle(
+		const hiprtRay&                 ray,
+		const float3&                   invD,
+		const rtip11::TrianglePairNode* nodes,
+		const uint32_t                  leafAddr,
+		const uint32_t                  leafType,
+		hiprtHit&                       hit );
+
+	[[nodiscard]] HIPRT_DEVICE uint32_t testTrianglePair(
+		const hiprtRay&                   ray,
+		const rtip31::TrianglePacketNode* nodes,
+		const uint32_t                    leafAddr,
+		const uint32_t                    triPairIndex,
+		hiprtHit&                         hit0,
+		hiprtHit&                         hit1,
+		bool&                             nodeEnd,
+		bool&                             rangeEnd );
+
+  protected:
+	hiprtRay             m_ray;
+	hiprtFuncTableHeader m_tableHeader = { 0, 1, nullptr };
+	uint4                m_descriptor{};
+	Stack&               m_stack;
+	const BoxNode*       m_boxNodes = nullptr;
+	void*                m_payload  = nullptr;
+	uint32_t             m_nodeIndex{};
+	uint32_t             m_rayType{};
+	uint32_t             m_triangleMask{};
+	hiprtTraversalState  m_state = hiprtTraversalStateInit;
+	hiprtTraversalHint   m_hint  = hiprtTraversalHintDefault;
+};
+
+template <typename Stack, typename PrimitiveNode, hiprtTraversalType TraversalType>
+class GeomTraversal : public TraversalBase<Stack, TraversalType>
 {
   public:
 	HIPRT_DEVICE
-	hiprtDynamicStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer );
-	HIPRT_DEVICE ~hiprtDynamicStack();
-	HIPRT_DEVICE uint32_t pop();
-	HIPRT_DEVICE void	  push( uint32_t val );
-	HIPRT_DEVICE uint32_t vacancy() const;
-	HIPRT_DEVICE bool	  empty() const;
-	HIPRT_DEVICE void	  reset();
+	GeomTraversal(
+		const hiprtGeometry      geometry,
+		const hiprtRay&          ray,
+		Stack&                   stack,
+		const hiprtTraversalHint hint      = hiprtTraversalHintDefault,
+		void*                    payload   = nullptr,
+		const hiprtFuncTable     funcTable = nullptr,
+		const uint32_t           rayType   = 0u );
 
-  private:
-	hiprtPimpl<hiprtGlobalStack_impl<uint32_t, true>, SizeGlobalInstanceStack, AlignmentGlobalInstanceStack> m_impl;
+	[[nodiscard]] HIPRT_DEVICE hiprtHit getNextHit();
+
+  protected:
+	[[nodiscard]] HIPRT_DEVICE bool
+	testLeafNode( const hiprtRay& ray, const float3& invD, uint32_t& leafIndex, uint32_t& triangleMask, hiprtHit& hit );
+
+  protected:
+	const PrimitiveNode* m_primNodes = nullptr;
+	uint32_t             m_geomType{};
+	uint32_t             m_leafIndex{};
 };
 
-/** \brief An instance stack using both (fast) shared memory and (slow) global memory with dynamic assignment.
- *
- * The stack uses shared memory if there is enough space.
- * Otherwise, it uses global memory as a backup.
- */
-class hiprtDynamicInstanceStack
+template <typename Stack, typename InstanceStack, hiprtTraversalType TraversalType>
+class SceneTraversal : public TraversalBase<Stack, TraversalType>
 {
   public:
-	HIPRT_DEVICE
-	hiprtDynamicInstanceStack( hiprtGlobalStackBuffer globalStackBuffer, hiprtSharedStackBuffer sharedStackBuffer );
-	HIPRT_DEVICE ~hiprtDynamicInstanceStack();
-	HIPRT_DEVICE hiprtInstanceStackEntry pop();
-	HIPRT_DEVICE void					 push( hiprtInstanceStackEntry val );
-	HIPRT_DEVICE uint32_t				 vacancy() const;
-	HIPRT_DEVICE bool					 empty() const;
-	HIPRT_DEVICE void					 reset();
+	HIPRT_DEVICE SceneTraversal(
+		const hiprtScene         scene,
+		const hiprtRay&          ray,
+		Stack&                   stack,
+		InstanceStack&           instanceStack,
+		const hiprtRayMask       mask      = InvalidValue,
+		const hiprtTraversalHint hint      = hiprtTraversalHintDefault,
+		void*                    payload   = nullptr,
+		const hiprtFuncTable     funcTable = nullptr,
+		const uint32_t           rayType   = 0,
+		const float              time      = 0.0f );
 
-  private:
-	hiprtPimpl<hiprtGlobalStack_impl<hiprtInstanceStackEntry, true>, SizeGlobalInstanceStack, AlignmentGlobalInstanceStack>
-		m_impl;
+	[[nodiscard]] HIPRT_DEVICE hiprtHit getNextHit();
+
+  protected:
+	[[nodiscard]] HIPRT_DEVICE const uint32_t& instanceId() const;
+
+	[[nodiscard]] HIPRT_DEVICE uint32_t& instanceId();
+
+	HIPRT_DEVICE bool transformRay( const uint32_t nodeIndex, hiprtRay& ray, float3& invD );
+
+	HIPRT_DEVICE void restoreRay( hiprtRay& ray, float3& invD ) const;
+
+	[[nodiscard]] HIPRT_DEVICE bool testLeafNode(
+		const void*     primNodes,
+		const hiprtRay& ray,
+		const float3&   invD,
+		const uint32_t  geomType,
+		uint32_t&       leafIndex,
+		uint32_t&       triangleMask,
+		hiprtHit&       hit );
+
+  protected:
+	union
+	{
+		uint32_t m_instanceId{};
+		uint32_t m_instanceIds[MaxInstanceLevels];
+	};
+
+	InstanceStack&      m_instanceStack;
+	const SceneHeader*  m_scene         = nullptr;
+	const InstanceNode* m_instanceNodes = nullptr;
+	const Frame*        m_frames        = nullptr;
+	const hiprtRayMask  m_mask          = FullRayMask;
+	uint32_t            m_level{};
+	uint32_t            m_instanceIndex{};
+	const float         m_time{};
 };
 
-/** \brief A traversal object for finding the closest hit with hiprtGeometry containing triangles.
- *
- * It uses a private stack with size 64 internally.
- */
-template <hiprtPrimitiveNodeType PrimitiveNodeType, hiprtTraversalType TraversalType>
-class hiprtGeomTraversal_impl;
-
-class hiprtGeomTraversalClosest
+template <typename PrimitiveNode, hiprtTraversalType TraversalType>
+class GeomTraversalPrivateStack
 {
   public:
-	HIPRT_DEVICE hiprtGeomTraversalClosest(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+	using Stack = hiprtPrivateStack;
+
+	HIPRT_DEVICE GeomTraversalPrivateStack(
+		hiprtGeometry            geom,
+		const hiprtRay&          ray,
+		const hiprtTraversalHint hint      = hiprtTraversalHintDefault,
+		void*                    payload   = nullptr,
+		const hiprtFuncTable     funcTable = nullptr,
+		const uint32_t           rayType   = 0 );
+
+	[[nodiscard]] HIPRT_DEVICE hiprtHit getNextHit();
+
+	[[nodiscard]] HIPRT_DEVICE hiprtTraversalState getCurrentState() const;
 
   private:
-	hiprtPimpl<
-		hiprtGeomTraversal_impl<hiprtTriangleNode, hiprtTraversalTerminateAtClosestHit>,
-		SizeGeomTraversalPrivateStack,
-		AlignmentGeomTraversalPrivateStack>
-		m_impl;
+	Stack                                              m_stack;
+	GeomTraversal<Stack, PrimitiveNode, TraversalType> m_traversal;
 };
 
-/** \brief A traversal object for finding the any hit with hiprtGeometry containing triangles.
- *
- * It uses a private stack with size 64 internally.
- */
-class hiprtGeomTraversalAnyHit
-{
-  public:
-	HIPRT_DEVICE hiprtGeomTraversalAnyHit(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
-
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversal_impl<hiprtTriangleNode, hiprtTraversalTerminateAtAnyHit>,
-		SizeGeomTraversalPrivateStack,
-		AlignmentGeomTraversalPrivateStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the closest hit with hiprtGeometry containing custom primitives.
- *
- * It uses a private stack with size 64 internally.
- */
-class hiprtGeomCustomTraversalClosest
-{
-  public:
-	HIPRT_DEVICE hiprtGeomCustomTraversalClosest(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
-
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversal_impl<hiprtCustomNode, hiprtTraversalTerminateAtClosestHit>,
-		SizeGeomTraversalPrivateStack,
-		AlignmentGeomTraversalPrivateStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the any hit with hiprtGeometry containing custom primitives.
- *
- * It uses a private stack with size 64 internally.
- */
-class hiprtGeomCustomTraversalAnyHit
-{
-  public:
-	HIPRT_DEVICE hiprtGeomCustomTraversalAnyHit(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
-
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversal_impl<hiprtCustomNode, hiprtTraversalTerminateAtAnyHit>,
-		SizeGeomTraversalPrivateStack,
-		AlignmentGeomTraversalPrivateStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the closest hit with hiprtScene.
- *
- * It uses a private stack with size 64 internally.
- */
 template <hiprtTraversalType TraversalType>
-class hiprtSceneTraversal_impl;
-
-class hiprtSceneTraversalClosest
+class SceneTraversalPrivateStack
 {
   public:
-	HIPRT_DEVICE hiprtSceneTraversalClosest(
-		hiprtScene		   scene,
-		const hiprtRay&	   ray,
-		hiprtRayMask	   mask		 = hiprtFullRayMask,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0,
-		float			   time		 = 0.0f );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+	using Stack         = hiprtPrivateStack;
+	using InstanceStack = hiprtPrivateInstanceStack;
+
+	HIPRT_DEVICE SceneTraversalPrivateStack(
+		hiprtScene               scene,
+		const hiprtRay&          ray,
+		const hiprtRayMask       mask      = hiprtFullRayMask,
+		const hiprtTraversalHint hint      = hiprtTraversalHintDefault,
+		void*                    payload   = nullptr,
+		const hiprtFuncTable     funcTable = nullptr,
+		const uint32_t           rayType   = 0,
+		const float              time      = 0.0f );
+
+	[[nodiscard]] HIPRT_DEVICE hiprtHit getNextHit();
+
+	[[nodiscard]] HIPRT_DEVICE hiprtTraversalState getCurrentState() const;
 
   private:
-	hiprtPimpl<
-		hiprtSceneTraversal_impl<hiprtTraversalTerminateAtClosestHit>,
-		SizeSceneTraversalPrivateStack,
-		AlignmentSceneTraversalPrivateStack>
-		m_impl;
+	Stack                                               m_stack;
+	InstanceStack                                       m_instanceStack;
+	SceneTraversal<Stack, InstanceStack, TraversalType> m_traversal;
 };
+} // namespace hiprt
 
-/** \brief A traversal object for finding the any hit with hiprtScene.
+/** \brief A traversal object for finding the closest / any hit with hiprtGeometry containing triangles.
  *
  * It uses a private stack with size 64 internally.
  */
-class hiprtSceneTraversalAnyHit
-{
-  public:
-	HIPRT_DEVICE hiprtSceneTraversalAnyHit(
-		hiprtScene		   scene,
-		const hiprtRay&	   ray,
-		hiprtRayMask	   mask		 = hiprtFullRayMask,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0,
-		float			   time		 = 0.0f );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+using hiprtGeomTraversalClosest = hiprt::GeomTraversalPrivateStack<hiprt::TriangleNode, hiprtTraversalTerminateAtClosestHit>;
+using hiprtGeomTraversalAnyHit  = hiprt::GeomTraversalPrivateStack<hiprt::TriangleNode, hiprtTraversalTerminateAtAnyHit>;
 
-  private:
-	hiprtPimpl<
-		hiprtSceneTraversal_impl<hiprtTraversalTerminateAtAnyHit>,
-		SizeSceneTraversalPrivateStack,
-		AlignmentSceneTraversalPrivateStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the closest hit with hiprtGeometry containing triangles.
+/** \brief A traversal object for finding the closest / any hit with hiprtGeometry containing custom primitives.
  *
- * \tparam hiprtStack A custom stack.
+ * It uses a private stack with size 64 internally.
  */
-template <typename hiprtStack, hiprtPrimitiveNodeType PrimitiveNodeType, hiprtTraversalType TraversalType>
-class hiprtGeomTraversalCustomStack_impl;
+using hiprtGeomCustomTraversalClosest =
+	hiprt::GeomTraversalPrivateStack<hiprt::CustomNode, hiprtTraversalTerminateAtClosestHit>;
+using hiprtGeomCustomTraversalAnyHit = hiprt::GeomTraversalPrivateStack<hiprt::CustomNode, hiprtTraversalTerminateAtAnyHit>;
 
-template <typename hiprtStack>
-class hiprtGeomTraversalClosestCustomStack
-{
-  public:
-	HIPRT_DEVICE hiprtGeomTraversalClosestCustomStack(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtStack&		   stack,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+/** \brief A traversal object for finding the closest / any hit with hiprtScene.
+ *
+ * It uses a private stack with size 64 internally.
+ */
+using hiprtSceneTraversalClosest = hiprt::SceneTraversalPrivateStack<hiprtTraversalTerminateAtClosestHit>;
+using hiprtSceneTraversalAnyHit  = hiprt::SceneTraversalPrivateStack<hiprtTraversalTerminateAtAnyHit>;
 
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversalCustomStack_impl<hiprtStack, hiprtTriangleNode, hiprtTraversalTerminateAtClosestHit>,
-		SizeGeomTraversalCustomStack,
-		AlignmentGeomTraversalCustomStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the any hit with hiprtGeometry containing triangles.
+/** \brief A traversal object for finding the closest / any hit with hiprtGeometry containing triangles.
  *
  * \tparam hiprtStack A custom stack.
  */
 template <typename hiprtStack>
-class hiprtGeomTraversalAnyHitCustomStack
-{
-  public:
-	HIPRT_DEVICE hiprtGeomTraversalAnyHitCustomStack(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtStack&		   stack,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+using hiprtGeomTraversalClosestCustomStack =
+	hiprt::GeomTraversal<hiprtStack, hiprt::TriangleNode, hiprtTraversalTerminateAtClosestHit>;
 
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversalCustomStack_impl<hiprtStack, hiprtTriangleNode, hiprtTraversalTerminateAtAnyHit>,
-		SizeGeomTraversalCustomStack,
-		AlignmentGeomTraversalCustomStack>
-		m_impl;
-};
+template <typename hiprtStack>
+using hiprtGeomTraversalAnyHitCustomStack =
+	hiprt::GeomTraversal<hiprtStack, hiprt::TriangleNode, hiprtTraversalTerminateAtAnyHit>;
 
-/** \brief A traversal object for finding the closest hit with hiprtGeometry containing custom primitives.
+/** \brief A traversal object for finding the closest / any hit with hiprtGeometry containing custom primitives.
  *
  * \tparam hiprtStack A custom stack.
  */
 template <typename hiprtStack>
-class hiprtGeomCustomTraversalClosestCustomStack
-{
-  public:
-	HIPRT_DEVICE hiprtGeomCustomTraversalClosestCustomStack(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtStack&		   stack,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+using hiprtGeomCustomTraversalClosestCustomStack =
+	hiprt::GeomTraversal<hiprtStack, hiprt::CustomNode, hiprtTraversalTerminateAtClosestHit>;
 
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversalCustomStack_impl<hiprtStack, hiprtCustomNode, hiprtTraversalTerminateAtClosestHit>,
-		SizeGeomTraversalCustomStack,
-		AlignmentGeomTraversalCustomStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the any hit with hiprtGeometry containing custom primitives.
- *
- * \tparam hiprtStack A custom stack.
- */
 template <typename hiprtStack>
-class hiprtGeomCustomTraversalAnyHitCustomStack
-{
-  public:
-	HIPRT_DEVICE hiprtGeomCustomTraversalAnyHitCustomStack(
-		hiprtGeometry	   geom,
-		const hiprtRay&	   ray,
-		hiprtStack&		   stack,
-		hiprtTraversalHint hint		 = hiprtTraversalHintDefault,
-		void*			   payload	 = nullptr,
-		hiprtFuncTable	   funcTable = nullptr,
-		uint32_t		   rayType	 = 0 );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+using hiprtGeomCustomTraversalAnyHitCustomStack =
+	hiprt::GeomTraversal<hiprtStack, hiprt::CustomNode, hiprtTraversalTerminateAtAnyHit>;
 
-  private:
-	hiprtPimpl<
-		hiprtGeomTraversalCustomStack_impl<hiprtStack, hiprtCustomNode, hiprtTraversalTerminateAtAnyHit>,
-		SizeGeomTraversalCustomStack,
-		AlignmentGeomTraversalCustomStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the closest hit with hiprtScene.
- *
- * \tparam hiprtStack A custom stack.
- */
-template <typename hiprtStack, typename hiprtInstanceStack, hiprtTraversalType TraversalType>
-class hiprtSceneTraversalCustomStack_impl;
-
-template <typename hiprtStack, typename hiprtInstanceStack>
-class hiprtSceneTraversalClosestCustomStack
-{
-  public:
-	HIPRT_DEVICE hiprtSceneTraversalClosestCustomStack(
-		hiprtScene			scene,
-		const hiprtRay&		ray,
-		hiprtStack&			stack,
-		hiprtInstanceStack& instanceStack,
-		hiprtRayMask		mask	  = hiprtFullRayMask,
-		hiprtTraversalHint	hint	  = hiprtTraversalHintDefault,
-		void*				payload	  = nullptr,
-		hiprtFuncTable		funcTable = nullptr,
-		uint32_t			rayType	  = 0,
-		float				time	  = 0.0f );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
-
-  private:
-	hiprtPimpl<
-		hiprtSceneTraversalCustomStack_impl<hiprtStack, hiprtInstanceStack, hiprtTraversalTerminateAtClosestHit>,
-		SizeSceneTraversalCustomStack,
-		AlignmentSceneTraversalCustomStack>
-		m_impl;
-};
-
-/** \brief A traversal object for finding the any hit with hiprtScene.
+/** \brief A traversal object for finding the closest / any hit with hiprtScene.
  *
  * \tparam hiprtStack A custom stack.
  */
 template <typename hiprtStack, typename hiprtInstanceStack>
-class hiprtSceneTraversalAnyHitCustomStack
-{
-  public:
-	HIPRT_DEVICE hiprtSceneTraversalAnyHitCustomStack(
-		hiprtScene			scene,
-		const hiprtRay&		ray,
-		hiprtStack&			stack,
-		hiprtInstanceStack& instanceStack,
-		hiprtRayMask		mask	  = hiprtFullRayMask,
-		hiprtTraversalHint	hint	  = hiprtTraversalHintDefault,
-		void*				payload	  = nullptr,
-		hiprtFuncTable		funcTable = nullptr,
-		uint32_t			rayType	  = 0,
-		float				time	  = 0.0f );
-	HIPRT_DEVICE hiprtHit			 getNextHit();
-	HIPRT_DEVICE hiprtTraversalState getCurrentState();
+using hiprtSceneTraversalClosestCustomStack =
+	hiprt::SceneTraversal<hiprtStack, hiprtInstanceStack, hiprtTraversalTerminateAtClosestHit>;
 
-  private:
-	hiprtPimpl<
-		hiprtSceneTraversalCustomStack_impl<hiprtStack, hiprtInstanceStack, hiprtTraversalTerminateAtAnyHit>,
-		SizeSceneTraversalCustomStack,
-		AlignmentSceneTraversalCustomStack>
-		m_impl;
-};
+template <typename hiprtStack, typename hiprtInstanceStack>
+using hiprtSceneTraversalAnyHitCustomStack =
+	hiprt::SceneTraversal<hiprtStack, hiprtInstanceStack, hiprtTraversalTerminateAtAnyHit>;
+
+/** \brief Returns the object to world transformation for a given instance and time in the form of the SRT frame.
+ *
+ * \param scene A scene.
+ * \param instanceID Instance ID.
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameSRT
+hiprtGetObjectToWorldFrameSRT( const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
+
+/** \brief Returns the world to object transformation for a given instance and time in the form of the SRT frame.
+ *
+ * \param scene A scene.
+ * \param instanceID Instance ID.
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameSRT
+hiprtGetWorldToObjectFrameSRT( const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
+
+/** \brief Returns the object to world transformation for a given instance and time in the form of the matrix.
+ *
+ * \param scene A scene.
+ * \param instanceID Instance ID.
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameMatrix
+hiprtGetObjectToWorldFrameMatrix( const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
+
+/** \brief Returns the world to object transformation for a given instance and time in the form of the matrix.
+ *
+ * \param scene A scene.
+ * \param instanceID Instance ID.
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameMatrix
+hiprtGetWorldToObjectFrameMatrix( const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
+
+/** \brief Returns the object to world transformation for a given instance and time in the form of the SRT frame.
+ *
+ * \param scene A scene.
+ * \param instanceIDs Instance IDs (multi-level instancing).
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameSRT hiprtGetObjectToWorldFrameSRT(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time = 0.0f );
+
+/** \brief Returns the world to object transformation for a given instance and time in the form of the SRT frame.
+ *
+ * \param scene A scene.
+ * \param instanceIDs Instance IDs (multi-level instancing).
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameSRT hiprtGetWorldToObjectFrameSRT(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time = 0.0f );
+
+/** \brief Returns the object to world transformation for a given instance and time in the form of the matrix.
+ *
+ * \param scene A scene.
+ * \param instanceIDs Instance IDs (multi-level instancing).
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameMatrix hiprtGetObjectToWorldFrameMatrix(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time = 0.0f );
+
+/** \brief Returns the world to object transformation for a given instance and time in the form of the matrix.
+ *
+ * \param scene A scene.
+ * \param instanceIDs Instance IDs (multi-level instancing).
+ * \param time The time.
+ */
+HIPRT_DEVICE hiprtFrameMatrix hiprtGetWorldToObjectFrameMatrix(
+	const hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], const float time = 0.0f );
 
 /** \brief Transforms a point from the object space to the world space.
  *
@@ -513,7 +475,8 @@ class hiprtSceneTraversalAnyHitCustomStack
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtPointObjectToWorld( const float3& point, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3
+hiprtPointObjectToWorld( const float3& point, const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
 
 /** \brief Transforms a point from the world space to the object space.
  *
@@ -522,7 +485,8 @@ HIPRT_DEVICE float3 hiprtPointObjectToWorld( const float3& point, hiprtScene sce
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtPointWorldToObject( const float3& point, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3
+hiprtPointWorldToObject( const float3& point, const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
 
 /** \brief Transforms a vector from the object space to the world space.
  *
@@ -531,7 +495,8 @@ HIPRT_DEVICE float3 hiprtPointWorldToObject( const float3& point, hiprtScene sce
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtVectorObjectToWorld( const float3& vector, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3
+hiprtVectorObjectToWorld( const float3& vector, const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
 
 /** \brief Transforms a vector from the world space to the object space.
  *
@@ -540,7 +505,8 @@ HIPRT_DEVICE float3 hiprtVectorObjectToWorld( const float3& vector, hiprtScene s
  * \param instanceID Instance ID.
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtVectorWorldToObject( const float3& vector, hiprtScene scene, uint32_t instanceID, float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3
+hiprtVectorWorldToObject( const float3& vector, const hiprtScene scene, const uint32_t instanceID, const float time = 0.0f );
 
 /** \brief Transforms a point from the object space to the world space.
  *
@@ -549,8 +515,11 @@ HIPRT_DEVICE float3 hiprtVectorWorldToObject( const float3& vector, hiprtScene s
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtPointObjectToWorld(
-	const float3& point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3 hiprtPointObjectToWorld(
+	const float3&    point,
+	const hiprtScene scene,
+	const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels],
+	const float time = 0.0f );
 
 /** \brief Transforms a point from the world space to the object space.
  *
@@ -559,8 +528,11 @@ HIPRT_DEVICE float3 hiprtPointObjectToWorld(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtPointWorldToObject(
-	const float3& point, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3 hiprtPointWorldToObject(
+	const float3&    point,
+	const hiprtScene scene,
+	const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels],
+	const float time = 0.0f );
 
 /** \brief Transforms a vector from the object space to the world space.
  *
@@ -569,8 +541,11 @@ HIPRT_DEVICE float3 hiprtPointWorldToObject(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
-	const float3& vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
+	const float3&    vector,
+	const hiprtScene scene,
+	const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels],
+	const float time = 0.0f );
 
 /** \brief Transforms a vector from the world space to the object space.
  *
@@ -579,5 +554,8 @@ HIPRT_DEVICE float3 hiprtVectorObjectToWorld(
  * \param instanceIDs Instance IDs (multi-level instancing).
  * \param time The time.
  */
-HIPRT_DEVICE float3 hiprtVectorWorldToObject(
-	const float3& vector, hiprtScene scene, const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels], float time = 0.0f );
+[[nodiscard]] HIPRT_DEVICE float3 hiprtVectorWorldToObject(
+	const float3&    vector,
+	const hiprtScene scene,
+	const uint32_t ( &instanceIDs )[hiprtMaxInstanceLevels],
+	const float time = 0.0f );

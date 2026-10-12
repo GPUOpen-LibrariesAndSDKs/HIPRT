@@ -29,27 +29,31 @@ namespace hiprt
 class MemoryArena
 {
   public:
-	HIPRT_HOST_DEVICE MemoryArena( hiprtDevicePtr data, size_t storageSize, uint32_t alignment )
-		: m_data( data ), m_alignment( alignment ), m_offset( 0 ), m_storageSize( storageSize )
+	HIPRT_HOST_DEVICE HIPRT_INLINE MemoryArena( hiprtDevicePtr data, const size_t storageSize, const size_t alignment )
+		: m_data( data ), m_offset( 0 ), m_storageSize( storageSize ), m_alignment( alignment )
 	{
 	}
 
 	template <typename T>
-	HIPRT_HOST_DEVICE T* allocate( size_t size = 1 )
+	HIPRT_HOST_DEVICE HIPRT_INLINE T* allocate( const size_t size = 1 )
 	{
 		if ( size == 0 ) return nullptr;
 		T* p = reinterpret_cast<T*>( reinterpret_cast<uint8_t*>( m_data ) + m_offset );
 		m_offset += RoundUp( sizeof( T ) * size, m_alignment );
-		HIPRT_ASSERT( m_offset <= m_storageSize );
+		hiprtAssert( m_offset <= m_storageSize );
 		return p;
 	}
 
-	HIPRT_HOST_DEVICE size_t getStorageSize() const { return m_storageSize; }
+	HIPRT_HOST_DEVICE HIPRT_INLINE size_t getStorageSize() const { return m_storageSize; }
+
+	HIPRT_HOST_DEVICE HIPRT_INLINE size_t getAlignment() const { return m_alignment; }
+
+	HIPRT_HOST_DEVICE HIPRT_INLINE hiprtDevicePtr getData() { return m_data; }
 
   private:
-	hiprtDevicePtr m_data;
-	uint32_t	   m_alignment;
-	size_t		   m_offset;
-	size_t		   m_storageSize;
+	hiprtDevicePtr m_data = nullptr;
+	size_t         m_offset{};
+	const size_t   m_storageSize{};
+	const size_t   m_alignment{};
 };
 } // namespace hiprt

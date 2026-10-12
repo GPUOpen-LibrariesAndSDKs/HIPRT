@@ -36,39 +36,41 @@ class alignas( alignof( float3 ) ) Triangle
 	struct PolygonN
 	{
 		static constexpr uint32_t MaxVertexCount = N;
-		float3					  m_vertices[MaxVertexCount];
-		uint32_t				  m_count;
+		float3                    m_vertices[MaxVertexCount];
+		uint32_t                  m_count{};
 	};
 	using Polygon = PolygonN<16>;
 
-	HIPRT_HOST_DEVICE static bool inside( const float3& p, uint32_t axis, float pos, bool isMin, const float maxExtent )
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static bool
+	inside( const float3& p, const uint32_t axis, const float pos, const bool isMin, const float maxExtent )
 	{
 		if ( isMin )
-			return ( &p.x )[axis] >= pos - ObbEpsilon * maxExtent;
+			return component( p, axis ) >= pos - ObbEpsilon * maxExtent;
 		else
-			return ( &p.x )[axis] <= pos + ObbEpsilon * maxExtent;
+			return component( p, axis ) <= pos + ObbEpsilon * maxExtent;
 	}
 
-	HIPRT_HOST_DEVICE static float3 intersect( const float3& a, const float3& b, uint32_t axis, float pos )
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE static float3
+	intersect( const float3& a, const float3& b, const uint32_t axis, const float pos )
 	{
-		float da = ( &a.x )[axis] - pos;
-		float db = ( &b.x )[axis] - pos;
-		float t	 = da / ( da - db );
+		float da = component( a, axis ) - pos;
+		float db = component( b, axis ) - pos;
+		float t  = da / ( da - db );
 		return a + t * ( b - a );
 	}
 
-	HIPRT_HOST_DEVICE static void
-	clip( const Polygon& inPoly, uint32_t axis, float pos, bool isMin, Polygon& outPoly, const float maxExtent )
+	HIPRT_HOST_DEVICE HIPRT_INLINE static void clip(
+		const Polygon& inPoly, const uint32_t axis, const float pos, const bool isMin, Polygon& outPoly, const float maxExtent )
 	{
 		outPoly.m_count = 0;
 		if ( inPoly.m_count == 0 ) return;
 
 		for ( uint32_t i = 0; i < inPoly.m_count; i++ )
 		{
-			const float3& curr	 = inPoly.m_vertices[i];
-			const float3& prev	 = inPoly.m_vertices[( i + inPoly.m_count - 1 ) % inPoly.m_count];
-			bool		  currIn = inside( curr, axis, pos, isMin, maxExtent );
-			bool		  prevIn = inside( prev, axis, pos, isMin, maxExtent );
+			const float3& curr   = inPoly.m_vertices[i];
+			const float3& prev   = inPoly.m_vertices[( i + inPoly.m_count - 1 ) % inPoly.m_count];
+			bool          currIn = inside( curr, axis, pos, isMin, maxExtent );
+			bool          prevIn = inside( prev, axis, pos, isMin, maxExtent );
 
 			if ( currIn )
 			{
@@ -84,20 +86,23 @@ class alignas( alignof( float3 ) ) Triangle
 	}
 
   public:
-	Triangle() = default;
+	HIPRT_INLINE Triangle() = default;
 
-	HIPRT_HOST_DEVICE Triangle( const float3& v0, const float3& v1, const float3& v2 ) : m_v0( v0 ), m_v1( v1 ), m_v2( v2 ) {}
-
-	HIPRT_HOST_DEVICE float3 normal( uint32_t flags = 0u ) const
+	HIPRT_HOST_DEVICE HIPRT_INLINE Triangle( const float3& v0, const float3& v1, const float3& v2 ) : m_vertices{ v0, v1, v2 }
 	{
-		return ( ( flags >> 5 ) & 1 ) ? cross( m_v2 - m_v0, m_v1 - m_v0 ) : cross( m_v1 - m_v0, m_v2 - m_v0 );
 	}
 
-	HIPRT_HOST_DEVICE
-	bool intersect( const hiprtRay& ray, float2& uv, float& t, uint32_t flags ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE float3 normal( uint32_t flags = 0u ) const
 	{
-		float3 e1 = m_v1 - m_v0;
-		float3 e2 = m_v2 - m_v0;
+		return ( ( flags >> 5 ) & 1 ) ? cross( m_vertices[2] - m_vertices[0], m_vertices[1] - m_vertices[0] )
+		                              : cross( m_vertices[1] - m_vertices[0], m_vertices[2] - m_vertices[0] );
+	}
+
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE bool
+	intersect( const hiprtRay& ray, float2& uv, float& t, const uint32_t flags ) const
+	{
+		float3 e1 = m_vertices[1] - m_vertices[0];
+		float3 e2 = m_vertices[2] - m_vertices[0];
 		float3 s1 = cross( ray.direction, e2 );
 
 		float denom = dot( s1, e1 );
@@ -105,44 +110,44 @@ class alignas( alignof( float3 ) ) Triangle
 		if ( denom == 0.f ) return false;
 
 		float  invDemom = 1.0f / denom;
-		float3 d		= ray.origin - m_v0;
+		float3 d        = ray.origin - m_vertices[0];
 		float3 b;
 		b.y = dot( d, s1 ) * invDemom;
 
 		float3 s2 = cross( d, e1 );
-		b.z		  = dot( ray.direction, s2 ) * invDemom;
+		b.z       = dot( ray.direction, s2 ) * invDemom;
 
 		float t0 = dot( e2, s2 ) * invDemom;
 
 		if ( ( b.y < 0.0f ) || ( b.y > 1.0f ) || ( b.z < 0.0f ) || ( b.y + b.z > 1.0f ) || ( t0 < ray.minT ) ||
-			 ( t0 > ray.maxT ) )
+		     ( t0 > ray.maxT ) )
 		{
 			return false;
 		}
 		else
 		{
-			b.x	 = 1.0f - b.y - b.z;
-			uv.x = ptr( b )[( flags >> 0 ) & 3];
-			uv.y = ptr( b )[( flags >> 2 ) & 3];
-			t	 = t0;
+			b.x  = 1.0f - b.y - b.z;
+			uv.x = component( b, ( flags >> 0 ) & 3 );
+			uv.y = component( b, ( flags >> 2 ) & 3 );
+			t    = t0;
 			return true;
 		}
 	}
 
-	HIPRT_HOST_DEVICE void
+	HIPRT_HOST_DEVICE HIPRT_INLINE void
 	split( const uint32_t axis, const float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
 	{
 		leftBox = rightBox = Aabb();
 
-		const float3* vertices = &m_v0;
-		const float3* v1	   = &vertices[2];
+		const float3* vertices = m_vertices;
+		const float3* v1       = &vertices[2];
 
 		for ( uint32_t i = 0; i < 3; i++ )
 		{
 			const float3* v0 = v1;
-			v1				 = &vertices[i];
-			const float v0p	 = ( &v0->x )[axis];
-			const float v1p	 = ( &v1->x )[axis];
+			v1               = &vertices[i];
+			const float v0p  = component( *v0, axis );
+			const float v1p  = component( *v1, axis );
 
 			if ( v0p <= position ) leftBox.grow( *v0 );
 			if ( v0p >= position ) rightBox.grow( *v0 );
@@ -155,20 +160,20 @@ class alignas( alignof( float3 ) ) Triangle
 			}
 		}
 
-		( &leftBox.m_max.x )[axis]	= position;
-		( &rightBox.m_min.x )[axis] = position;
+		component( leftBox.m_max, axis )  = position;
+		component( rightBox.m_min, axis ) = position;
 		leftBox.intersect( box );
 		rightBox.intersect( box );
 	}
 
-	HIPRT_HOST_DEVICE Obb obb( const Aabb& box, uint32_t matrixIndex ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Obb obb( const Aabb& box, const uint32_t matrixIndex ) const
 	{
 		Polygon poly0, poly1;
-		poly0.m_vertices[0] = m_v0;
-		poly0.m_vertices[1] = m_v1;
-		poly0.m_vertices[2] = m_v2;
-		poly0.m_count		= 3;
-		poly1.m_count		= 0;
+		poly0.m_vertices[0] = m_vertices[0];
+		poly0.m_vertices[1] = m_vertices[1];
+		poly0.m_vertices[2] = m_vertices[2];
+		poly0.m_count       = 3;
+		poly1.m_count       = 0;
 
 		const float maxExtent = fmaxf( fmaxf( box.extent().x, box.extent().y ), box.extent().z );
 		clip( poly0, 0, box.m_min.x, true, poly1, maxExtent );
@@ -185,53 +190,53 @@ class alignas( alignof( float3 ) ) Triangle
 		return obb;
 	}
 
-	HIPRT_HOST_DEVICE Aabb aabb() const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Aabb aabb() const
 	{
 		Aabb aabb;
-		return aabb.grow( m_v0 ).grow( m_v1 ).grow( m_v2 );
+		return aabb.grow( m_vertices[0] ).grow( m_vertices[1] ).grow( m_vertices[2] );
 	}
 
   public:
-	float3 m_v0;
-	float3 m_v1;
-	float3 m_v2;
+	float3 m_vertices[3] = {};
 };
 
 class alignas( alignof( float3 ) ) TrianglePair
 {
   public:
-	TrianglePair() = default;
+	HIPRT_INLINE TrianglePair() = default;
 
-	HIPRT_HOST_DEVICE TrianglePair( const float3& v0, const float3& v1, const float3& v2, const float3& v3 )
+	HIPRT_HOST_DEVICE HIPRT_INLINE TrianglePair( const float3& v0, const float3& v1, const float3& v2, const float3& v3 )
 		: m_v0( v0 ), m_v1( v1 ), m_v2( v2 ), m_v3( v3 )
 	{
 	}
 
-	HIPRT_HOST_DEVICE Triangle fetchTriangle( uint32_t index ) const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Triangle fetchTriangle( const uint32_t index ) const
 	{
 		if ( index > 0 ) return Triangle( m_v1, m_v3, m_v2 );
 		return Triangle( m_v0, m_v1, m_v2 );
 	}
-	HIPRT_HOST_DEVICE void split( uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
+
+	HIPRT_HOST_DEVICE HIPRT_INLINE void
+	split( uint32_t axis, float position, const Aabb& box, Aabb& leftBox, Aabb& rightBox ) const
 	{
 		Aabb leftBox0, rightBox0;
 		fetchTriangle( 0 ).split( axis, position, box, leftBox0, rightBox0 );
 		Aabb leftBox1, rightBox1;
 		fetchTriangle( 1 ).split( axis, position, box, leftBox1, rightBox1 );
-		leftBox	 = Aabb( leftBox0, leftBox1 );
+		leftBox  = Aabb( leftBox0, leftBox1 );
 		rightBox = Aabb( rightBox0, rightBox1 );
 	}
 
-	HIPRT_HOST_DEVICE Aabb aabb() const
+	[[nodiscard]] HIPRT_HOST_DEVICE HIPRT_INLINE Aabb aabb() const
 	{
 		Aabb aabb;
 		return aabb.grow( m_v0 ).grow( m_v1 ).grow( m_v2 ).grow( m_v3 );
 	}
 
   public:
-	float3 m_v0;
-	float3 m_v1;
-	float3 m_v2;
-	float3 m_v3;
+	float3 m_v0{};
+	float3 m_v1{};
+	float3 m_v2{};
+	float3 m_v3{};
 };
 } // namespace hiprt

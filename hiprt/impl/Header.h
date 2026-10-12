@@ -23,42 +23,63 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-#include <hiprt/impl/BvhNode.h>
 #include <hiprt/impl/Transform.h>
 
 namespace hiprt
 {
 struct Instance;
 
-struct GeomHeader
+namespace rtip11
+{
+struct BoxNode;
+struct InstanceNode;
+}; // namespace rtip11
+
+namespace rtip31
+{
+struct BoxNode;
+struct InstanceNode;
+}; // namespace rtip31
+
+#if defined( __KERNELCC__ )
+#if HIPRT_RTIP >= 31
+using BoxNode      = rtip31::BoxNode;
+using InstanceNode = rtip31::InstanceNode;
+#else
+using BoxNode      = rtip11::BoxNode;
+using InstanceNode = rtip11::InstanceNode;
+#endif
+#endif
+
+struct alignas( 128 ) GeomHeader
 {
 #if defined( __KERNELCC__ )
 	BoxNode* m_boxNodes;
 #else
 	void* m_boxNodes;
 #endif
-	void*	 m_primNodes;
-	size_t	 m_size;
+	void*    m_primNodes;
+	size_t   m_size;
 	uint32_t m_referenceCount;
 	uint32_t m_boxNodeCount;
 	uint32_t m_primNodeCount;
 	uint32_t m_geomType;
 	uint32_t m_rtip;
 };
-HIPRT_STATIC_ASSERT( alignof( GeomHeader ) <= DefaultAlignment );
+HIPRT_STATIC_ASSERT( sizeof( GeomHeader ) >= DefaultAlignment && sizeof( GeomHeader ) % DefaultAlignment == 0 );
 
-struct SceneHeader
+struct alignas( 128 ) SceneHeader
 {
 #if defined( __KERNELCC__ )
-	BoxNode*	  m_boxNodes;
+	BoxNode*      m_boxNodes;
 	InstanceNode* m_primNodes;
 #else
 	void* m_boxNodes;
 	void* m_primNodes;
 #endif
 	Instance* m_instances;
-	Frame*	  m_frames;
-	size_t	  m_size;
+	Frame*    m_frames;
+	size_t    m_size;
 	uint32_t  m_referenceCount;
 	uint32_t  m_primCount;
 	uint32_t  m_primNodeCount;
@@ -66,5 +87,5 @@ struct SceneHeader
 	uint32_t  m_frameCount;
 	uint32_t  m_rtip;
 };
-HIPRT_STATIC_ASSERT( alignof( SceneHeader ) <= DefaultAlignment );
+HIPRT_STATIC_ASSERT( sizeof( SceneHeader ) >= DefaultAlignment && sizeof( SceneHeader ) % DefaultAlignment == 0 );
 } // namespace hiprt
