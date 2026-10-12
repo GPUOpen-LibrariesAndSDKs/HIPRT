@@ -9,11 +9,17 @@ jobs:
   format-and-update:
     runs-on: ubuntu-latest
 
+    # Do not react to our own automatic commit: the push made by step 3 fires a
+    # new 'pull_request: synchronize' event, which would start this workflow again.
+    if: github.actor != 'github-actions[bot]'
+
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          # Full history is needed to look for the last non-automatic commit below.
+          fetch-depth: 0
 
       # Step 1: Run clang-format linter (in place)
       - name: Run clang-format
@@ -26,10 +32,18 @@ jobs:
           inplace: 'True'
 
       # Step 2: Update commit hash in version.txt (line 4)
+      # Use the last commit that is NOT one of our automatic commits. Using HEAD
+      # instead would never converge: the hash is written before the commit is
+      # created, so the file would always lag one commit behind and every run
+      # would produce yet another commit.
       - name: Update version.txt with latest commit hash
         run: |
           FILE="version.txt"
-          HASH=$(git rev-parse --short HEAD)
+          HASH=$(git log -n 1 --abbrev=7 --format=%h --invert-grep --grep='^Automatic: clang-format')
+          if [ -z "$HASH" ]; then
+            echo "No non-automatic commit found!"
+            exit 1
+          fi
           if [ -f "$FILE" ]; then
             echo "Updating $FILE with hash $HASH"
             sed -i "4s~.*~$HASH~" "$FILE"
@@ -39,6 +53,8 @@ jobs:
           fi
 
       # Step 3: Commit and push all changes (format + hash)
+      # Does nothing when the working tree is clean, which is now the case as
+      # soon as the formatting and the hash are up to date.
       - name: Commit and push changes
         uses: EndBug/add-and-commit@v9.1.1
         with:
