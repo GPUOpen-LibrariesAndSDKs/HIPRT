@@ -104,6 +104,7 @@ def compileAmd():
         targets += ' --offload-arch=' + i
 
     parallel_jobs = 15
+    parallel_jobs_flag = common_tools.getParallelJobsFlag(hipccpath, parallel_jobs)
 
     if isLinux():
         osDef = "-DHIPCC_OS_LINUX"
@@ -122,15 +123,15 @@ def compileAmd():
         print("Pinned MSVC toolset: " + vcpath)
 
     dst = 'hiprt' + hiprt_ver + '_' + hip_version + '_amd_lib' + postfix
-    cmd = hipccpath + ' -x hip ../../hiprt/impl/hiprt_kernels_bitcode.h -O3 -std=c++17 ' + targets + ' -fgpu-rdc -c --gpu-bundle-output -c -emit-llvm -I../../contrib/Orochi/ -I../../ -DHIPRT_BITCODE_LINKING ' + osDef + ' -ffast-math -parallel-jobs=' + str(parallel_jobs) + ' -o ' + dst
+    cmd = hipccpath + ' -x hip ../../hiprt/impl/hiprt_kernels_bitcode.h -O3 -std=c++17 ' + targets + ' -fgpu-rdc -c --gpu-bundle-output -c -emit-llvm -I../../contrib/Orochi/ -I../../ -DHIPRT_BITCODE_LINKING ' + osDef + ' -ffast-math' + parallel_jobs_flag + ' -o ' + dst
     compileScript(cmd, dst)
 
     dst = 'hiprt' + hiprt_ver + '_' + hip_version + '_amd.hipfb'
-    cmd = hipccpath + ' -x hip ../../hiprt/impl/hiprt_kernels.h -O3 -std=c++17 ' + targets + ' -mllvm -amdgpu-early-inline-all=false -mllvm -amdgpu-function-calls=true --genco -I../../ -DHIPRT_BITCODE_LINKING ' + osDef +  ' -ffast-math -parallel-jobs=' + str(parallel_jobs) + ' -o ' + dst
+    cmd = hipccpath + ' -x hip ../../hiprt/impl/hiprt_kernels.h -O3 -std=c++17 ' + targets + ' -mllvm -amdgpu-early-inline-all=false -mllvm -amdgpu-function-calls=true --genco -I../../ -DHIPRT_BITCODE_LINKING ' + osDef +  ' -ffast-math' + parallel_jobs_flag + ' -o ' + dst
     compileScript(cmd, dst)
 
     dst = 'oro_compiled_kernels.hipfb'
-    cmd = hipccpath + ' -x hip ../../contrib/Orochi/ParallelPrimitives/RadixSortKernels.h -O3 -std=c++17 ' + targets + ' --genco -I../../contrib/Orochi/ -include hip/hip_runtime.h -DHIPRT_BITCODE_LINKING ' + osDef +  ' -ffast-math -parallel-jobs=' + str(parallel_jobs) + ' -o ' + dst
+    cmd = hipccpath + ' -x hip ../../contrib/Orochi/ParallelPrimitives/RadixSortKernels.h -O3 -std=c++17 ' + targets + ' --genco -I../../contrib/Orochi/ -include hip/hip_runtime.h -DHIPRT_BITCODE_LINKING ' + osDef +  ' -ffast-math' + parallel_jobs_flag + ' -o ' + dst
     compileScript(cmd, dst)
 
 

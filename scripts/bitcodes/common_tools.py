@@ -236,6 +236,36 @@ def getAMDGPUArchs(hip_sdk_path=None, hipcc_version_output=None):
     return gpus_archs
 
 
+def supportsCompilerOption(compiler_path, option):
+    # True if the compiler accepts the option. Nothing is compiled: the driver
+    # rejects an unknown option before --version answers. compiler_path may
+    # already be quoted for the shell, hence shell=True.
+    cmd = compiler_path + ' ' + option + ' --version'
+    try:
+        return subprocess.call(cmd, shell=True,
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL) == 0
+    except OSError:
+        return False
+
+
+def getParallelJobsFlag(compiler_path, jobs):
+    # Flag asking the driver to compile the per-GPU device passes in parallel.
+    # Recent SDKs replaced '-parallel-jobs=' with '--offload-jobs='; both spellings
+    # are tried to stay compatible with the older SDKs HIPRT is built against.
+    # Returns a string ready to be appended to a command line, empty when neither
+    # is accepted.
+    for option in ['-parallel-jobs=', '--offload-jobs=']:
+        flag = option + str(jobs)
+        if supportsCompilerOption(compiler_path, flag):
+            print('Parallel device compilation: ' + flag)
+            return ' ' + flag
+
+    print('Warning: neither --offload-jobs= nor -parallel-jobs= is accepted by '
+          + compiler_path + ', device code will be compiled serially.')
+    return ''
+
+
 # encapsulate the full path in quotes if it's not already quoted
 def quoteFilepathIfNeeded(path: str) -> str:
     if not (path.startswith('"') and path.endswith('"')):
