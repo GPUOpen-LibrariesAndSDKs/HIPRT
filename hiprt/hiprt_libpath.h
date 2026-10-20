@@ -42,7 +42,9 @@ inline const char* g_hip_paths[] = {
 	"amdhip64.dll", // <- hip '5.x' DLL.
 	nullptr };
 
-inline const char* g_hiprtc_paths[] = { "hiprtc07014.dll", "hiprtc07013.dll", "hiprtc07012.dll",
+inline const char* g_hiprtc_paths[] = { "hiprtc0720.dll",  "hiprtc0719.dll",  "hiprtc0718.dll",
+                                        "hiprtc0717.dll",  "hiprtc0716.dll",  "hiprtc0715.dll",
+                                        "hiprtc07014.dll", "hiprtc07013.dll", "hiprtc07012.dll",
                                         "hiprtc07011.dll", "hiprtc07010.dll", "hiprtc0709.dll",
                                         "hiprtc0708.dll",  "hiprtc0707.dll",  "hiprtc0706.dll",
                                         "hiprtc0705.dll",  "hiprtc0704.dll",  "hiprtc0703.dll",
@@ -81,10 +83,10 @@ inline const char* g_hip_paths[] = {
 
 inline const char* g_hiprtc_paths[] = {
 
-	// first, we try with the generic symbolic link.
+	// Let the dynamic loader honor its search path before probing conventional installs.
+	"libhiprtc.so",
 	"/opt/rocm/hip/lib/libhiprtc.so",
 	"/opt/rocm/lib/libhiprtc.so",
-	"libhiprtc.so",
 
 	// .. if it doesn't exist, we try the specific versions
 	"/opt/rocm/hip/lib/libhiprtc.so.7",
