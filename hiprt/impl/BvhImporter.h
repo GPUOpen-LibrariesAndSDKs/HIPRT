@@ -413,6 +413,12 @@ void BvhImporter::update(
 		GET_ARG_LIST( BvhBuilderKernels ) );
 	resetCountersAndUpdateLeavesKernel.setArgs( { header, primitives, boxNodes, primNodes } );
 	resetCountersAndUpdateLeavesKernel.launch( resetThreadCount, stream );
+	// For scenes, thread i converts frame i while other threads of the same
+	// launch read frame primIndex for the instance inverse matrix, so a read
+	// can still see the previous update's frame. A second launch reads only
+	// converted frames (and rewrites the same values).
+	if constexpr ( std::is_same<Header, SceneHeader>::value )
+		resetCountersAndUpdateLeavesKernel.launch( resetThreadCount, stream );
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,

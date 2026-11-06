@@ -2861,6 +2861,149 @@ TEST_F( hiprtTest, LargeMeshBuild )
 	checkHiprt( hiprtDestroyContext( ctxt ) );
 }
 
+// Scene update with many instances whose frames all change.
+//
+// During a scene update, ResetCountersAndUpdateLeaves converts the API frames in
+// place (thread i converts frame i) and, in the same launch, builds each leaf's
+// inverse transform from frame primIndex. That frame belongs to another thread,
+// usually in another workgroup, and nothing orders the two, so the leaf can
+// read the frame before it is converted: it keeps its previous transform, and
+// the instance is traced at its old pose. The test uses enough instances to
+// span many workgroups, moves every instance to another cell on every update,
+// and traces one ray per instance at its new position. Without the fix, most
+// lookups on gfx950 found the old pose.
+TEST_F( hiprtTest, SceneUpdateManyInstances )
+{
+	constexpr uint32_t Side          = 64;
+	constexpr uint32_t InstanceCount = Side * Side;
+	constexpr uint32_t UpdateCount   = 20;
+	constexpr float    CellSize      = 1.0f / Side;
+
+	hiprtContext ctxt{};
+	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
+
+	// A unit square centred on the origin; the frames scale it to 80% of a cell.
+	hiprtTriangleMeshPrimitive mesh;
+	mesh.triangleCount          = 2;
+	mesh.triangleStride         = sizeof( uint3 );
+	mesh.vertexCount            = 4;
+	mesh.vertexStride           = sizeof( float3 );
+	mesh.triangleIndices        = malloc<uint3>( mesh.triangleCount );
+	mesh.vertices               = malloc<float3>( mesh.vertexCount );
+	const uint3  quadIndices[]  = { { 0, 1, 2 }, { 0, 2, 3 } };
+	const float3 quadVertices[] = {
+		{ -0.5f, -0.5f, 0.0f }, { 0.5f, -0.5f, 0.0f }, { 0.5f, 0.5f, 0.0f }, { -0.5f, 0.5f, 0.0f } };
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), quadIndices, mesh.triangleCount );
+	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), quadVertices, mesh.vertexCount );
+
+	hiprtGeometryBuildInput geomInput{};
+	geomInput.type                   = hiprtPrimitiveTypeTriangleMesh;
+	geomInput.primitive.triangleMesh = mesh;
+
+	hiprtBuildOptions geomOptions;
+	geomOptions.buildFlags = hiprtBuildFlagBitPreferFastBuild;
+	size_t geomTempSize    = 0;
+	checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, geomOptions, geomTempSize ) );
+	hiprtDevicePtr geomTemp = malloc<uint8_t>( geomTempSize );
+	hiprtGeometry  geom     = nullptr;
+	checkHiprt( hiprtCreateGeometry( ctxt, geomInput, geomOptions, geom ) );
+	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, geomOptions, geomTemp, 0, geom ) );
+
+	hiprtInstance instance;
+	instance.type     = hiprtInstanceTypeGeometry;
+	instance.geometry = geom;
+	std::vector<hiprtInstance> instances( InstanceCount, instance );
+
+	// Update k puts instance i into cell (i + k * Stride) mod InstanceCount, so its
+	// previous cell is always elsewhere.
+	constexpr uint32_t Stride   = 1237;
+	auto               cellOf   = []( uint32_t i, uint32_t k ) { return ( i + k * Stride ) % InstanceCount; };
+	auto               centreOf = [&]( uint32_t cell ) {
+        return float2{ ( cell % Side + 0.5f ) * CellSize, ( cell / Side + 0.5f ) * CellSize };
+	};
+	std::vector<hiprtFrameSRT> frames( InstanceCount );
+	std::vector<float2>        targets( InstanceCount );
+	auto                       place = [&]( uint32_t k ) {
+        for ( uint32_t i = 0; i < InstanceCount; ++i )
+        {
+            const float2 c        = centreOf( cellOf( i, k ) );
+            frames[i].translation = { c.x, c.y, 0.0f };
+            frames[i].scale       = { 0.8f * CellSize, 0.8f * CellSize, 1.0f };
+            frames[i].rotation    = { 0.0f, 0.0f, 1.0f, 0.0f };
+            targets[i]            = c;
+        }
+	};
+
+	hiprtSceneBuildInput sceneInput{};
+	sceneInput.instanceCount            = InstanceCount;
+	sceneInput.instanceMasks            = nullptr;
+	sceneInput.instanceTransformHeaders = nullptr;
+	sceneInput.instances                = malloc<hiprtInstance>( InstanceCount );
+	sceneInput.frameCount               = InstanceCount;
+	sceneInput.instanceFrames           = malloc<hiprtFrameSRT>( InstanceCount );
+	copyHtoD( reinterpret_cast<hiprtInstance*>( sceneInput.instances ), instances.data(), InstanceCount );
+
+	oroFunction func;
+	if constexpr ( UseBitcode )
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "InstanceIdKernel", func );
+	else
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "InstanceIdKernel", func );
+
+	float2*               targetsDevice = malloc<float2>( InstanceCount );
+	uint32_t*             ids           = malloc<uint32_t>( InstanceCount );
+	std::vector<uint32_t> hostIds( InstanceCount );
+
+	const std::pair<hiprtBuildFlags, const char*> builds[] = {
+		{ hiprtBuildFlagBitPreferFastBuild, "fast" }, { hiprtBuildFlagBitPreferBalancedBuild, "balanced" } };
+	for ( const auto& [flags, name] : builds )
+	{
+		hiprtBuildOptions options;
+		options.buildFlags   = flags;
+		size_t sceneTempSize = 0;
+		checkHiprt( hiprtGetSceneBuildTemporaryBufferSize( ctxt, sceneInput, options, sceneTempSize ) );
+		hiprtDevicePtr sceneTemp = malloc<uint8_t>( sceneTempSize );
+
+		place( 0 );
+		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), InstanceCount );
+		hiprtScene scene = nullptr;
+		checkHiprt( hiprtCreateScene( ctxt, sceneInput, options, scene ) );
+		checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationBuild, sceneInput, options, sceneTemp, 0, scene ) );
+
+		uint32_t stale = 0;
+		for ( uint32_t k = 1; k <= UpdateCount; ++k )
+		{
+			place( k );
+			copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), InstanceCount );
+			checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationUpdate, sceneInput, options, sceneTemp, 0, scene ) );
+
+			copyHtoD( targetsDevice, targets.data(), InstanceCount );
+			uint32_t    count  = InstanceCount;
+			const void* args[] = { &scene, &targetsDevice, &ids, &count };
+			launchKernel( func, InstanceCount, 1, 64, 1, args );
+			ASSERT_EQ( oroStreamSynchronize( 0 ), oroSuccess ) << name << ": trace after update " << k << " failed";
+			copyDtoH( hostIds.data(), ids, InstanceCount );
+			for ( uint32_t i = 0; i < InstanceCount; ++i )
+				stale += hostIds[i] != i;
+		}
+		EXPECT_EQ( stale, 0u ) << name << " build: " << stale << " of " << UpdateCount * InstanceCount
+							   << " instance lookups after an update did not find the instance at its new position";
+
+		free( sceneTemp );
+		checkHiprt( hiprtDestroyScene( ctxt, scene ) );
+	}
+
+	free( targetsDevice );
+	free( ids );
+	free( sceneInput.instances );
+	free( sceneInput.instanceFrames );
+	free( geomTemp );
+	free( mesh.triangleIndices );
+	free( mesh.vertices );
+	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
+	checkHiprt( hiprtDestroyContext( ctxt ) );
+}
+
 TEST_F( hiprtTest, BatchConstruction )
 {
 	hiprtContext ctxt{};

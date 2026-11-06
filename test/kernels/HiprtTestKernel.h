@@ -428,3 +428,19 @@ HIPRT_KERNEL void GridPrimIdKernel( hiprtGeometry geom, uint32_t* primIds, const
 	hiprtHit                  hit = tr.getNextHit();
 	primIds[y * 2 * cells + x]    = hit.hasHit() ? hit.primID : ~0u;
 }
+
+// One ray per instance, aimed at the point where the instance is expected to be.
+// Writes the instance ID of the closest hit (or ~0u).
+HIPRT_KERNEL void InstanceIdKernel( hiprtScene scene, const float2* targets, uint32_t* instanceIds, const uint32_t count )
+{
+	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+	if ( index >= count ) return;
+
+	hiprtRay ray;
+	ray.origin    = { targets[index].x, targets[index].y, -1.0f };
+	ray.direction = { 0.0f, 0.0f, 1.0f };
+
+	hiprtSceneTraversalClosest tr( scene, ray );
+	hiprtHit                   hit = tr.getNextHit();
+	instanceIds[index]             = hit.hasHit() ? hit.instanceID : ~0u;
+}
