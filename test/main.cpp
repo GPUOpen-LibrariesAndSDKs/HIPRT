@@ -25,7 +25,9 @@
 #include "hiprtTest.h"
 #include <test/CornellBox.h>
 #include <contrib/argparse/argparse.h>
+#include <algorithm>
 #include <numeric>
+#include <random>
 #include <memory>
 #include <cassert>
 #include <map>
@@ -2748,6 +2750,114 @@ TEST_F( hiprtTest, UpdateRepeated )
 	free( geomTemp );
 	free( dst );
 	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
+	checkHiprt( hiprtDestroyContext( ctxt ) );
+}
+
+// BVH construction over a mesh large enough for the multi-pass radix sort.
+// Every other test mesh is far below the 3072 keys (SINGLE_SORT_WG_SIZE *
+// SINGLE_SORT_N_ITEMS_PER_WI) under which the radix sort runs as a single
+// workgroup, so the Onesweep path that sorts the Morton codes of larger meshes
+// was not exercised.
+//
+// OnesweepReorder groups threads into 32-lane warps, but on wave64 GPUs
+// (CDNA, e.g. gfx942/gfx950) __ballot returns the whole 64-lane wave, and
+// truncating it to 32 bits hands the upper warp the lower warp's lanes. The
+// permutation is then wrong, and fast (LBVH) builds of large meshes lose or
+// duplicate primitives.
+//
+// One ray per triangle, aimed at its centroid, must return that triangle. The
+// triangles are shuffled so that the input order is not already spatially
+// sorted.
+TEST_F( hiprtTest, LargeMeshBuild )
+{
+	constexpr uint32_t Cells         = 256; // 2 * 256 * 256 = 131072 triangles
+	constexpr uint32_t TriangleCount = 2 * Cells * Cells;
+
+	hiprtContext ctxt{};
+	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
+
+	std::vector<float3> vertices;
+	for ( uint32_t y = 0; y <= Cells; ++y )
+		for ( uint32_t x = 0; x <= Cells; ++x )
+			vertices.push_back( { x / static_cast<float>( Cells ), y / static_cast<float>( Cells ), 0.0f } );
+
+	// Grid triangle g = 2 * (y * Cells + x) + t is stored at position order[g].
+	std::vector<uint32_t> order( TriangleCount );
+	std::iota( order.begin(), order.end(), 0 );
+	std::shuffle( order.begin(), order.end(), std::mt19937( 7 ) );
+
+	std::vector<uint3> indices( TriangleCount );
+	for ( uint32_t y = 0; y < Cells; ++y )
+		for ( uint32_t x = 0; x < Cells; ++x )
+		{
+			const uint32_t v00    = y * ( Cells + 1 ) + x;
+			const uint32_t v10    = v00 + 1;
+			const uint32_t v01    = v00 + Cells + 1;
+			const uint32_t v11    = v01 + 1;
+			const uint32_t g      = 2 * ( y * Cells + x );
+			indices[order[g]]     = { v00, v10, v11 };
+			indices[order[g + 1]] = { v00, v11, v01 };
+		}
+
+	hiprtTriangleMeshPrimitive mesh;
+	mesh.triangleCount   = TriangleCount;
+	mesh.triangleStride  = sizeof( uint3 );
+	mesh.vertexCount     = static_cast<uint32_t>( vertices.size() );
+	mesh.vertexStride    = sizeof( float3 );
+	mesh.triangleIndices = malloc<uint3>( mesh.triangleCount );
+	mesh.vertices        = malloc<float3>( mesh.vertexCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), indices.data(), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), vertices.data(), mesh.vertexCount );
+
+	hiprtGeometryBuildInput geomInput{};
+	geomInput.type                   = hiprtPrimitiveTypeTriangleMesh;
+	geomInput.primitive.triangleMesh = mesh;
+
+	oroFunction func;
+	if constexpr ( UseBitcode )
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "GridPrimIdKernel", func );
+	else
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "GridPrimIdKernel", func );
+
+	uint32_t*             primIds = malloc<uint32_t>( TriangleCount );
+	std::vector<uint32_t> hostIds( TriangleCount );
+
+	const std::pair<hiprtBuildFlags, const char*> builds[] = {
+		{ hiprtBuildFlagBitPreferFastBuild, "fast" },
+		{ hiprtBuildFlagBitPreferBalancedBuild, "balanced" },
+		{ hiprtBuildFlagBitPreferHighQualityBuild, "high quality" } };
+	for ( const auto& [flags, name] : builds )
+	{
+		hiprtBuildOptions options;
+		options.buildFlags  = flags;
+		size_t geomTempSize = 0;
+		checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, options, geomTempSize ) );
+		hiprtDevicePtr geomTemp = malloc<uint8_t>( geomTempSize );
+
+		hiprtGeometry geom = nullptr;
+		checkHiprt( hiprtCreateGeometry( ctxt, geomInput, options, geom ) );
+		checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
+
+		uint32_t    cells  = Cells;
+		const void* args[] = { &geom, &primIds, &cells };
+		launchKernel( func, 2 * Cells, Cells, args );
+		ASSERT_EQ( oroStreamSynchronize( 0 ), oroSuccess ) << name << " build: trace failed";
+		copyDtoH( hostIds.data(), primIds, TriangleCount );
+
+		uint32_t wrong = 0;
+		for ( uint32_t g = 0; g < TriangleCount; ++g )
+			wrong += hostIds[g] != order[g];
+		EXPECT_EQ( wrong, 0u ) << name << " build: " << wrong << " of " << TriangleCount
+							   << " rays did not hit the triangle they were aimed at";
+
+		free( geomTemp );
+		checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
+	}
+
+	free( primIds );
+	free( mesh.triangleIndices );
+	free( mesh.vertices );
 	checkHiprt( hiprtDestroyContext( ctxt ) );
 }
 

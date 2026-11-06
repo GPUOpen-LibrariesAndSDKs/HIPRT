@@ -407,3 +407,24 @@ HIPRT_KERNEL void MotionBlurSlerpKernel( hiprtScene scene, uint8_t* image, hiprt
 	image[index * 4 + 2] = color.z * 255;
 	image[index * 4 + 3] = 255;
 }
+
+// One ray per triangle of a cells x cells grid in the z = 0 plane, aimed at the
+// triangle's centroid. Writes the primitive ID of the closest hit (or ~0u).
+HIPRT_KERNEL void GridPrimIdKernel( hiprtGeometry geom, uint32_t* primIds, const uint32_t cells )
+{
+	const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+	if ( x >= 2 * cells || y >= cells ) return;
+
+	const uint32_t i     = x / 2;
+	const bool     lower = ( x % 2 ) == 0;
+	const float    inv   = 1.0f / static_cast<float>( cells );
+
+	hiprtRay ray;
+	ray.origin    = { ( i + ( lower ? 2.0f : 1.0f ) / 3.0f ) * inv, ( y + ( lower ? 1.0f : 2.0f ) / 3.0f ) * inv, -1.0f };
+	ray.direction = { 0.0f, 0.0f, 1.0f };
+
+	hiprtGeomTraversalClosest tr( geom, ray );
+	hiprtHit                  hit = tr.getNextHit();
+	primIds[y * 2 * cells + x]    = hit.hasHit() ? hit.primID : ~0u;
+}

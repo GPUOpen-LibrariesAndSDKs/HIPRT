@@ -36,6 +36,16 @@ using u8 = unsigned char;
 using u16 = unsigned short;
 using u32 = unsigned int;
 using u64 = unsigned long long;
+
+#if !defined( ITS )
+// __ballot returns the whole wave. gfx950 is wave64, but this file keeps
+// WARP_SIZE at 32. Keep only the caller's 32 lanes (__lane_id() & 32 is 0 or 32).
+__device__ __forceinline__ u32 ballot32( int pred )
+{
+	const u64 wave = static_cast<u64>( __ballot( pred ) );
+	return static_cast<u32>( wave >> ( __lane_id() & 32 ) );
+}
+#endif
 } // namespace
 
 template<typename T>
@@ -466,7 +476,7 @@ __device__ __forceinline__ void OnesweepReorder( RADIX_SORT_KEY_TYPE* inputKeys,
 #if defined( ITS )
 			__ballot_sync( 0xFFFFFFFF,
 #else
-			__ballot(
+			ballot32(
 #endif
 						   itemIndex < numberOfInputs );
 
@@ -477,7 +487,7 @@ __device__ __forceinline__ void OnesweepReorder( RADIX_SORT_KEY_TYPE* inputKeys,
 #if defined( ITS )
 								__ballot_sync( 0xFFFFFFFF, bit != 0 );
 #else
-								__ballot( bit != 0 );
+								ballot32( bit != 0 );
 #endif
 			broThreads &= ~difference;
 		}
