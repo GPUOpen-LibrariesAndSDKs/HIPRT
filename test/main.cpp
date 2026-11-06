@@ -25,7 +25,9 @@
 #include "hiprtTest.h"
 #include <test/CornellBox.h>
 #include <contrib/argparse/argparse.h>
+#include <algorithm>
 #include <numeric>
+#include <random>
 #include <memory>
 #include <cassert>
 #include <map>
@@ -2747,6 +2749,257 @@ TEST_F( hiprtTest, UpdateRepeated )
 	free( mesh.vertices );
 	free( geomTemp );
 	free( dst );
+	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
+	checkHiprt( hiprtDestroyContext( ctxt ) );
+}
+
+// BVH construction over a mesh large enough for the multi-pass radix sort.
+// Every other test mesh is far below the 3072 keys (SINGLE_SORT_WG_SIZE *
+// SINGLE_SORT_N_ITEMS_PER_WI) under which the radix sort runs as a single
+// workgroup, so the Onesweep path that sorts the Morton codes of larger meshes
+// was not exercised.
+//
+// OnesweepReorder groups threads into 32-lane warps, but on wave64 GPUs
+// (CDNA, e.g. gfx942/gfx950) __ballot returns the whole 64-lane wave, and
+// truncating it to 32 bits hands the upper warp the lower warp's lanes. The
+// permutation is then wrong, and fast (LBVH) builds of large meshes lose or
+// duplicate primitives.
+//
+// One ray per triangle, aimed at its centroid, must return that triangle. The
+// triangles are shuffled so that the input order is not already spatially
+// sorted.
+TEST_F( hiprtTest, LargeMeshBuild )
+{
+	constexpr uint32_t Cells         = 256; // 2 * 256 * 256 = 131072 triangles
+	constexpr uint32_t TriangleCount = 2 * Cells * Cells;
+
+	hiprtContext ctxt{};
+	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
+
+	std::vector<float3> vertices;
+	for ( uint32_t y = 0; y <= Cells; ++y )
+		for ( uint32_t x = 0; x <= Cells; ++x )
+			vertices.push_back( { x / static_cast<float>( Cells ), y / static_cast<float>( Cells ), 0.0f } );
+
+	// Grid triangle g = 2 * (y * Cells + x) + t is stored at position order[g].
+	std::vector<uint32_t> order( TriangleCount );
+	std::iota( order.begin(), order.end(), 0 );
+	std::shuffle( order.begin(), order.end(), std::mt19937( 7 ) );
+
+	std::vector<uint3> indices( TriangleCount );
+	for ( uint32_t y = 0; y < Cells; ++y )
+		for ( uint32_t x = 0; x < Cells; ++x )
+		{
+			const uint32_t v00    = y * ( Cells + 1 ) + x;
+			const uint32_t v10    = v00 + 1;
+			const uint32_t v01    = v00 + Cells + 1;
+			const uint32_t v11    = v01 + 1;
+			const uint32_t g      = 2 * ( y * Cells + x );
+			indices[order[g]]     = { v00, v10, v11 };
+			indices[order[g + 1]] = { v00, v11, v01 };
+		}
+
+	hiprtTriangleMeshPrimitive mesh;
+	mesh.triangleCount   = TriangleCount;
+	mesh.triangleStride  = sizeof( uint3 );
+	mesh.vertexCount     = static_cast<uint32_t>( vertices.size() );
+	mesh.vertexStride    = sizeof( float3 );
+	mesh.triangleIndices = malloc<uint3>( mesh.triangleCount );
+	mesh.vertices        = malloc<float3>( mesh.vertexCount );
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), indices.data(), mesh.triangleCount );
+	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), vertices.data(), mesh.vertexCount );
+
+	hiprtGeometryBuildInput geomInput{};
+	geomInput.type                   = hiprtPrimitiveTypeTriangleMesh;
+	geomInput.primitive.triangleMesh = mesh;
+
+	oroFunction func;
+	if constexpr ( UseBitcode )
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "GridPrimIdKernel", func );
+	else
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "GridPrimIdKernel", func );
+
+	uint32_t*             primIds = malloc<uint32_t>( TriangleCount );
+	std::vector<uint32_t> hostIds( TriangleCount );
+
+	const std::pair<hiprtBuildFlags, const char*> builds[] = {
+		{ hiprtBuildFlagBitPreferFastBuild, "fast" },
+		{ hiprtBuildFlagBitPreferBalancedBuild, "balanced" },
+		{ hiprtBuildFlagBitPreferHighQualityBuild, "high quality" } };
+	for ( const auto& [flags, name] : builds )
+	{
+		hiprtBuildOptions options;
+		options.buildFlags  = flags;
+		size_t geomTempSize = 0;
+		checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, options, geomTempSize ) );
+		hiprtDevicePtr geomTemp = malloc<uint8_t>( geomTempSize );
+
+		hiprtGeometry geom = nullptr;
+		checkHiprt( hiprtCreateGeometry( ctxt, geomInput, options, geom ) );
+		checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, options, geomTemp, 0, geom ) );
+
+		uint32_t    cells  = Cells;
+		const void* args[] = { &geom, &primIds, &cells };
+		launchKernel( func, 2 * Cells, Cells, args );
+		ASSERT_EQ( oroStreamSynchronize( 0 ), oroSuccess ) << name << " build: trace failed";
+		copyDtoH( hostIds.data(), primIds, TriangleCount );
+
+		uint32_t wrong = 0;
+		for ( uint32_t g = 0; g < TriangleCount; ++g )
+			wrong += hostIds[g] != order[g];
+		EXPECT_EQ( wrong, 0u ) << name << " build: " << wrong << " of " << TriangleCount
+							   << " rays did not hit the triangle they were aimed at";
+
+		free( geomTemp );
+		checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
+	}
+
+	free( primIds );
+	free( mesh.triangleIndices );
+	free( mesh.vertices );
+	checkHiprt( hiprtDestroyContext( ctxt ) );
+}
+
+// Scene update with many instances whose frames all change.
+//
+// During a scene update, ResetCountersAndUpdateLeaves converts the API frames in
+// place (thread i converts frame i) and, in the same launch, builds each leaf's
+// inverse transform from frame primIndex. That frame belongs to another thread,
+// usually in another workgroup, and nothing orders the two, so the leaf can
+// read the frame before it is converted: it keeps its previous transform, and
+// the instance is traced at its old pose. The test uses enough instances to
+// span many workgroups, moves every instance to another cell on every update,
+// and traces one ray per instance at its new position. Without the fix, most
+// lookups on gfx950 found the old pose.
+TEST_F( hiprtTest, SceneUpdateManyInstances )
+{
+	constexpr uint32_t Side          = 64;
+	constexpr uint32_t InstanceCount = Side * Side;
+	constexpr uint32_t UpdateCount   = 20;
+	constexpr float    CellSize      = 1.0f / Side;
+
+	hiprtContext ctxt{};
+	checkHiprt( hiprtCreateContext( HIPRT_API_VERSION, m_ctxtInput, ctxt ) );
+	checkHiprt( hiprtSetLogLevel( ctxt, hiprtLogLevelError | hiprtLogLevelWarn ) );
+
+	// A unit square centred on the origin; the frames scale it to 80% of a cell.
+	hiprtTriangleMeshPrimitive mesh;
+	mesh.triangleCount          = 2;
+	mesh.triangleStride         = sizeof( uint3 );
+	mesh.vertexCount            = 4;
+	mesh.vertexStride           = sizeof( float3 );
+	mesh.triangleIndices        = malloc<uint3>( mesh.triangleCount );
+	mesh.vertices               = malloc<float3>( mesh.vertexCount );
+	const uint3  quadIndices[]  = { { 0, 1, 2 }, { 0, 2, 3 } };
+	const float3 quadVertices[] = {
+		{ -0.5f, -0.5f, 0.0f }, { 0.5f, -0.5f, 0.0f }, { 0.5f, 0.5f, 0.0f }, { -0.5f, 0.5f, 0.0f } };
+	copyHtoD( reinterpret_cast<uint3*>( mesh.triangleIndices ), quadIndices, mesh.triangleCount );
+	copyHtoD( reinterpret_cast<float3*>( mesh.vertices ), quadVertices, mesh.vertexCount );
+
+	hiprtGeometryBuildInput geomInput{};
+	geomInput.type                   = hiprtPrimitiveTypeTriangleMesh;
+	geomInput.primitive.triangleMesh = mesh;
+
+	hiprtBuildOptions geomOptions;
+	geomOptions.buildFlags = hiprtBuildFlagBitPreferFastBuild;
+	size_t geomTempSize    = 0;
+	checkHiprt( hiprtGetGeometryBuildTemporaryBufferSize( ctxt, geomInput, geomOptions, geomTempSize ) );
+	hiprtDevicePtr geomTemp = malloc<uint8_t>( geomTempSize );
+	hiprtGeometry  geom     = nullptr;
+	checkHiprt( hiprtCreateGeometry( ctxt, geomInput, geomOptions, geom ) );
+	checkHiprt( hiprtBuildGeometry( ctxt, hiprtBuildOperationBuild, geomInput, geomOptions, geomTemp, 0, geom ) );
+
+	hiprtInstance instance;
+	instance.type     = hiprtInstanceTypeGeometry;
+	instance.geometry = geom;
+	std::vector<hiprtInstance> instances( InstanceCount, instance );
+
+	// Update k puts instance i into cell (i + k * Stride) mod InstanceCount, so its
+	// previous cell is always elsewhere.
+	constexpr uint32_t Stride   = 1237;
+	auto               cellOf   = []( uint32_t i, uint32_t k ) { return ( i + k * Stride ) % InstanceCount; };
+	auto               centreOf = [&]( uint32_t cell ) {
+        return float2{ ( cell % Side + 0.5f ) * CellSize, ( cell / Side + 0.5f ) * CellSize };
+	};
+	std::vector<hiprtFrameSRT> frames( InstanceCount );
+	std::vector<float2>        targets( InstanceCount );
+	auto                       place = [&]( uint32_t k ) {
+        for ( uint32_t i = 0; i < InstanceCount; ++i )
+        {
+            const float2 c        = centreOf( cellOf( i, k ) );
+            frames[i].translation = { c.x, c.y, 0.0f };
+            frames[i].scale       = { 0.8f * CellSize, 0.8f * CellSize, 1.0f };
+            frames[i].rotation    = { 0.0f, 0.0f, 1.0f, 0.0f };
+            targets[i]            = c;
+        }
+	};
+
+	hiprtSceneBuildInput sceneInput{};
+	sceneInput.instanceCount            = InstanceCount;
+	sceneInput.instanceMasks            = nullptr;
+	sceneInput.instanceTransformHeaders = nullptr;
+	sceneInput.instances                = malloc<hiprtInstance>( InstanceCount );
+	sceneInput.frameCount               = InstanceCount;
+	sceneInput.instanceFrames           = malloc<hiprtFrameSRT>( InstanceCount );
+	copyHtoD( reinterpret_cast<hiprtInstance*>( sceneInput.instances ), instances.data(), InstanceCount );
+
+	oroFunction func;
+	if constexpr ( UseBitcode )
+		buildTraceKernelFromBitcode( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "InstanceIdKernel", func );
+	else
+		buildTraceKernel( ctxt, getRootDir() / "test/kernels/HiprtTestKernel.h", "InstanceIdKernel", func );
+
+	float2*               targetsDevice = malloc<float2>( InstanceCount );
+	uint32_t*             ids           = malloc<uint32_t>( InstanceCount );
+	std::vector<uint32_t> hostIds( InstanceCount );
+
+	const std::pair<hiprtBuildFlags, const char*> builds[] = {
+		{ hiprtBuildFlagBitPreferFastBuild, "fast" }, { hiprtBuildFlagBitPreferBalancedBuild, "balanced" } };
+	for ( const auto& [flags, name] : builds )
+	{
+		hiprtBuildOptions options;
+		options.buildFlags   = flags;
+		size_t sceneTempSize = 0;
+		checkHiprt( hiprtGetSceneBuildTemporaryBufferSize( ctxt, sceneInput, options, sceneTempSize ) );
+		hiprtDevicePtr sceneTemp = malloc<uint8_t>( sceneTempSize );
+
+		place( 0 );
+		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), InstanceCount );
+		hiprtScene scene = nullptr;
+		checkHiprt( hiprtCreateScene( ctxt, sceneInput, options, scene ) );
+		checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationBuild, sceneInput, options, sceneTemp, 0, scene ) );
+
+		uint32_t stale = 0;
+		for ( uint32_t k = 1; k <= UpdateCount; ++k )
+		{
+			place( k );
+			copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), InstanceCount );
+			checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationUpdate, sceneInput, options, sceneTemp, 0, scene ) );
+
+			copyHtoD( targetsDevice, targets.data(), InstanceCount );
+			uint32_t    count  = InstanceCount;
+			const void* args[] = { &scene, &targetsDevice, &ids, &count };
+			launchKernel( func, InstanceCount, 1, 64, 1, args );
+			ASSERT_EQ( oroStreamSynchronize( 0 ), oroSuccess ) << name << ": trace after update " << k << " failed";
+			copyDtoH( hostIds.data(), ids, InstanceCount );
+			for ( uint32_t i = 0; i < InstanceCount; ++i )
+				stale += hostIds[i] != i;
+		}
+		EXPECT_EQ( stale, 0u ) << name << " build: " << stale << " of " << UpdateCount * InstanceCount
+							   << " instance lookups after an update did not find the instance at its new position";
+
+		free( sceneTemp );
+		checkHiprt( hiprtDestroyScene( ctxt, scene ) );
+	}
+
+	free( targetsDevice );
+	free( ids );
+	free( sceneInput.instances );
+	free( sceneInput.instanceFrames );
+	free( geomTemp );
+	free( mesh.triangleIndices );
+	free( mesh.vertices );
 	checkHiprt( hiprtDestroyGeometry( ctxt, geom ) );
 	checkHiprt( hiprtDestroyContext( ctxt ) );
 }
