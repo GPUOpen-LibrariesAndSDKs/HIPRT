@@ -38,13 +38,19 @@ using u32 = unsigned int;
 using u64 = unsigned long long;
 
 #if !defined( ITS )
-// __ballot returns the whole wave. gfx950 is wave64, but this file keeps
-// WARP_SIZE at 32. Keep only the caller's 32 lanes (__lane_id() & 32 is 0 or 32).
+#if defined( __AMDGCN__ )
+// AMD device code. __ballot returns the whole wave, and CDNA GPUs (e.g. gfx950)
+// run 64-lane waves while this file keeps WARP_SIZE at 32. Keep only the caller's
+// 32 lanes: __lane_id() & 32 is 32 in the upper half of a wave64 and 0 otherwise.
 __device__ __forceinline__ u32 ballot32( int pred )
 {
 	const u64 wave = static_cast<u64>( __ballot( pred ) );
 	return static_cast<u32>( wave >> ( __lane_id() & 32 ) );
 }
+#else
+// Any other compiler that takes the non-ITS path keeps the plain ballot.
+__device__ __forceinline__ u32 ballot32( int pred ) { return __ballot( pred ); }
+#endif
 #endif
 } // namespace
 
