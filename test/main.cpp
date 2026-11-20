@@ -24,6 +24,7 @@
 
 #include "hiprtTest.h"
 #include <test/CornellBox.h>
+#include <test/common/bvhbuilder.h>
 #include <contrib/argparse/argparse.h>
 #include <algorithm>
 #include <numeric>
@@ -2872,9 +2873,16 @@ TEST_F( hiprtTest, LargeMeshBuild )
 // The test uses enough instances to span many workgroups, moves every instance to
 // another cell on every update, and traces one ray per instance at its new
 // position. With the shared launch, most lookups on gfx950 found the old pose.
+// It stays below the 3072 instances at which the initial build switches to the
+// multi-pass radix sort (see LargeMeshBuild), so it checks the frame updates on
+// wave64 GPUs too.
+// Every builder with its own update path runs, the high-quality and imported ones
+// without spatial splits and oriented bounding boxes, as their updates require. Each
+// runs with SRT frames, and with matrix frames that explicit transform headers
+// reference beyond the instance count, so the frames past it have to be converted too.
 TEST_F( hiprtTest, SceneUpdateManyInstances )
 {
-	constexpr uint32_t Side          = 64;
+	constexpr uint32_t Side          = 48; // 2304 instances
 	constexpr uint32_t InstanceCount = Side * Side;
 	constexpr uint32_t UpdateCount   = 20;
 	constexpr float    CellSize      = 1.0f / Side;
@@ -2922,27 +2930,50 @@ TEST_F( hiprtTest, SceneUpdateManyInstances )
 	auto               centreOf = [&]( uint32_t cell ) {
         return float2{ ( cell % Side + 0.5f ) * CellSize, ( cell / Side + 0.5f ) * CellSize };
 	};
-	std::vector<hiprtFrameSRT> frames( InstanceCount );
-	std::vector<float2>        targets( InstanceCount );
-	auto                       place = [&]( uint32_t k ) {
-        for ( uint32_t i = 0; i < InstanceCount; ++i )
-        {
-            const float2 c        = centreOf( cellOf( i, k ) );
-            frames[i].translation = { c.x, c.y, 0.0f };
-            frames[i].scale       = { 0.8f * CellSize, 0.8f * CellSize, 1.0f };
-            frames[i].rotation    = { 0.0f, 0.0f, 1.0f, 0.0f };
-            targets[i]            = c;
-        }
+	// With SRT frames, instance i uses frame i. With matrix frames, explicit transform headers point instance i at
+	// frame matrixFrameOf( i ), beyond the instance count; the frames below it are decoys far from the grid, so an
+	// instance placed by one of them is not found.
+	constexpr uint32_t                MatrixFrameCount = 2 * InstanceCount;
+	auto                              matrixFrameOf    = [&]( uint32_t i ) { return MatrixFrameCount - 1 - i; };
+	std::vector<hiprtFrameSRT>        srtFrames( InstanceCount );
+	std::vector<hiprtFrameMatrix>     matrixFrames( MatrixFrameCount );
+	std::vector<hiprtTransformHeader> headers( InstanceCount );
+	std::vector<float2>               targets( InstanceCount );
+	for ( uint32_t i = 0; i < InstanceCount; ++i )
+	{
+		matrixFrames[i].matrix[0][3] = 10.0f;
+		matrixFrames[i].matrix[1][3] = 10.0f;
+		headers[i]                   = { matrixFrameOf( i ), 1 };
+	}
+	auto place = [&]( uint32_t k ) {
+		for ( uint32_t i = 0; i < InstanceCount; ++i )
+		{
+			const float2 c           = centreOf( cellOf( i, k ) );
+			srtFrames[i].translation = { c.x, c.y, 0.0f };
+			srtFrames[i].scale       = { 0.8f * CellSize, 0.8f * CellSize, 1.0f };
+			srtFrames[i].rotation    = { 0.0f, 0.0f, 1.0f, 0.0f };
+
+			hiprtFrameMatrix& m = matrixFrames[matrixFrameOf( i )];
+			m.matrix[0][0]      = 0.8f * CellSize;
+			m.matrix[0][3]      = c.x;
+			m.matrix[1][1]      = 0.8f * CellSize;
+			m.matrix[1][3]      = c.y;
+			targets[i]          = c;
+		}
 	};
 
-	hiprtSceneBuildInput sceneInput{};
-	sceneInput.instanceCount            = InstanceCount;
-	sceneInput.instanceMasks            = nullptr;
-	sceneInput.instanceTransformHeaders = nullptr;
-	sceneInput.instances                = malloc<hiprtInstance>( InstanceCount );
-	sceneInput.frameCount               = InstanceCount;
-	sceneInput.instanceFrames           = malloc<hiprtFrameSRT>( InstanceCount );
-	copyHtoD( reinterpret_cast<hiprtInstance*>( sceneInput.instances ), instances.data(), InstanceCount );
+	hiprtInstance*        instancesDevice    = malloc<hiprtInstance>( InstanceCount );
+	hiprtFrameSRT*        srtFramesDevice    = malloc<hiprtFrameSRT>( InstanceCount );
+	hiprtFrameMatrix*     matrixFramesDevice = malloc<hiprtFrameMatrix>( MatrixFrameCount );
+	hiprtTransformHeader* headersDevice      = malloc<hiprtTransformHeader>( InstanceCount );
+	copyHtoD( instancesDevice, instances.data(), InstanceCount );
+	copyHtoD( headersDevice, headers.data(), InstanceCount );
+	auto copyFrames = [&]( bool matrix ) {
+		if ( matrix )
+			copyHtoD( matrixFramesDevice, matrixFrames.data(), MatrixFrameCount );
+		else
+			copyHtoD( srtFramesDevice, srtFrames.data(), InstanceCount );
+	};
 
 	oroFunction func;
 	if constexpr ( UseBitcode )
@@ -2954,49 +2985,83 @@ TEST_F( hiprtTest, SceneUpdateManyInstances )
 	uint32_t*             ids           = malloc<uint32_t>( InstanceCount );
 	std::vector<uint32_t> hostIds( InstanceCount );
 
+	// Embree builds the imported BVH over the instances at their first positions.
+	RTCDevice               embreeDevice = rtcNewDevice( "" );
+	const std::vector<Aabb> quadBoxes( InstanceCount, Aabb( float3{ -0.5f, -0.5f, 0.0f }, float3{ 0.5f, 0.5f, 0.0f } ) );
+
+	constexpr hiprtBuildFlags NoSplitsNoObbs =
+		hiprtBuildFlagBitDisableSpatialSplits | hiprtBuildFlagBitDisableOrientedBoundingBoxes;
 	const std::pair<hiprtBuildFlags, const char*> builds[] = {
-		{ hiprtBuildFlagBitPreferFastBuild, "fast" }, { hiprtBuildFlagBitPreferBalancedBuild, "balanced" } };
-	for ( const auto& [flags, name] : builds )
+		{ hiprtBuildFlagBitPreferFastBuild, "fast" },
+		{ hiprtBuildFlagBitPreferBalancedBuild, "balanced" },
+		{ hiprtBuildFlagBitPreferHighQualityBuild | NoSplitsNoObbs, "high quality" },
+		{ hiprtBuildFlagBitCustomBvhImport | NoSplitsNoObbs, "imported" } };
+	for ( const bool matrix : { false, true } )
 	{
-		hiprtBuildOptions options;
-		options.buildFlags   = flags;
-		size_t sceneTempSize = 0;
-		checkHiprt( hiprtGetSceneBuildTemporaryBufferSize( ctxt, sceneInput, options, sceneTempSize ) );
-		hiprtDevicePtr sceneTemp = malloc<uint8_t>( sceneTempSize );
+		hiprtSceneBuildInput sceneInput{};
+		sceneInput.instanceCount            = InstanceCount;
+		sceneInput.instances                = instancesDevice;
+		sceneInput.frameType                = matrix ? hiprtFrameTypeMatrix : hiprtFrameTypeSRT;
+		sceneInput.frameCount               = matrix ? MatrixFrameCount : InstanceCount;
+		sceneInput.instanceFrames           = matrix ? static_cast<hiprtDevicePtr>( matrixFramesDevice ) : srtFramesDevice;
+		sceneInput.instanceTransformHeaders = matrix ? headersDevice : nullptr;
+		const char* frameKind               = matrix ? "matrix frames" : "SRT frames";
 
-		place( 0 );
-		copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), InstanceCount );
-		hiprtScene scene = nullptr;
-		checkHiprt( hiprtCreateScene( ctxt, sceneInput, options, scene ) );
-		checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationBuild, sceneInput, options, sceneTemp, 0, scene ) );
-
-		uint32_t stale = 0;
-		for ( uint32_t k = 1; k <= UpdateCount; ++k )
+		for ( const auto& [flags, name] : builds )
 		{
-			place( k );
-			copyHtoD( reinterpret_cast<hiprtFrameSRT*>( sceneInput.instanceFrames ), frames.data(), InstanceCount );
-			checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationUpdate, sceneInput, options, sceneTemp, 0, scene ) );
+			const bool imported = ( flags & 3 ) == hiprtBuildFlagBitCustomBvhImport;
+			place( 0 );
+			copyFrames( matrix );
+			if ( imported ) buildEmbreeSceneBvh( embreeDevice, quadBoxes, srtFrames, sceneInput );
 
-			copyHtoD( targetsDevice, targets.data(), InstanceCount );
-			uint32_t    count  = InstanceCount;
-			const void* args[] = { &scene, &targetsDevice, &ids, &count };
-			launchKernel( func, InstanceCount, 1, 64, 1, args );
-			ASSERT_EQ( oroStreamSynchronize( 0 ), oroSuccess ) << name << ": trace after update " << k << " failed";
-			copyDtoH( hostIds.data(), ids, InstanceCount );
-			for ( uint32_t i = 0; i < InstanceCount; ++i )
-				stale += hostIds[i] != i;
+			hiprtBuildOptions options;
+			options.buildFlags   = flags;
+			size_t sceneTempSize = 0;
+			checkHiprt( hiprtGetSceneBuildTemporaryBufferSize( ctxt, sceneInput, options, sceneTempSize ) );
+			hiprtDevicePtr sceneTemp = malloc<uint8_t>( sceneTempSize );
+
+			hiprtScene scene = nullptr;
+			checkHiprt( hiprtCreateScene( ctxt, sceneInput, options, scene ) );
+			checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationBuild, sceneInput, options, sceneTemp, 0, scene ) );
+
+			uint32_t stale = 0;
+			for ( uint32_t k = 1; k <= UpdateCount; ++k )
+			{
+				place( k );
+				copyFrames( matrix );
+				checkHiprt( hiprtBuildScene( ctxt, hiprtBuildOperationUpdate, sceneInput, options, sceneTemp, 0, scene ) );
+
+				copyHtoD( targetsDevice, targets.data(), InstanceCount );
+				uint32_t    count  = InstanceCount;
+				const void* args[] = { &scene, &targetsDevice, &ids, &count };
+				launchKernel( func, InstanceCount, 1, 64, 1, args );
+				ASSERT_EQ( oroStreamSynchronize( 0 ), oroSuccess )
+					<< name << " build, " << frameKind << ": trace after update " << k << " failed";
+				copyDtoH( hostIds.data(), ids, InstanceCount );
+				for ( uint32_t i = 0; i < InstanceCount; ++i )
+					stale += hostIds[i] != i;
+			}
+			EXPECT_EQ( stale, 0u ) << name << " build, " << frameKind << ": " << stale << " of " << UpdateCount * InstanceCount
+								   << " instance lookups after an update did not find the instance at its new position";
+
+			free( sceneTemp );
+			checkHiprt( hiprtDestroyScene( ctxt, scene ) );
+			if ( imported )
+			{
+				free( sceneInput.nodeList.leafNodes );
+				free( sceneInput.nodeList.internalNodes );
+				sceneInput.nodeList = {};
+			}
 		}
-		EXPECT_EQ( stale, 0u ) << name << " build: " << stale << " of " << UpdateCount * InstanceCount
-							   << " instance lookups after an update did not find the instance at its new position";
-
-		free( sceneTemp );
-		checkHiprt( hiprtDestroyScene( ctxt, scene ) );
 	}
 
+	rtcReleaseDevice( embreeDevice );
 	free( targetsDevice );
 	free( ids );
-	free( sceneInput.instances );
-	free( sceneInput.instanceFrames );
+	free( instancesDevice );
+	free( srtFramesDevice );
+	free( matrixFramesDevice );
+	free( headersDevice );
 	free( geomTemp );
 	free( mesh.triangleIndices );
 	free( mesh.vertices );
