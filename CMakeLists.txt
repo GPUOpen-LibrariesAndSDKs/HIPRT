@@ -448,6 +448,9 @@ if(PRECOMPILE)
 	${CMAKE_SOURCE_DIR}/hiprt/impl/Obb.h
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_types.h
 	${CMAKE_SOURCE_DIR}/hiprt/hiprt_common.h
+	${CMAKE_SOURCE_DIR}/hiprt/impl/BvhBuilderKernels.h
+	${CMAKE_SOURCE_DIR}/contrib/Orochi/ParallelPrimitives/RadixSortConfigs.h
+	${CMAKE_SOURCE_DIR}/contrib/Orochi/ParallelPrimitives/RadixSortKernels.h
 	)
 
 	message(">> add_custom_command: ${Python3_EXECUTABLE} compile.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
@@ -473,6 +476,7 @@ if(PRECOMPILE)
 		set(unittest_kernel_source
 		${CMAKE_SOURCE_DIR}/test/bitcodes/custom_func_table.cpp
 		${CMAKE_SOURCE_DIR}/test/bitcodes/unit_test.cpp
+		${CMAKE_SOURCE_DIR}/test/kernels/HiprtTestKernel.h
 		)
 		
 		message(">> add_custom_command: ${Python3_EXECUTABLE} precompile_bitcode.py ${CUDA_OPTION} --hipSdkPath \"${HIP_FINAL_PATH}\"")
