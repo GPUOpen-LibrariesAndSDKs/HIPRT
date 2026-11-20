@@ -398,11 +398,23 @@ void BvhImporter::update(
 	Compiler&                compiler = context.getCompiler();
 	std::vector<const char*> opts;
 
-	uint32_t resetThreadCount = primitives.getCount();
 	if constexpr ( std::is_same_v<Header, SceneHeader> )
 	{
 		primitives.setFrames( headerHost.m_frames );
-		resetThreadCount = std::max( primitives.getCount(), primitives.getFrameCount() );
+
+		// Convert the frames before the leaves read them: the leaf update below reads
+		// frame primIndex from thread index, so the conversion needs its own launch.
+		if ( primitives.getFrameCount() > 0 )
+		{
+			Kernel convertFramesKernel = compiler.getKernel(
+				context,
+				Utility::getRootDir() / "hiprt/impl/BvhBuilderKernels.h",
+				"ConvertFrames_" + containerParam,
+				opts,
+				GET_ARG_LIST( BvhBuilderKernels ) );
+			convertFramesKernel.setArgs( { primitives } );
+			convertFramesKernel.launch( primitives.getFrameCount(), stream );
+		}
 	}
 
 	Kernel resetCountersAndUpdateLeavesKernel = compiler.getKernel(
@@ -412,13 +424,7 @@ void BvhImporter::update(
 		opts,
 		GET_ARG_LIST( BvhBuilderKernels ) );
 	resetCountersAndUpdateLeavesKernel.setArgs( { header, primitives, boxNodes, primNodes } );
-	resetCountersAndUpdateLeavesKernel.launch( resetThreadCount, stream );
-	// For scenes, thread i converts frame i while other threads of the same
-	// launch read frame primIndex for the instance inverse matrix, so a read
-	// can still see the previous update's frame. A second launch reads only
-	// converted frames (and rewrites the same values).
-	if constexpr ( std::is_same<Header, SceneHeader>::value )
-		resetCountersAndUpdateLeavesKernel.launch( resetThreadCount, stream );
+	resetCountersAndUpdateLeavesKernel.launch( primitives.getCount(), stream );
 
 	Kernel fitBoundsKernel = compiler.getKernel(
 		context,

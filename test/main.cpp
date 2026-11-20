@@ -2863,15 +2863,15 @@ TEST_F( hiprtTest, LargeMeshBuild )
 
 // Scene update with many instances whose frames all change.
 //
-// During a scene update, ResetCountersAndUpdateLeaves converts the API frames in
-// place (thread i converts frame i) and, in the same launch, builds each leaf's
-// inverse transform from frame primIndex. That frame belongs to another thread,
-// usually in another workgroup, and nothing orders the two, so the leaf can
-// read the frame before it is converted: it keeps its previous transform, and
-// the instance is traced at its old pose. The test uses enough instances to
-// span many workgroups, moves every instance to another cell on every update,
-// and traces one ray per instance at its new position. Without the fix, most
-// lookups on gfx950 found the old pose.
+// A scene update converts the API frames and then builds each leaf's inverse
+// transform from frame primIndex. The two used to share one launch: thread i
+// converted frame i while the leaves read frames that belong to other threads,
+// usually in other workgroups. Nothing ordered the two, so a leaf could read its
+// frame before the conversion, keep its previous transform, and the instance was
+// traced at its old pose. The frames are now converted in a launch of their own.
+// The test uses enough instances to span many workgroups, moves every instance to
+// another cell on every update, and traces one ray per instance at its new
+// position. With the shared launch, most lookups on gfx950 found the old pose.
 TEST_F( hiprtTest, SceneUpdateManyInstances )
 {
 	constexpr uint32_t Side          = 64;

@@ -541,6 +541,21 @@ HIPRT_KERNEL void ComputeMortonCodes_InstanceList_hiprtFrameMatrix(
 	ComputeMortonCodes<InstanceList<hiprtFrameMatrix>>( primitives, centroidBox, mortonCodeKeys, mortonCodeValues );
 }
 
+// Scene update: converts the API frames into the scene's frames. This is a separate launch
+// because ResetCountersAndUpdateLeaves reads frame primIndex from thread index: converting
+// in that same launch lets a leaf read a frame before, or while, another thread converts it.
+HIPRT_KERNEL void ConvertFrames_InstanceList_hiprtFrameSRT( InstanceList<hiprtFrameSRT> instanceList )
+{
+	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+	if ( index < instanceList.getFrameCount() ) instanceList.convertFrame( index );
+}
+
+HIPRT_KERNEL void ConvertFrames_InstanceList_hiprtFrameMatrix( InstanceList<hiprtFrameMatrix> instanceList )
+{
+	const uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+	if ( index < instanceList.getFrameCount() ) instanceList.convertFrame( index );
+}
+
 template <typename PrimitiveContainer, typename PrimitiveNode, typename Header>
 HIPRT_DEVICE HIPRT_INLINE void ResetCountersAndUpdateLeaves(
 	const Header* header, PrimitiveContainer& primitives, BoxNode* boxNodes, PrimitiveNode* primNodes )
@@ -596,8 +611,8 @@ HIPRT_DEVICE HIPRT_INLINE void ResetCountersAndUpdateLeaves(
 	}
 	else if constexpr ( is_same_v<PrimitiveNode, InstanceNode> )
 	{
-		if ( index < primitives.getFrameCount() ) primitives.convertFrame( index );
-
+		// The frames are read here across threads (frame index != thread index), so they
+		// are converted beforehand by ConvertFrames, in a launch of its own.
 		if ( index < header->m_primNodeCount )
 		{
 			const uint32_t       primIndex = primNodes[index].m_primIndex;
