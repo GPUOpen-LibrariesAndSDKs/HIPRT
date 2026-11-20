@@ -140,7 +140,8 @@ class BvhBuilder
 	static void build( const uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes );
 };
 
-void BvhBuilder::build( const uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes )
+inline void
+BvhBuilder::build( const uint32_t nPrims, const std::vector<Aabb>& primBoxes, std::vector<hiprtInternalNode>& nodes )
 {
 	assert( nPrims >= 2 );
 	std::vector<Aabb>     rightBoxes( nPrims );
