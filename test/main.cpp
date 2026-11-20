@@ -2918,7 +2918,7 @@ TEST_F( hiprtTest, SceneUpdateManyInstances )
 	// Update k puts instance i into cell (i + k * Stride) mod InstanceCount, so its
 	// previous cell is always elsewhere.
 	constexpr uint32_t Stride   = 1237;
-	auto               cellOf   = []( uint32_t i, uint32_t k ) { return ( i + k * Stride ) % InstanceCount; };
+	auto               cellOf   = [&]( uint32_t i, uint32_t k ) { return ( i + k * Stride ) % InstanceCount; };
 	auto               centreOf = [&]( uint32_t cell ) {
         return float2{ ( cell % Side + 0.5f ) * CellSize, ( cell / Side + 0.5f ) * CellSize };
 	};
