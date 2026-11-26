@@ -70,7 +70,7 @@ static constexpr size_t BatchBuildCacheSize =
 	const size_t primCount    = buildInput.instanceCount;
 	const size_t boxNodeCount = getMaxBoxNodeCount( buildInput, Rtip, BoxNode::BranchingFactor, primCount );
 	return getSceneStorageBufferSize(
-		primCount, primCount, boxNodeCount, sizeof( BoxNode ), sizeof( InstanceNode ), frameCount );
+		primCount, primCount, boxNodeCount, sizeof( InstanceNode ), sizeof( BoxNode ), frameCount );
 }
 
 template <typename PrimitiveNode, typename PrimitiveContainer>
